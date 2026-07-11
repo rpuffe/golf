@@ -11,13 +11,49 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:14px; min-height:100vh; overflow:hidden; user-select:none; -webkit-user-select:none;
   }
-  #hud { display:flex; gap:22px; letter-spacing:1px; text-transform:uppercase; font-size:12px; opacity:.92; }
+  #hud { display:flex; gap:20px; letter-spacing:1px; text-transform:uppercase; font-size:12px; opacity:.92; flex-wrap:wrap; justify-content:center; }
   #hud b { color:var(--accent); font-variant-numeric:tabular-nums; }
-  canvas { background:var(--rough); border:1px solid var(--wall); border-radius:6px; touch-action:none; cursor:crosshair; }
+  #hud .who { color:var(--fg); text-transform:none; opacity:.7; }
+  canvas { background:var(--rough); border:1px solid var(--wall); border-radius:6px; touch-action:none; cursor:crosshair; max-width:100%; }
   #hint { font-size:11px; opacity:.45; letter-spacing:1px; height:14px; }
+
+  /* overlays */
+  .overlay {
+    position:fixed; inset:0; display:none; align-items:center; justify-content:center;
+    background:rgba(6,10,8,.86); z-index:10; padding:20px;
+  }
+  .overlay.show { display:flex; }
+  .card {
+    background:#0e1712; border:1px solid var(--wall); border-radius:10px; padding:28px 30px;
+    width:min(440px,100%); text-align:center;
+  }
+  .card h1 { color:var(--accent); font-size:26px; letter-spacing:2px; margin-bottom:6px; }
+  .card .sub { font-size:12px; opacity:.55; letter-spacing:1px; margin-bottom:20px; }
+  .card input {
+    width:100%; padding:11px 13px; font:inherit; color:var(--fg);
+    background:#0a0f0c; border:1px solid var(--wall); border-radius:6px; text-align:center; margin-bottom:14px;
+  }
+  .card input:focus { outline:1px solid var(--accent); }
+  .card button {
+    width:100%; padding:11px; font:inherit; font-weight:600; letter-spacing:1px; text-transform:uppercase;
+    color:#0a0f0c; background:var(--accent); border:0; border-radius:6px; cursor:pointer;
+  }
+  .card button:hover { filter:brightness(1.08); }
+  .result { font-size:15px; margin:6px 0 4px; }
+  .result b { color:var(--accent); }
+  .boards { display:flex; gap:16px; margin:18px 0 20px; text-align:left; }
+  .board { flex:1; min-width:0; }
+  .board h2 { font-size:11px; letter-spacing:1px; text-transform:uppercase; opacity:.6; margin-bottom:8px; border-bottom:1px solid var(--wall); padding-bottom:5px; }
+  .board ol { list-style:none; font-size:13px; }
+  .board li { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-variant-numeric:tabular-nums; }
+  .board li .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .board li .sc { color:var(--accent); }
+  .board li.me { color:var(--accent); font-weight:600; }
+  .board .empty { opacity:.4; font-size:12px; }
 </style>
 
 <div id="hud">
+  <span class="who">⛳ <b id="who">—</b></span>
   <span>Hole <b id="hole">1</b>/3</span>
   <span>Par <b id="par">3</b></span>
   <span>Strokes <b id="strokes">0</b></span>
@@ -25,6 +61,30 @@
 </div>
 <canvas id="c" width="720" height="480"></canvas>
 <div id="hint">drag back from the ball to aim &amp; set power — release to putt</div>
+
+<!-- name entry -->
+<div id="start" class="overlay show">
+  <div class="card">
+    <h1>MINI GOLF</h1>
+    <div class="sub">3 holes · par 9 · fewest strokes wins</div>
+    <input id="name" maxlength="20" placeholder="enter your name" autocomplete="off">
+    <button id="startBtn">Start Round</button>
+  </div>
+</div>
+
+<!-- round complete + leaderboards -->
+<div id="end" class="overlay">
+  <div class="card">
+    <h1>ROUND COMPLETE</h1>
+    <div class="result" id="endResult">—</div>
+    <div class="result" id="endBest" style="font-size:13px;opacity:.7"></div>
+    <div class="boards">
+      <div class="board"><h2>Today</h2><ol id="boardToday"></ol></div>
+      <div class="board"><h2>All time</h2><ol id="boardAll"></ol></div>
+    </div>
+    <button id="againBtn">Play Again</button>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById('c');
@@ -40,6 +100,7 @@ const HOLES = [
   { par: 4, tee: [110, 240], cup: [610, 240],                                     // center block + posts
     walls: [[330, 170, 60, 140], [200, 60, 40, 60], [480, 360, 40, 60]] },
 ];
+const PAR = HOLES.reduce((a, h) => a + h.par, 0);
 
 const R = 9;            // ball radius
 const CUP_R = 15;       // cup radius
@@ -50,25 +111,85 @@ const FRICTION = 0.985; // per step velocity decay
 const STOP = 0.06;      // speed below which the ball halts
 
 let holeIdx = 0, strokes = 0, total = 0;
-let ball, walls, cup, done = false;
-let aim = null;         // { x, y } current pointer while dragging
+let ball, walls, cup;
+let started = false, done = false;   // started: name entered; done: round over
+let aim = null;                      // { x, y } current pointer while dragging
+let playerName = '';
 
 function loadHole(i) {
   const h = HOLES[i];
   ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, moving: false };
   cup = { x: h.cup[0], y: h.cup[1] };
-  // outer border as four walls + interior obstacles
   walls = [
     [0, 0, W, MARGIN], [0, H - MARGIN, W, MARGIN],
     [0, 0, MARGIN, H], [W - MARGIN, 0, MARGIN, H],
     ...h.walls,
   ];
-  strokes = 0; done = false; aim = null;
+  strokes = 0; aim = null;
   $('hole').textContent = i + 1;
   $('par').textContent = h.par;
   $('strokes').textContent = 0;
   $('total').textContent = total;
 }
+
+// ---- name entry / round lifecycle ----
+function beginRound(name) {
+  playerName = name;
+  $('who').textContent = name;
+  localStorage.setItem('golf_name', name);
+  holeIdx = 0; total = 0; done = false; started = true;
+  $('start').classList.remove('show');
+  $('end').classList.remove('show');
+  loadHole(0);
+}
+
+$('startBtn').addEventListener('click', () => {
+  const n = $('name').value.trim() || 'Player';
+  beginRound(n);
+});
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('startBtn').click(); });
+$('againBtn').addEventListener('click', () => beginRound(playerName));
+$('name').value = localStorage.getItem('golf_name') || '';
+
+async function finishRound() {
+  done = true;
+  const diff = total - PAR;
+  const label = diff === 0 ? 'even par' : diff > 0 ? `+${diff}` : `${diff}`;
+  $('endResult').innerHTML = `<b>${total}</b> strokes &middot; par ${PAR} &middot; ${label}`;
+  $('endBest').textContent = '';
+  renderBoard('boardToday', [], playerName);
+  renderBoard('boardAll', [], playerName);
+  $('end').classList.add('show');
+
+  // submit + pull leaderboards (server returns them in the POST response)
+  let data = null;
+  try {
+    const res = await fetch('/api/score', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: playerName, strokes: total }),
+    });
+    if (res.ok) data = await res.json();
+  } catch (e) { console.warn('score submit failed', e); }
+
+  if (data) {
+    renderBoard('boardToday', data.today, playerName);
+    renderBoard('boardAll', data.allTime, playerName);
+    const mine = (data.allTime || []).find(s => s.name === playerName);
+    if (mine) $('endBest').textContent = `your best for the round: ${mine.strokes}`;
+  } else {
+    $('boardToday').innerHTML = '<div class="empty">leaderboard unavailable offline</div>';
+    $('boardAll').innerHTML = '';
+  }
+}
+
+function renderBoard(id, rows, me) {
+  const ol = $(id);
+  if (!rows || !rows.length) { ol.innerHTML = '<div class="empty">no scores yet</div>'; return; }
+  ol.innerHTML = rows.map((s, i) =>
+    `<li class="${s.name === me ? 'me' : ''}"><span class="nm">${i + 1}. ${esc(s.name)}</span><span class="sc">${s.strokes}</span></li>`
+  ).join('');
+}
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---- input (pointer = mouse + touch) ----
 function ptr(e) {
@@ -77,7 +198,7 @@ function ptr(e) {
   return { x: (t.clientX - r.left) * (W / r.width), y: (t.clientY - r.top) * (H / r.height) };
 }
 function onDown(e) {
-  if (ball.moving || done) return;
+  if (!started || ball.moving || done) return;
   const p = ptr(e);
   if (Math.hypot(p.x - ball.x, p.y - ball.y) < 60) { aim = p; e.preventDefault(); }
 }
@@ -101,7 +222,6 @@ addEventListener('mouseup', onUp);
 canvas.addEventListener('touchstart', onDown, { passive: false });
 canvas.addEventListener('touchmove', onMove, { passive: false });
 canvas.addEventListener('touchend', onUp);
-canvas.addEventListener('click', () => { if (done) { holeIdx = 0; total = 0; loadHole(0); } });
 
 // ---- physics ----
 function circleRect(cx, cy, r, rx, ry, rw, rh) {
@@ -112,10 +232,9 @@ function circleRect(cx, cy, r, rx, ry, rw, rh) {
 }
 
 function step() {
-  if (!ball.moving) return;
-  // sub-step so fast shots don't tunnel through walls
+  if (!ball || !ball.moving) return;
   const speed = Math.hypot(ball.vx, ball.vy);
-  const sub = Math.max(1, Math.ceil(speed / (R * 0.5)));
+  const sub = Math.max(1, Math.ceil(speed / (R * 0.5)));   // sub-step vs tunneling
   for (let s = 0; s < sub; s++) {
     ball.x += ball.vx / sub;
     ball.y += ball.vy / sub;
@@ -123,16 +242,14 @@ function step() {
       const c = circleRect(ball.x, ball.y, R, x, y, w, h);
       if (!c.hit) continue;
       let d = Math.hypot(c.dx, c.dy) || 1;
-      const nxv = c.dx / d, nyv = c.dy / d;    // collision normal
-      // reflect velocity and push the ball back out of the wall
+      const nxv = c.dx / d, nyv = c.dy / d;
       const dot = ball.vx * nxv + ball.vy * nyv;
       ball.vx -= 2 * dot * nxv;
       ball.vy -= 2 * dot * nyv;
       const push = R - d;
       ball.x += nxv * push; ball.y += nyv * push;
-      ball.vx *= 0.8; ball.vy *= 0.8;          // bounce energy loss
+      ball.vx *= 0.8; ball.vy *= 0.8;
     }
-    // sink check mid-substep
     const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
     if (dc < CUP_R - 2 && speed < 7) { sink(); return; }
   }
@@ -146,7 +263,7 @@ function sink() {
   total += strokes; $('total').textContent = total;
   setTimeout(() => {
     if (holeIdx < HOLES.length - 1) { holeIdx++; loadHole(holeIdx); }
-    else done = true;
+    else finishRound();
   }, 650);
 }
 
@@ -162,11 +279,9 @@ function roundRect(x, y, w, h, r) {
 }
 
 function draw() {
-  // fairway
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fairway').trim();
   ctx.fillRect(MARGIN, MARGIN, W - MARGIN * 2, H - MARGIN * 2);
 
-  // walls
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--wall').trim();
   for (const [x, y, w, h] of walls) roundRect(x, y, w, h, 4), ctx.fill();
 
@@ -198,26 +313,9 @@ function draw() {
   ctx.beginPath(); ctx.arc(ball.x + 1, ball.y + 2, R, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ball').trim();
   ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
-
-  // win screen
-  if (done) {
-    ctx.fillStyle = 'rgba(6,10,8,.82)';
-    ctx.fillRect(0, 0, W, H);
-    const par = HOLES.reduce((a, h) => a + h.par, 0);
-    const diff = total - par;
-    const label = diff === 0 ? 'even par' : diff > 0 ? `+${diff}` : `${diff}`;
-    ctx.textAlign = 'center';
-    ctx.fillStyle = '#facc15'; ctx.font = '600 34px ui-monospace, monospace';
-    ctx.fillText('ROUND COMPLETE', W / 2, H / 2 - 26);
-    ctx.fillStyle = '#e8e8e8'; ctx.font = '18px ui-monospace, monospace';
-    ctx.fillText(`${total} strokes · par ${par} · ${label}`, W / 2, H / 2 + 12);
-    ctx.fillStyle = 'rgba(232,232,232,.55)'; ctx.font = '13px ui-monospace, monospace';
-    ctx.fillText('click to play again', W / 2, H / 2 + 46);
-    ctx.textAlign = 'left';
-  }
 }
 
-function loop() { step(); draw(); requestAnimationFrame(loop); }
-loadHole(0);
+function loop() { step(); if (ball) draw(); requestAnimationFrame(loop); }
+loadHole(0);            // render a course behind the start overlay
 requestAnimationFrame(loop);
 </script>
