@@ -12,8 +12,8 @@ USER root
 # fails on fixable HIGH/CRITICAL vulns (it caught CVE-2026-33630 in c-ares in
 # a current image). Keep this line — it's what "current base image" means.
 RUN apk upgrade --no-cache \
-    && echo "ok" > /usr/share/nginx/html/healthz \
-    && echo "hello from flightdeck" > /usr/share/nginx/html/index.html
+    && echo "ok" > /usr/share/nginx/html/healthz
+COPY index.html /usr/share/nginx/html/index.html
 
 # Explicit non-root user: the Trivy gate (DS002, HIGH) checks the Dockerfile
 # itself and can't see that the base image already switches users.
