@@ -2,7 +2,7 @@
 # linux/amd64 per the flightdeck contract; the final image has no shell or
 # package manager, so the Trivy image scan has almost no surface to flag.
 
-FROM --platform=linux/amd64 golang:1.24-alpine AS build
+FROM --platform=linux/amd64 golang:1.26-alpine AS build
 WORKDIR /src
 # Cache module downloads separately from source changes.
 COPY go.mod go.sum ./
