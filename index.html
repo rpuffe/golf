@@ -17,6 +17,17 @@
   canvas { background:var(--rough); border:1px solid var(--wall); border-radius:6px; touch-action:none; cursor:crosshair; max-width:100%; }
   #hint { font-size:11px; opacity:.45; letter-spacing:1px; height:14px; }
 
+  /* live social toasts */
+  #toasts { position:fixed; top:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none; }
+  .toast {
+    background:#0e1712; border:1px solid var(--accent); color:var(--fg);
+    padding:9px 13px; border-radius:8px; font-size:13px; letter-spacing:.4px;
+    box-shadow:0 4px 14px rgba(0,0,0,.45); max-width:280px;
+    opacity:0; transform:translateX(14px); transition:opacity .3s ease, transform .3s ease;
+  }
+  .toast.show { opacity:1; transform:none; }
+  .toast b { color:var(--accent); }
+
   /* overlays */
   .overlay {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
@@ -61,6 +72,7 @@
 </div>
 <canvas id="c" width="720" height="480"></canvas>
 <div id="hint">drag back from the ball to aim &amp; set power — release to putt</div>
+<div id="toasts"></div>
 
 <!-- name entry -->
 <div id="start" class="overlay show">
@@ -191,6 +203,41 @@ function renderBoard(id, rows, me) {
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
+// ---- live social feed (SSE) ----
+const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+function connectLive() {
+  let es;
+  try { es = new EventSource('/api/events'); }
+  catch (e) { return; }                       // e.g. file:// with no backend
+  es.addEventListener('holeout', ev => {
+    let d; try { d = JSON.parse(ev.data); } catch { return; }
+    if (!d || d.id === CLIENT_ID) return;      // ignore our own hole-outs
+    const s = d.strokes === 1 ? 'stroke' : 'strokes';
+    toast(`<b>${esc(d.name)}</b> finished hole ${d.hole} in ${d.strokes} ${s}`);
+  });
+  // EventSource auto-reconnects on error; nothing to do.
+}
+
+function broadcastHole(hole, holeStrokes) {
+  fetch('/api/hole', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: CLIENT_ID, name: playerName, hole, strokes: holeStrokes }),
+  }).catch(() => {});
+}
+
+let toastTimer = 0;
+function toast(html) {
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = html;
+  const box = $('toasts');
+  box.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 5000);
+  while (box.children.length > 4) box.removeChild(box.firstChild);   // cap stack
+}
+
 // ---- input (pointer = mouse + touch) ----
 function ptr(e) {
   const r = canvas.getBoundingClientRect();
@@ -261,6 +308,7 @@ function sink() {
   ball.moving = false; ball.vx = ball.vy = 0;
   ball.x = cup.x; ball.y = cup.y;
   total += strokes; $('total').textContent = total;
+  if (started) broadcastHole(holeIdx + 1, strokes);   // notify other live players
   setTimeout(() => {
     if (holeIdx < HOLES.length - 1) { holeIdx++; loadHole(holeIdx); }
     else finishRound();
@@ -317,5 +365,6 @@ function draw() {
 
 function loop() { step(); if (ball) draw(); requestAnimationFrame(loop); }
 loadHole(0);            // render a course behind the start overlay
+connectLive();          // subscribe to other players' hole-outs
 requestAnimationFrame(loop);
 </script>

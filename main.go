@@ -18,6 +18,7 @@ var indexHTML []byte
 func main() {
 	port := getenv("PORT", "8080")
 	store := newStore(context.Background(), os.Getenv("STORAGE_BUCKET"))
+	hub := newHub()
 
 	mux := http.NewServeMux()
 
@@ -62,6 +63,10 @@ func main() {
 	mux.HandleFunc("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		writeLeaderboards(w, r, store)
 	})
+
+	// Live social feed: subscribe (SSE) and publish hole-completions.
+	mux.HandleFunc("/api/events", hub.serveSSE)
+	mux.HandleFunc("/api/hole", hub.serveHole)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
