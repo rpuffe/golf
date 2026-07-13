@@ -40,12 +40,29 @@
   #hud .who b { color:var(--hot); }
   .status-dot { display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); }
   canvas {
-    display:block; width:auto; height:auto; max-width:100%; max-height:calc(100dvh - 165px);
+    display:block; width:auto; height:auto; max-width:100%; max-height:calc(100dvh - 215px);
     background:var(--rough); border:1px solid rgba(98,233,255,.32); border-radius:18px;
     box-shadow:0 24px 70px rgba(0,0,0,.42),0 0 0 5px rgba(98,233,255,.035),0 0 42px rgba(98,233,255,.08);
     touch-action:none; cursor:crosshair;
   }
   #hint { font-size:10px; color:var(--muted); letter-spacing:1.25px; min-height:16px; text-align:center; text-transform:uppercase; }
+
+  /* club selector chips */
+  #clubs { width:min(720px,100%); display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  #clubs .club {
+    display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 6px;
+    background:var(--panel); border:1px solid rgba(98,233,255,.14); border-radius:12px;
+    color:var(--muted); cursor:pointer; font:inherit; text-transform:uppercase;
+    letter-spacing:1.2px; backdrop-filter:blur(12px);
+    box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.15);
+    transition:border-color .15s,color .15s,box-shadow .15s;
+  }
+  #clubs .club b { color:var(--fg); font-size:12px; }
+  #clubs .club small { font-size:8px; letter-spacing:1px; opacity:.65; text-transform:none; }
+  #clubs .club:hover { border-color:rgba(98,233,255,.4); }
+  #clubs .club.active { color:var(--accent); border-color:var(--accent); box-shadow:0 0 22px rgba(216,255,82,.1),inset 0 0 0 1px rgba(216,255,82,.22); }
+  #clubs .club.active b { color:var(--accent); }
+  #clubs .club .key { font-size:8px; opacity:.5; letter-spacing:1px; }
 
   /* live social toasts */
   #toasts { position:fixed; top:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none; }
@@ -147,7 +164,9 @@
     #hud { grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
     #hud span { padding:6px 3px; border-radius:10px; }
     #hud .who { grid-column:1 / -1; }
-    canvas { min-height:0; max-height:calc(100vh - 202px); max-height:calc(100svh - 202px); border-radius:15px; }
+    canvas { min-height:0; max-height:calc(100vh - 250px); max-height:calc(100svh - 250px); border-radius:15px; }
+    #clubs { gap:5px; }
+    #clubs .club { padding:6px 3px; letter-spacing:.6px; }
     #hint { max-width:340px; min-height:0; font-size:9px; line-height:1.25; letter-spacing:.85px; }
     #links { gap:12px; margin-bottom:0; font-size:9px; letter-spacing:.8px; }
     #links #leaderboardBtn { padding:5px 9px; }
@@ -168,7 +187,7 @@
     #hud { font-size:8px; letter-spacing:.65px; }
     #hud b { font-size:10px; }
     #links { gap:9px; font-size:8px; }
-    canvas { max-height:calc(100svh - 194px); }
+    canvas { max-height:calc(100svh - 242px); }
     .brand-mark { font-size:8px; letter-spacing:1.25px; }
   }
   @media (prefers-reduced-motion:reduce) {
@@ -178,13 +197,18 @@
 
 <div id="hud">
   <span class="who"><i class="status-dot"></i><b id="who">—</b></span>
-  <span>Hole <b id="hole">1</b>/3</span>
+  <span>Hole <b id="hole">1</b>/9</span>
   <span>Par <b id="par">3</b></span>
   <span>Strokes <b id="strokes">0</b></span>
   <span>Total <b id="total">0</b></span>
 </div>
 <canvas id="c" width="720" height="480"></canvas>
-<div id="hint">drag back from the ball to aim &amp; set power — release to putt</div>
+<div id="clubs">
+  <button class="club" data-i="0" type="button"><b>Driver</b><small>long &middot; low</small><span class="key">1</span></button>
+  <button class="club" data-i="1" type="button"><b>Wedge</b><small>high &middot; soft</small><span class="key">2</span></button>
+  <button class="club" data-i="2" type="button"><b>Putter</b><small>ground &middot; exact</small><span class="key">3</span></button>
+</div>
+<div id="hint">drag back from the ball to aim &amp; set power — release to hit</div>
 <div id="links">
   <button id="leaderboardBtn" type="button">leaderboard</button>
   <button id="howtoBtn" type="button">how it works</button>
@@ -212,7 +236,7 @@
   <div class="card">
     <div class="brand-mark">After dark · est. 2026</div>
     <h1>MINI GOLF</h1>
-    <div class="sub">3 holes · par 9 · fewest strokes wins</div>
+    <div class="sub">9 holes · par 31 · pick your club · fewest strokes wins</div>
     <input id="name" maxlength="20" placeholder="enter your name" autocomplete="off">
     <div class="actions">
       <button id="startBtn">Start Round</button>
@@ -241,10 +265,13 @@
     <button class="closeX" id="howtoClose" type="button" aria-label="Close">&times;</button>
     <h1>HOW IT WORKS</h1>
     <ul>
-      <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to putt.</li>
-      <li>3 hand-designed holes, par 9. Fewest strokes wins.</li>
-      <li>Your best round is saved to a live leaderboard (Today + All-time).</li>
-      <li>While you play, you'll get a live notification when another player online finishes a hole.</li>
+      <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to hit.</li>
+      <li>Pick a club before each shot — tap the chips below the course, or press 1 / 2 / 3 (C cycles).</li>
+      <li><b>Driver</b> flies long and low. <b>Wedge</b> lofts high to clear sand and trees. <b>Putter</b> stays on the ground and is dead accurate.</li>
+      <li>Trees can be chipped over. Mountains and steel barriers cannot — route around them.</li>
+      <li>Carry the water in the air — land in the pond and it's a <b>+1 penalty</b>, replayed from where you last hit.</li>
+      <li>Nine hand-built holes combine split fairways, doglegs, forest shortcuts, water carries, and mountain routes. Fewest strokes wins.</li>
+      <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
     <button id="howtoOk">Got it</button>
   </div>
@@ -255,53 +282,119 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const $ = id => document.getElementById(id);
 
-// ---- course data ----  walls are [x,y,w,h] rects (inset border added automatically)
+// ---- course data ----
+// obstacles are [x,y,w,h,height,type]. Trees have a finite height and can be
+// cleared in flight; mountains omit height and are permanent barriers.
+// sands are ground-level [x,y,w,h] hazards that bog the ball down while it rolls.
+// Nine holes authored in landscape LAND_W x LAND_H. Every layout has its own
+// identity and supports more than one route instead of prescribing a single shot.
+const LAND_W = 960, LAND_H = 480;
 const BASE_HOLES = [
-  { par: 2, tee: [110, 240], cup: [610, 240], walls: [] },                       // straight
-  { par: 3, tee: [110, 380], cup: [610, 110],                                     // dogleg
-    walls: [[240, 0, 40, 340], [440, 140, 40, 340]] },
-  { par: 4, tee: [110, 240], cup: [610, 240],                                     // center block + posts
-    walls: [[330, 170, 60, 140], [200, 60, 40, 60], [480, 360, 40, 60]] },
+  // Split Decision — a central bunker asks for a safe lane or an ambitious carry.
+  { name: 'Split Decision', par: 3, tee: [70, 240], cup: [850, 240],
+    walls: [[455, 170, 70, 140, 34, 'trees']],
+    sands: [[330, 55, 125, 125], [525, 300, 125, 125]],
+    waters: [] },
+  // Neon Bend — play the long dogleg or loft a wedge across the low ridge.
+  { name: 'Neon Bend', par: 4, tee: [85, 390], cup: [850, 90],
+    walls: [[275, 18, 55, 275, undefined, 'mountain'], [535, 187, 55, 275, undefined, 'mountain'], [330, 230, 205, 38, 42, 'trees']],
+    sands: [[350, 315, 165, 105]],
+    waters: [[650, 180, 115, 95]] },
+  // Blue Horizon — lay up, then commit to a clean carry onto the far green.
+  { name: 'Blue Horizon', par: 3, tee: [75, 240], cup: [865, 240],
+    walls: [[790, 95, 28, 95, 26, 'trees'], [790, 290, 28, 95, 26, 'trees']],
+    sands: [[330, 75, 100, 105], [330, 300, 100, 105]],
+    waters: [[535, 55, 180, 370]] },
+  // Switchback — mountains alternate from each edge to form a climbing slalom.
+  { name: 'Switchback', par: 4, tee: [75, 405], cup: [875, 75],
+    walls: [[245, 165, 55, 297, undefined, 'mountain'], [470, 18, 55, 285, undefined, 'mountain'], [695, 165, 55, 297, undefined, 'mountain'], [525, 235, 170, 36, 40, 'trees']],
+    sands: [[325, 330, 120, 95]],
+    waters: [] },
+  // Twin Lakes — thread the dry center or carry either lake to a wider landing.
+  { name: 'Twin Lakes', par: 3, tee: [70, 240], cup: [875, 240],
+    walls: [[455, 205, 70, 70, 32, 'trees']],
+    sands: [[700, 195, 105, 90]],
+    waters: [[300, 45, 300, 145], [300, 290, 300, 145]] },
+  // Forest Gate — staggered groves reward controlled wedges on a diagonal line.
+  { name: 'Forest Gate', par: 3, tee: [75, 390], cup: [875, 90],
+    walls: [[260, 275, 150, 42, 34, 'trees'], [440, 190, 150, 42, 38, 'trees'], [620, 105, 150, 42, 34, 'trees']],
+    sands: [[335, 55, 130, 95], [600, 330, 130, 95]],
+    waters: [] },
+  // Quarry Run — a central massif creates two genuinely different routes.
+  { name: 'Quarry Run', par: 4, tee: [70, 240], cup: [880, 240],
+    walls: [[370, 125, 220, 230, undefined, 'mountain']],
+    sands: [[305, 45, 350, 70]],
+    waters: [[305, 365, 350, 70]],
+  },
+  // Stepping Stones — dry landing shelves zigzag through a broad water hazard.
+  { name: 'Stepping Stones', par: 3, tee: [75, 390], cup: [875, 90],
+    walls: [[420, 205, 115, 55, 30, 'trees']],
+    sands: [[590, 55, 115, 85]],
+    waters: [[245, 45, 150, 260], [565, 175, 150, 260]] },
+  // Summit — the finale mixes every learned choice on the climb to the flag.
+  { name: 'Summit', par: 4, tee: [70, 405], cup: [880, 75],
+    walls: [[255, 160, 60, 302, undefined, 'mountain'], [570, 18, 60, 285, undefined, 'mountain'], [350, 310, 175, 38, 42, 'trees'], [650, 125, 155, 38, 38, 'trees']],
+    sands: [[345, 55, 150, 95]],
+    waters: [[665, 330, 145, 95]] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
-const rotatePoint = ([x, y]) => [y, 720 - x];
-const rotateWall = ([x, y, w, h]) => [y, 720 - x - w, h, w];
+const rotatePoint = ([x, y]) => [y, LAND_W - x];
+// keep optional obstacle height + visual type when rotating; hazards have only 4 values
+const rotateWall = ([x, y, w, h, hz, type]) => [y, LAND_W - x - w, h, w, hz, type];
 const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
-  par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup), walls: h.walls.map(rotateWall),
+  par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
+  walls: h.walls.map(rotateWall), sands: h.sands.map(rotateWall), waters: h.waters.map(rotateWall),
 })) : BASE_HOLES;
-let W = PORTRAIT_COURSE ? 480 : 720;
-let H = PORTRAIT_COURSE ? 720 : 480;
+let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
+let H = PORTRAIT_COURSE ? LAND_W : LAND_H;
 canvas.width = W;
 canvas.height = H;
 $('hint').textContent = PORTRAIT_COURSE
-  ? 'drag anywhere on the course to aim & set power — release to putt'
-  : 'drag back from the ball to aim & set power — release to putt';
+  ? 'drag anywhere to aim & set power · pick a club below · release to hit'
+  : 'drag back from the ball to aim & set power · pick a club below · release to hit';
 const PAR = HOLES.reduce((a, h) => a + h.par, 0);
 
 const R = 9;            // ball radius
 const CUP_R = 15;       // cup radius
 const MARGIN = 18;      // playfield inset (outer wall)
 const MAX_DRAG = 150;   // px drag = max power
-const MAX_SPEED = 13;   // px per step at full power
-const FRICTION = 0.985; // per step velocity decay
 const STOP = 0.06;      // speed below which the ball halts
+const GRAVITY = 0.55;   // downward pull per step on an airborne ball
+const LAND_DAMP = 0.72; // fraction of horizontal speed kept when the ball touches down
+const SAND_FRICTION = 0.80; // heavy per-step decay while rolling through a bunker
+
+// clubs reshape the shot: speed = horizontal px/step at full power, loft = upward
+// launch velocity, friction = per-step ground decay (higher = rolls farther)
+const CLUBS = [
+  { name: 'Driver', speed: 14.44, loft: 3.3, friction: 0.965 },  // long, penetrating flight, big rollout
+  { name: 'Wedge',  speed: 8,  loft: 8,   friction: 0.93 },   // high, clears sand + ridge, checks up
+  { name: 'Putter', speed: 11, loft: 0,   friction: 0.955 },  // grounded & precise
+];
+let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0;
-let ball, walls, cup;
+let ball, walls, cup, sands = [], waters = [];
+let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
+let waterHold = false;    // true during the splash pause: hides the ball and blocks input
+let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
 let started = false, done = false;   // started: name entered; done: round over
 let aim = null;                      // { x, y } current pointer while dragging
 let playerName = '';
 
 function loadHole(i) {
   const h = HOLES[i];
-  ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, moving: false };
+  ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, z: 0, vz: 0, moving: false, groundFriction: CLUBS[0].friction };
   cup = { x: h.cup[0], y: h.cup[1] };
   walls = [
     [0, 0, W, MARGIN], [0, H - MARGIN, W, MARGIN],
     [0, 0, MARGIN, H], [W - MARGIN, 0, MARGIN, H],
     ...h.walls,
   ];
+  sands = h.sands || [];
+  waters = h.waters || [];
+  lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
   strokes = 0; aim = null;
+  setClub(0);                       // every hole starts with the driver in hand
   $('hole').textContent = i + 1;
   $('par').textContent = h.par;
   $('strokes').textContent = 0;
@@ -326,6 +419,23 @@ $('startBtn').addEventListener('click', () => {
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('startBtn').click(); });
 $('againBtn').addEventListener('click', () => beginRound(playerName));
 $('name').value = localStorage.getItem('golf_name') || '';
+
+// ---- club selection (chips + keyboard) ----
+function setClub(i) {
+  currentClub = i;
+  document.querySelectorAll('#clubs .club').forEach((el, idx) => el.classList.toggle('active', idx === i));
+}
+$('clubs').addEventListener('click', e => {
+  const b = e.target.closest('.club');
+  if (b) setClub(+b.dataset.i);
+});
+document.addEventListener('keydown', e => {
+  if (!started || done) return;
+  if (e.key === '1') setClub(0);
+  else if (e.key === '2') setClub(1);
+  else if (e.key === '3') setClub(2);
+  else if (e.key === 'c' || e.key === 'C') setClub((currentClub + 1) % CLUBS.length);
+});
 
 // ---- how it works modal ----
 $('howtoBtn').addEventListener('click', () => $('howto').classList.add('show'));
@@ -451,7 +561,7 @@ function ptr(e) {
 let dragOrigin = null;
 let touchAim = false;
 function onDown(e) {
-  if (!started || ball.moving || done) return;
+  if (!started || ball.moving || done || waterHold) return;
   const p = ptr(e);
   touchAim = e.pointerType === 'touch' || e.pointerType === 'pen';
   if (touchAim || Math.hypot(p.x - ball.x, p.y - ball.y) < 60) {
@@ -476,9 +586,14 @@ function onUp(e) {
   const d = Math.hypot(dx, dy);
   aim = null; dragOrigin = null; touchAim = false;
   if (d < 6) return;                       // ignore taps
+  lastShotPos = { x: ball.x, y: ball.y };  // remember where we hit from, in case of a water penalty
+  const club = CLUBS[currentClub];
   const power = Math.min(d, MAX_DRAG) / MAX_DRAG;
-  ball.vx = (dx / d) * MAX_SPEED * power;
-  ball.vy = (dy / d) * MAX_SPEED * power;
+  ball.vx = (dx / d) * club.speed * power;
+  ball.vy = (dy / d) * club.speed * power;
+  ball.vz = club.loft * power;             // loft sends it airborne (0 for the putter)
+  ball.z = 0;
+  ball.groundFriction = club.friction;     // this club's roll persists for the whole shot
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
 }
@@ -495,6 +610,32 @@ function circleRect(cx, cy, r, rx, ry, rw, rh) {
   return { hit: dx * dx + dy * dy < r * r, nx, ny, dx, dy };
 }
 
+function inSand(x, y) {
+  for (const [sx, sy, sw, sh] of sands) {
+    if (x >= sx && x <= sx + sw && y >= sy && y <= sy + sh) return true;
+  }
+  return false;
+}
+function inWater(x, y) {
+  for (const [wx, wy, ww, wh] of waters) {
+    if (x >= wx && x <= wx + ww && y >= wy && y <= wy + wh) return true;
+  }
+  return false;
+}
+// ball found water while on the ground: +1 penalty stroke, then (after a beat) replay from where it was hit
+function waterPenalty() {
+  ball.moving = false; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
+  strokes++; $('strokes').textContent = strokes;
+  toast('<b>Splash!</b> +1 stroke &middot; drop where you last hit');
+  waterHold = true;                                    // hide the ball & block input during the pause
+  splashPos = { x: ball.x, y: ball.y }; splashStart = performance.now();
+  ball.hidden = true;
+  setTimeout(() => {                                   // ball reappears at the drop after the splash settles
+    ball.x = lastShotPos.x; ball.y = lastShotPos.y;
+    ball.hidden = false; waterHold = false; splashPos = null;
+  }, 900);
+}
+
 function step() {
   if (!ball || !ball.moving) return;
   const speed = Math.hypot(ball.vx, ball.vy);
@@ -502,8 +643,20 @@ function step() {
   for (let s = 0; s < sub; s++) {
     ball.x += ball.vx / sub;
     ball.y += ball.vy / sub;
-    for (const [x, y, w, h] of walls) {
-      const c = circleRect(ball.x, ball.y, R, x, y, w, h);
+    // vertical flight: gravity arc, then touchdown
+    if (ball.z > 0 || ball.vz > 0) {
+      ball.vz -= GRAVITY / sub;
+      ball.z += ball.vz / sub;
+      if (ball.z <= 0) {                       // lands: trade loft for roll
+        ball.z = 0; ball.vz = 0;
+        ball.vx *= LAND_DAMP; ball.vy *= LAND_DAMP;
+      }
+    }
+    const airborne = ball.z > 0.01;
+    for (const w of walls) {
+      const wh = w[4] === undefined ? Infinity : w[4];
+      if (airborne && ball.z >= wh) continue;  // flying above this wall — sail over it
+      const c = circleRect(ball.x, ball.y, R, w[0], w[1], w[2], w[3]);
       if (!c.hit) continue;
       let d = Math.hypot(c.dx, c.dy) || 1;
       const nxv = c.dx / d, nyv = c.dy / d;
@@ -514,15 +667,21 @@ function step() {
       ball.x += nxv * push; ball.y += nyv * push;
       ball.vx *= 0.8; ball.vy *= 0.8;
     }
-    const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
-    if (dc < CUP_R - 2 && speed < 7) { sink(); return; }
+    if (!airborne) {                           // ground-only checks
+      if (inWater(ball.x, ball.y)) { waterPenalty(); return; }   // landed/rolled into the pond
+      const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
+      if (dc < CUP_R - 2 && speed < 7) { sink(); return; }
+    }
   }
-  ball.vx *= FRICTION; ball.vy *= FRICTION;
-  if (Math.hypot(ball.vx, ball.vy) < STOP) { ball.vx = ball.vy = 0; ball.moving = false; }
+  if (ball.z <= 0.01) {                         // ground drag; sand bogs it down
+    const f = inSand(ball.x, ball.y) ? SAND_FRICTION : ball.groundFriction;
+    ball.vx *= f; ball.vy *= f;
+    if (Math.hypot(ball.vx, ball.vy) < STOP) { ball.vx = ball.vy = 0; ball.moving = false; }
+  }
 }
 
 function sink() {
-  ball.moving = false; ball.vx = ball.vy = 0;
+  ball.moving = false; ball.vx = ball.vy = 0; ball.z = 0; ball.vz = 0;
   ball.x = cup.x; ball.y = cup.y;
   total += strokes; $('total').textContent = total;
   if (started) broadcastHole(holeIdx + 1, strokes);   // notify other live players
@@ -541,6 +700,79 @@ function roundRect(x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+
+// a raised wall drawn as an extruded block: footprint on the ground, body lifted
+// straight "up" (−y) by its height, with a lit top face — so you can read how tall it is
+function drawWall3D(x, y, w, h, height) {
+  // soft contact shadow cast from the footprint — anchors the block to the turf
+  ctx.save();
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 5;
+  ctx.fillStyle = '#04211e';
+  roundRect(x, y, w, h, 6); ctx.fill();
+  ctx.restore();
+  // body / front face: lit near the top, falling into shade at the base
+  const g = ctx.createLinearGradient(0, y - height, 0, y + h);
+  g.addColorStop(0, '#0d4c44'); g.addColorStop(.5, '#0a3e37'); g.addColorStop(1, '#06302b');
+  ctx.fillStyle = g;
+  roundRect(x, y - height, w, h + height, 6); ctx.fill();
+  // lit top face
+  ctx.fillStyle = '#125a4f';
+  roundRect(x, y - height, w, h, 6); ctx.fill();
+  ctx.strokeStyle = 'rgba(98,233,255,.5)'; ctx.lineWidth = 1.5;
+  roundRect(x + .75, y - height + .75, w - 1.5, h - 1.5, 6); ctx.stroke();
+}
+
+// A finite-height obstacle is a grove: the footprint still drives collision,
+// while overlapping trunks and neon canopies make "chip over me" obvious.
+function drawTrees(x, y, w, h, height) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(3,28,24,.55)';
+  roundRect(x, y, w, h, 10); ctx.fill();
+  const horizontal = w >= h;
+  const length = horizontal ? w : h;
+  const count = Math.max(2, Math.floor(length / 34));
+  for (let i = 0; i < count; i++) {
+    const t = (i + .5) / count;
+    const tx = horizontal ? x + w * t : x + w * (.35 + (i % 2) * .3);
+    const ty = horizontal ? y + h * (.38 + (i % 2) * .28) : y + h * t;
+    const canopyY = ty - height * .55;
+    ctx.strokeStyle = '#744f38'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.moveTo(tx, ty + 5); ctx.lineTo(tx, canopyY + 8); ctx.stroke();
+    ctx.fillStyle = i % 2 ? '#1aa06f' : '#22bd78';
+    ctx.shadowColor = 'rgba(34,189,120,.38)'; ctx.shadowBlur = 10;
+    ctx.beginPath(); ctx.arc(tx, canopyY, 13, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#35d98b';
+    ctx.beginPath(); ctx.arc(tx - 5, canopyY - 5, 6, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Permanent internal barriers read as a continuous rocky mountain ridge.
+function drawMountain(x, y, w, h) {
+  ctx.save();
+  ctx.fillStyle = '#172d32';
+  roundRect(x, y, w, h, 7); ctx.fill();
+  ctx.beginPath(); ctx.rect(x, y - 30, w, h + 30); ctx.clip();
+  const horizontal = w >= h;
+  const length = horizontal ? w : h;
+  const count = Math.max(3, Math.ceil(length / 42));
+  for (let i = 0; i < count; i++) {
+    const t = (i + .5) / count;
+    const px = horizontal ? x + w * t : x + w * (.35 + (i % 2) * .3);
+    const py = horizontal ? y + h * (.55 + (i % 2) * .18) : y + h * t;
+    const size = 25 + (i % 3) * 5;
+    ctx.fillStyle = i % 2 ? '#29434a' : '#213a40';
+    ctx.beginPath();
+    ctx.moveTo(px - size, py + 18); ctx.lineTo(px - 8, py - size);
+    ctx.lineTo(px + 3, py - size * .48); ctx.lineTo(px + size, py + 18);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(98,233,255,.2)'; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = 'rgba(205,238,232,.45)';
+    ctx.beginPath(); ctx.moveTo(px - 8, py - size); ctx.lineTo(px + 3, py - size * .48);
+    ctx.lineTo(px - 1, py - size * .56); ctx.lineTo(px - 11, py - size * .65); ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function draw() {
@@ -567,15 +799,54 @@ function draw() {
   }
   ctx.restore();
 
-  // chunky obstacles with a cool edge highlight
+  // sand bunkers sit on the turf — fly over them, don't roll through
+  for (const [x, y, w, h] of sands) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(226,196,120,.92)';
+    roundRect(x, y, w, h, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,235,170,.35)'; ctx.lineWidth = 1.5;
+    roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 12); ctx.stroke();
+    ctx.beginPath(); roundRect(x, y, w, h, 12); ctx.clip();
+    ctx.fillStyle = 'rgba(150,120,60,.32)';
+    for (let sx = x + 9; sx < x + w; sx += 15)
+      for (let sy = y + 9; sy < y + h; sy += 15) {
+        ctx.beginPath(); ctx.arc(sx, sy, 1.3, 0, Math.PI * 2); ctx.fill();
+      }
+    ctx.restore();
+  }
+
+  // water hazards — carry them in the air; land in one and it's a penalty
+  for (const [x, y, w, h] of waters) {
+    ctx.save();
+    const wg = ctx.createLinearGradient(x, y, x, y + h);
+    wg.addColorStop(0, 'rgba(38,120,190,.92)'); wg.addColorStop(1, 'rgba(24,86,150,.92)');
+    ctx.fillStyle = wg;
+    roundRect(x, y, w, h, 12); ctx.fill();
+    ctx.beginPath(); roundRect(x, y, w, h, 12); ctx.clip();
+    ctx.strokeStyle = 'rgba(170,225,255,.28)'; ctx.lineWidth = 1.5;
+    for (let wy = y + 12; wy < y + h; wy += 17) {
+      ctx.beginPath(); ctx.moveTo(x, wy);
+      ctx.bezierCurveTo(x + w * .3, wy - 4, x + w * .6, wy + 4, x + w, wy); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(120,205,255,.45)'; ctx.lineWidth = 1.5;
+    roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 12); ctx.stroke();
+  }
+
+  // outer boundary walls remain understated; special internal obstacles render below
   ctx.save();
   ctx.fillStyle = '#062825';
   ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
-  for (const [x, y, w, h] of walls) roundRect(x, y, w, h, 7), ctx.fill();
+  for (const w of walls) { if (w[4] !== undefined || w[5]) continue; roundRect(w[0], w[1], w[2], w[3], 7); ctx.fill(); }
   ctx.shadowColor = 'transparent';
   ctx.strokeStyle = 'rgba(98,233,255,.13)'; ctx.lineWidth = 1.5;
-  for (const [x, y, w, h] of walls) roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 7), ctx.stroke();
+  for (const w of walls) { if (w[4] !== undefined || w[5]) continue; roundRect(w[0] + .75, w[1] + .75, w[2] - 1.5, w[3] - 1.5, 7); ctx.stroke(); }
   ctx.restore();
+  for (const w of walls) {
+    if (w[5] === 'trees') drawTrees(w[0], w[1], w[2], w[3], w[4]);
+    else if (w[5] === 'mountain') drawMountain(w[0], w[1], w[2], w[3]);
+    else if (w[4] !== undefined) drawWall3D(w[0], w[1], w[2], w[3], w[4]);
+  }
 
   // tee marker makes the starting area feel intentional
   if (strokes === 0 && !ball.moving) {
@@ -608,31 +879,67 @@ function draw() {
     const d = Math.hypot(dx, dy) || 1;
     const power = Math.min(d, MAX_DRAG) / MAX_DRAG;
     const len = power * 130;
-    ctx.strokeStyle = `rgba(216,255,82,${0.45 + power * 0.5})`;
-    ctx.shadowColor = 'rgba(216,255,82,.6)'; ctx.shadowBlur = 9;
+    ctx.strokeStyle = `rgba(98,233,255,${0.45 + power * 0.5})`;
+    ctx.shadowColor = 'rgba(98,233,255,.6)'; ctx.shadowBlur = 9;
     ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
     ctx.lineTo(ball.x + (dx / d) * len, ball.y + (dy / d) * len); ctx.stroke();
     ctx.setLineDash([]); ctx.shadowColor = 'transparent';
     const tipX = ball.x + (dx / d) * len, tipY = ball.y + (dy / d) * len;
-    ctx.fillStyle = '#d8ff52';
+    ctx.fillStyle = '#62e9ff';
     ctx.beginPath(); ctx.arc(tipX, tipY, 3 + power * 3, 0, Math.PI * 2); ctx.fill();
+
+    // lofted clubs: trace the real flight arc (dots lift off the ground and curve back
+    // down) + a landing ring, so the height and carry are legible before you swing
+    const club = CLUBS[currentClub];
+    if (club.loft > 0) {
+      let sx = ball.x, sy = ball.y, sz = 0;
+      let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power, svz = club.loft * power;
+      ctx.fillStyle = 'rgba(216,255,82,.9)';
+      for (let n = 1; n <= 600 && sz >= 0; n++) {
+        sx += svx; sy += svy; svz -= GRAVITY; sz += svz;
+        if (sz < 0) break;
+        if (n % 4 === 0) { ctx.beginPath(); ctx.arc(sx, sy - sz, 1.8, 0, Math.PI * 2); ctx.fill(); }
+      }
+      ctx.strokeStyle = 'rgba(216,255,82,.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+      ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 
-  // ball
-  ctx.fillStyle = 'rgba(0,0,0,.3)';
-  ctx.beginPath(); ctx.ellipse(ball.x + 2, ball.y + 5, R + 2, R - 3, 0, 0, Math.PI * 2); ctx.fill();
-  const ballFill = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, R + 1);
+  // splash ripple where the ball entered the water, during the penalty pause
+  if (splashPos) {
+    const t = Math.min(1, (performance.now() - splashStart) / 900);
+    ctx.strokeStyle = `rgba(170,225,255,${0.65 * (1 - t)})`; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(splashPos.x, splashPos.y, 4 + t * 24, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(splashPos.x, splashPos.y, 2 + t * 13, 0, Math.PI * 2); ctx.stroke();
+  }
+  if (ball.hidden) return;   // ball is out of play during the water-drop pause
+
+  // ball — shadow stays on the ground; the body lifts by its height (z) so you read altitude
+  const z = ball.z || 0;
+  const drawY = ball.y - z;                              // higher z = drawn further "up"
+  const hr = R + Math.min(z * 0.04, 3.5);                // subtly bigger the higher it is
+  const shScale = 1 / (1 + z * 0.014);                  // shadow tightens as it climbs
+  ctx.fillStyle = `rgba(0,0,0,${Math.max(0.16, 0.44 - z * 0.004)})`;
+  ctx.beginPath(); ctx.ellipse(ball.x, ball.y + 3, (R + 1) * shScale, (R - 3) * shScale, 0, 0, Math.PI * 2); ctx.fill();
+  // dashed tether from shadow up to the ball makes its height obvious in flight
+  if (z > 3) {
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 3]);
+    ctx.beginPath(); ctx.moveTo(ball.x, ball.y + 3); ctx.lineTo(ball.x, drawY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const ballFill = ctx.createRadialGradient(ball.x - 3, drawY - 4, 1, ball.x, drawY, hr + 1);
   ballFill.addColorStop(0, '#ffffff');
   ballFill.addColorStop(.55, '#f8ffe8');
   ballFill.addColorStop(1, '#a9c7b5');
   ctx.fillStyle = ballFill;
   ctx.shadowColor = 'rgba(98,233,255,.35)'; ctx.shadowBlur = 7;
-  ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ball.x, drawY, hr, 0, Math.PI * 2); ctx.fill();
   ctx.shadowColor = 'transparent';
   ctx.fillStyle = 'rgba(7,19,18,.22)';
-  ctx.beginPath(); ctx.arc(ball.x + 2, ball.y + 1, 1.2, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(ball.x - 3, ball.y + 3, 1, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ball.x + 2, drawY + 1, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ball.x - 3, drawY + 3, 1, 0, Math.PI * 2); ctx.fill();
 }
 
 function loop() { step(); if (ball) draw(); requestAnimationFrame(loop); }

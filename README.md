@@ -34,13 +34,14 @@ Go server (main.go)
 Pure canvas, no assets. The whole thing is one file embedded into the binary
 at build time (`//go:embed index.html`).
 
-- **Course**: three holes defined as data (`HOLES` — tee, cup, and wall
-  rectangles). Walls plus the outer border are axis-aligned rectangles.
-- **Physics**: drag back from the ball to aim (slingshot), release to putt.
-  The ball rolls with friction and bounces off walls (circle-vs-rectangle
-  reflection), sub-stepped so fast shots can't tunnel through a wall. It drops
-  when it reaches the cup slowly enough.
-- **Flow**: enter a name → play 3 holes → a round-complete card shows your
+- **Course**: nine holes defined as data (`BASE_HOLES` — tee, cup, trees,
+  mountains, sand, and water). See the repeatable visual and physics rules in
+  [the course-design guide](docs/course-design.md).
+- **Physics**: drag back from the ball to aim (slingshot), choose a club, and
+  release to hit. Lofted shots can clear trees and ground hazards; mountains
+  are permanent barriers. Grounded balls roll with friction and reflect from
+  obstacle rectangles, sub-stepped so fast shots cannot tunnel through them.
+- **Flow**: enter a name → play 9 holes → a round-complete card shows your
   score vs par and the **Today** and **All-time** leaderboards.
 
 ### Scores & storage (`store.go`)
@@ -110,6 +111,7 @@ restart. Set `PORT` to override the listen port (default `8080`).
 | `main.go`            | HTTP server, routes, score validation                  |
 | `store.go`           | `Store` interface + S3 and in-memory implementations   |
 | `hub.go`             | SSE hub for the live social feed                        |
+| `docs/course-design.md` | obstacle language and future hole-authoring guide    |
 | `Dockerfile`         | multi-stage Go build → distroless static image         |
 | `app-manifest.yaml`  | flightdeck service config (name, port, `storage: s3`)  |
 
@@ -119,4 +121,3 @@ flightdeck handles build, scan, deploy, TLS, and DNS. Push to `main` deploys
 dev; tag `v*` promotes that exact image to prod. Always run `make preflight`
 first — it mirrors CI's gates locally. See [CLAUDE.md](CLAUDE.md) and
 [docs/pipeline.md](docs/pipeline.md).
-
