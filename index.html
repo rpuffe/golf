@@ -2,20 +2,28 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MINI GOLF</title>
 <style>
-  :root { --fg:#e8e8e8; --fairway:#2f7d4f; --rough:#25623e; --wall:#173a26; --ball:#f5f5f5; --cup:#0d1f14; --accent:#facc15; }
+  :root { --fg:#e8e8e8; --muted:#9ca89f; --panel:#0e1712; --fairway:#2f7d4f; --rough:#25623e; --wall:#173a26; --ball:#f5f5f5; --cup:#0d1f14; --accent:#facc15; }
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body { height:100%; }
   body {
     background:#0a0f0c; color:var(--fg);
     font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:14px; min-height:100vh; overflow:hidden; user-select:none; -webkit-user-select:none;
+    gap:12px; min-height:100dvh; padding:18px; overflow:auto; user-select:none; -webkit-user-select:none;
   }
-  #hud { display:flex; gap:20px; letter-spacing:1px; text-transform:uppercase; font-size:12px; opacity:.92; flex-wrap:wrap; justify-content:center; }
+  #hud {
+    width:min(720px,100%); display:grid; grid-template-columns:1.4fr repeat(4,1fr); gap:8px;
+    letter-spacing:.7px; text-transform:uppercase; font-size:11px;
+  }
+  #hud span { background:var(--panel); border:1px solid var(--wall); border-radius:7px; padding:8px 10px; text-align:center; white-space:nowrap; }
   #hud b { color:var(--accent); font-variant-numeric:tabular-nums; }
   #hud .who { color:var(--fg); text-transform:none; opacity:.7; }
-  canvas { background:var(--rough); border:1px solid var(--wall); border-radius:6px; touch-action:none; cursor:crosshair; max-width:100%; }
-  #hint { font-size:11px; opacity:.45; letter-spacing:1px; height:14px; }
+  canvas {
+    display:block; width:auto; height:auto; max-width:100%; max-height:calc(100dvh - 165px);
+    background:var(--rough); border:1px solid var(--wall); border-radius:10px;
+    box-shadow:0 18px 50px rgba(0,0,0,.26); touch-action:none; cursor:crosshair;
+  }
+  #hint { font-size:11px; color:var(--muted); letter-spacing:.5px; min-height:16px; text-align:center; }
 
   /* live social toasts */
   #toasts { position:fixed; top:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none; }
@@ -31,7 +39,7 @@
   /* overlays */
   .overlay {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(6,10,8,.86); z-index:10; padding:20px;
+    background:rgba(6,10,8,.9); z-index:10; padding:20px; overflow:auto;
   }
   .overlay.show { display:flex; }
   .card {
@@ -51,15 +59,19 @@
     color:#0a0f0c; background:var(--accent); border:0; border-radius:6px; cursor:pointer;
   }
   .card button:hover { filter:brightness(1.08); }
+  .card .actions { display:grid; gap:9px; }
+  .card button.secondary { color:var(--fg); background:transparent; border:1px solid var(--wall); }
+  .card button.secondary:hover { color:var(--accent); border-color:var(--accent); filter:none; }
   .result { font-size:15px; margin:6px 0 4px; }
   .result b { color:var(--accent); }
-  .boards { display:flex; gap:16px; margin:18px 0 20px; text-align:left; }
+  .boards { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:18px 0 20px; text-align:left; }
   .board { flex:1; min-width:0; }
   .board h2 { font-size:11px; letter-spacing:1px; text-transform:uppercase; opacity:.6; margin-bottom:8px; border-bottom:1px solid var(--wall); padding-bottom:5px; }
   .board ol { list-style:none; font-size:13px; }
-  .board li { display:flex; justify-content:space-between; gap:8px; padding:3px 0; font-variant-numeric:tabular-nums; }
+  .board li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1px 8px; padding:5px 0; font-variant-numeric:tabular-nums; }
   .board li .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .board li .sc { color:var(--accent); }
+  .board li .dt { grid-column:1 / -1; color:var(--muted); font-size:10px; letter-spacing:.3px; }
   .board li.me { color:var(--accent); font-weight:600; }
   .board .empty { opacity:.4; font-size:12px; }
 
@@ -70,6 +82,12 @@
     text-decoration:none; opacity:.5; cursor:pointer;
   }
   #links a:hover, #links button:hover { opacity:1; color:var(--accent); }
+  #links #leaderboardBtn { color:var(--accent); opacity:.9; border:1px solid rgba(250,204,21,.45); border-radius:999px; padding:5px 10px; }
+  #links #leaderboardBtn:hover { border-color:var(--accent); }
+
+  #leaderboard { z-index:12; }
+  #leaderboard .card { width:min(560px,100%); }
+  #leaderboardStatus { min-height:16px; color:var(--muted); font-size:11px; margin-top:4px; }
 
   /* how-it-works modal */
   #howto .card { text-align:left; }
@@ -81,6 +99,18 @@
     background:none; color:var(--fg); font-size:20px; line-height:1; opacity:.5;
   }
   .card .closeX:hover { opacity:1; filter:none; background:none; }
+
+  @media (max-width:700px) and (orientation:portrait) {
+    body { justify-content:flex-start; gap:9px; padding:10px; }
+    #hud { grid-template-columns:repeat(4,1fr); gap:5px; }
+    #hud span { padding:7px 4px; }
+    #hud .who { grid-column:1 / -1; }
+    canvas { max-height:calc(100dvh - 174px); }
+    #hint { font-size:10px; }
+    #links { margin-bottom:3px; }
+    .card { padding:24px 18px; }
+    .boards { grid-template-columns:1fr; gap:18px; max-height:48dvh; overflow:auto; padding-right:3px; }
+  }
 </style>
 
 <div id="hud">
@@ -93,10 +123,26 @@
 <canvas id="c" width="720" height="480"></canvas>
 <div id="hint">drag back from the ball to aim &amp; set power — release to putt</div>
 <div id="links">
+  <button id="leaderboardBtn" type="button">leaderboard</button>
   <button id="howtoBtn" type="button">how it works</button>
   <a href="https://github.com/rpuffe/golf" target="_blank" rel="noopener">github ↗</a>
 </div>
 <div id="toasts"></div>
+
+<!-- leaderboard available before, during, and after a round -->
+<div id="leaderboard" class="overlay">
+  <div class="card">
+    <button class="closeX" id="leaderboardClose" type="button" aria-label="Close">&times;</button>
+    <h1>LEADERBOARD</h1>
+    <div class="sub">fewest strokes wins</div>
+    <div id="leaderboardStatus">Loading scores…</div>
+    <div class="boards">
+      <div class="board"><h2>Today</h2><ol id="leaderboardToday"></ol></div>
+      <div class="board"><h2>All time</h2><ol id="leaderboardAll"></ol></div>
+    </div>
+    <button id="leaderboardOk" type="button">Back to game</button>
+  </div>
+</div>
 
 <!-- name entry -->
 <div id="start" class="overlay show">
@@ -104,7 +150,10 @@
     <h1>MINI GOLF</h1>
     <div class="sub">3 holes · par 9 · fewest strokes wins</div>
     <input id="name" maxlength="20" placeholder="enter your name" autocomplete="off">
-    <button id="startBtn">Start Round</button>
+    <div class="actions">
+      <button id="startBtn">Start Round</button>
+      <button id="startLeaderboardBtn" class="secondary" type="button">View Leaderboard</button>
+    </div>
   </div>
 </div>
 
@@ -128,7 +177,7 @@
     <button class="closeX" id="howtoClose" type="button" aria-label="Close">&times;</button>
     <h1>HOW IT WORKS</h1>
     <ul>
-      <li>Drag back from the ball to aim, release to putt — power scales with drag distance.</li>
+      <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to putt.</li>
       <li>3 hand-designed holes, par 9. Fewest strokes wins.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time).</li>
       <li>While you play, you'll get a live notification when another player online finishes a hole.</li>
@@ -141,16 +190,28 @@
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 const $ = id => document.getElementById(id);
-const W = canvas.width, H = canvas.height;
 
 // ---- course data ----  walls are [x,y,w,h] rects (inset border added automatically)
-const HOLES = [
+const BASE_HOLES = [
   { par: 2, tee: [110, 240], cup: [610, 240], walls: [] },                       // straight
   { par: 3, tee: [110, 380], cup: [610, 110],                                     // dogleg
     walls: [[240, 0, 40, 340], [440, 140, 40, 340]] },
   { par: 4, tee: [110, 240], cup: [610, 240],                                     // center block + posts
     walls: [[330, 170, 60, 140], [200, 60, 40, 60], [480, 360, 40, 60]] },
 ];
+const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
+const rotatePoint = ([x, y]) => [y, 720 - x];
+const rotateWall = ([x, y, w, h]) => [y, 720 - x - w, h, w];
+const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
+  par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup), walls: h.walls.map(rotateWall),
+})) : BASE_HOLES;
+let W = PORTRAIT_COURSE ? 480 : 720;
+let H = PORTRAIT_COURSE ? 720 : 480;
+canvas.width = W;
+canvas.height = H;
+$('hint').textContent = PORTRAIT_COURSE
+  ? 'drag anywhere on the course to aim & set power — release to putt'
+  : 'drag back from the ball to aim & set power — release to putt';
 const PAR = HOLES.reduce((a, h) => a + h.par, 0);
 
 const R = 9;            // ball radius
@@ -208,6 +269,32 @@ $('howtoClose').addEventListener('click', () => $('howto').classList.remove('sho
 $('howtoOk').addEventListener('click', () => $('howto').classList.remove('show'));
 $('howto').addEventListener('click', e => { if (e.target === $('howto')) $('howto').classList.remove('show'); });
 
+// ---- leaderboard available throughout the game ----
+function closeLeaderboard() { $('leaderboard').classList.remove('show'); }
+$('leaderboardClose').addEventListener('click', closeLeaderboard);
+$('leaderboardOk').addEventListener('click', closeLeaderboard);
+$('leaderboard').addEventListener('click', e => { if (e.target === $('leaderboard')) closeLeaderboard(); });
+async function openLeaderboard() {
+  $('leaderboard').classList.add('show');
+  $('leaderboardStatus').textContent = 'Loading scores…';
+  renderBoard('leaderboardToday', [], playerName);
+  renderBoard('leaderboardAll', [], playerName);
+  try {
+    const res = await fetch('/api/leaderboard');
+    if (!res.ok) throw new Error('leaderboard returned ' + res.status);
+    const data = await res.json();
+    renderBoard('leaderboardToday', data.today, playerName);
+    renderBoard('leaderboardAll', data.allTime, playerName);
+    $('leaderboardStatus').textContent = 'Updated ' + formatDate(new Date().toISOString().slice(0, 10));
+  } catch (e) {
+    $('leaderboardStatus').textContent = 'Leaderboard unavailable offline';
+    $('leaderboardToday').innerHTML = '<div class="empty">could not load scores</div>';
+    $('leaderboardAll').innerHTML = '';
+  }
+}
+$('leaderboardBtn').addEventListener('click', openLeaderboard);
+$('startLeaderboardBtn').addEventListener('click', openLeaderboard);
+
 async function finishRound() {
   done = true;
   const diff = total - PAR;
@@ -242,11 +329,20 @@ async function finishRound() {
 function renderBoard(id, rows, me) {
   const ol = $(id);
   if (!rows || !rows.length) { ol.innerHTML = '<div class="empty">no scores yet</div>'; return; }
-  ol.innerHTML = rows.map((s, i) =>
-    `<li class="${s.name === me ? 'me' : ''}"><span class="nm">${i + 1}. ${esc(s.name)}</span><span class="sc">${s.strokes}</span></li>`
-  ).join('');
+  ol.innerHTML = rows.map((s, i) => {
+    const cls = s.name === me ? ' class="me"' : '';
+    return '<li' + cls + '><span class="nm">' + (i + 1) + '. ' + esc(s.name) +
+      '</span><span class="sc">' + s.strokes + '</span><span class="dt">' +
+      formatDate(s.date) + '</span></li>';
+  }).join('');
 }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function formatDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return 'date unavailable';
+  const [year, month, day] = value.split('-').map(Number);
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(Date.UTC(year, month - 1, day)));
+}
 
 // ---- live social feed (SSE) ----
 const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -286,21 +382,35 @@ function toast(html) {
 // ---- input (pointer = mouse + touch) ----
 function ptr(e) {
   const r = canvas.getBoundingClientRect();
-  const t = e.touches ? e.touches[0] : e;
-  return { x: (t.clientX - r.left) * (W / r.width), y: (t.clientY - r.top) * (H / r.height) };
+  return { x: (e.clientX - r.left) * (W / r.width), y: (e.clientY - r.top) * (H / r.height) };
 }
+let dragOrigin = null;
+let touchAim = false;
 function onDown(e) {
   if (!started || ball.moving || done) return;
   const p = ptr(e);
-  if (Math.hypot(p.x - ball.x, p.y - ball.y) < 60) { aim = p; e.preventDefault(); }
+  touchAim = e.pointerType === 'touch' || e.pointerType === 'pen';
+  if (touchAim || Math.hypot(p.x - ball.x, p.y - ball.y) < 60) {
+    dragOrigin = p;
+    aim = touchAim ? { x: ball.x, y: ball.y } : p;
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
 }
-function onMove(e) { if (aim) { aim = ptr(e); e.preventDefault(); } }
+function onMove(e) {
+  if (!aim) return;
+  const p = ptr(e);
+  aim = touchAim
+    ? { x: ball.x + p.x - dragOrigin.x, y: ball.y + p.y - dragOrigin.y }
+    : p;
+  e.preventDefault();
+}
 function onUp(e) {
   if (!aim) return;
   // shoot opposite the drag (slingshot), power by drag length
   let dx = ball.x - aim.x, dy = ball.y - aim.y;
   const d = Math.hypot(dx, dy);
-  aim = null;
+  aim = null; dragOrigin = null; touchAim = false;
   if (d < 6) return;                       // ignore taps
   const power = Math.min(d, MAX_DRAG) / MAX_DRAG;
   ball.vx = (dx / d) * MAX_SPEED * power;
@@ -308,12 +418,10 @@ function onUp(e) {
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
 }
-canvas.addEventListener('mousedown', onDown);
-addEventListener('mousemove', onMove);
-addEventListener('mouseup', onUp);
-canvas.addEventListener('touchstart', onDown, { passive: false });
-canvas.addEventListener('touchmove', onMove, { passive: false });
-canvas.addEventListener('touchend', onUp);
+canvas.addEventListener('pointerdown', onDown);
+canvas.addEventListener('pointermove', onMove);
+canvas.addEventListener('pointerup', onUp);
+canvas.addEventListener('pointercancel', () => { aim = null; dragOrigin = null; touchAim = false; });
 
 // ---- physics ----
 function circleRect(cx, cy, r, rx, ry, rw, rh) {

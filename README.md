@@ -88,7 +88,8 @@ heartbeat keeps the stream under the ALB's 60s idle timeout.
 | `POST /api/hole`     | `{ id, name, hole, strokes }`     | `204` (broadcasts to others)     |
 | `GET /api/events`    | — (SSE)                           | `event: holeout` stream          |
 
-Leaderboard rows are `{ name, strokes }`, best-per-player, ascending, top 10.
+Leaderboard rows are `{ name, strokes, date }`, best-per-player, ascending, top 10.
+`date` is the UTC calendar date of that player's latest matching best score.
 
 ## Running locally
 

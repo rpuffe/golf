@@ -29,6 +29,7 @@ type Entry struct {
 type Score struct {
 	Name    string `json:"name"`
 	Strokes int    `json:"strokes"`
+	Date    string `json:"date"`
 }
 
 // Store persists rounds and answers leaderboard queries. Two implementations:
@@ -49,15 +50,15 @@ func dayKey(tsMillis int64) string {
 
 // aggregate reduces raw entries to best-per-player, sorted and capped.
 func aggregate(entries []Entry) []Score {
-	best := map[string]int{}
+	best := map[string]Entry{}
 	for _, e := range entries {
-		if b, ok := best[e.Name]; !ok || e.Strokes < b {
-			best[e.Name] = e.Strokes
+		if b, ok := best[e.Name]; !ok || e.Strokes < b.Strokes || (e.Strokes == b.Strokes && e.TS > b.TS) {
+			best[e.Name] = e
 		}
 	}
 	out := make([]Score, 0, len(best))
-	for name, strokes := range best {
-		out = append(out, Score{Name: name, Strokes: strokes})
+	for name, entry := range best {
+		out = append(out, Score{Name: name, Strokes: entry.Strokes, Date: dayKey(entry.TS)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if out[i].Strokes != out[j].Strokes {
