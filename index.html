@@ -1,5 +1,5 @@
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>MINI GOLF</title>
 <style>
   :root {
@@ -136,15 +136,40 @@
   .card .closeX:hover { opacity:1; filter:none; background:none; }
 
   @media (max-width:700px) and (orientation:portrait) {
-    body { justify-content:flex-start; gap:9px; padding:10px; }
-    #hud { grid-template-columns:repeat(4,1fr); gap:5px; }
-    #hud span { padding:7px 4px; }
+    html,body { height:100%; min-height:100%; }
+    body {
+      justify-content:flex-start; gap:7px; height:100svh; min-height:100svh; overflow:hidden;
+      padding-top:max(8px,env(safe-area-inset-top));
+      padding-right:max(8px,env(safe-area-inset-right));
+      padding-bottom:max(8px,env(safe-area-inset-bottom));
+      padding-left:max(8px,env(safe-area-inset-left));
+    }
+    #hud { grid-template-columns:repeat(4,minmax(0,1fr)); gap:4px; }
+    #hud span { padding:6px 3px; border-radius:10px; }
     #hud .who { grid-column:1 / -1; }
-    canvas { max-height:calc(100dvh - 174px); }
-    #hint { font-size:10px; }
-    #links { margin-bottom:3px; }
-    .card { padding:24px 18px; }
-    .boards { grid-template-columns:1fr; gap:18px; max-height:48dvh; overflow:auto; padding-right:3px; }
+    canvas { min-height:0; max-height:calc(100vh - 202px); max-height:calc(100svh - 202px); border-radius:15px; }
+    #hint { max-width:340px; min-height:0; font-size:9px; line-height:1.25; letter-spacing:.85px; }
+    #links { gap:12px; margin-bottom:0; font-size:9px; letter-spacing:.8px; }
+    #links #leaderboardBtn { padding:5px 9px; }
+    .overlay {
+      align-items:center;
+      padding-top:max(10px,env(safe-area-inset-top));
+      padding-right:max(10px,env(safe-area-inset-right));
+      padding-bottom:max(10px,env(safe-area-inset-bottom));
+      padding-left:max(10px,env(safe-area-inset-left));
+    }
+    .card { max-height:calc(100svh - 20px); padding:22px 17px; overflow-y:auto; border-radius:18px; }
+    .card input { font-size:16px; } /* prevents Safari zooming the page when the name field receives focus */
+    .card h1 { font-size:27px; }
+    .card .sub { margin-bottom:18px; }
+    .boards { grid-template-columns:1fr; gap:16px; max-height:45svh; overflow:auto; padding-right:3px; }
+  }
+  @media (max-width:360px) and (orientation:portrait) {
+    #hud { font-size:8px; letter-spacing:.65px; }
+    #hud b { font-size:10px; }
+    #links { gap:9px; font-size:8px; }
+    canvas { max-height:calc(100svh - 194px); }
+    .brand-mark { font-size:8px; letter-spacing:1.25px; }
   }
   @media (prefers-reduced-motion:reduce) {
     *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; }
