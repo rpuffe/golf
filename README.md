@@ -119,3 +119,4 @@ flightdeck handles build, scan, deploy, TLS, and DNS. Push to `main` deploys
 dev; tag `v*` promotes that exact image to prod. Always run `make preflight`
 first — it mirrors CI's gates locally. See [CLAUDE.md](CLAUDE.md) and
 [docs/pipeline.md](docs/pipeline.md).
+
