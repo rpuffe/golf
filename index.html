@@ -2,35 +2,57 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MINI GOLF</title>
 <style>
-  :root { --fg:#e8e8e8; --muted:#9ca89f; --panel:#0e1712; --fairway:#2f7d4f; --rough:#25623e; --wall:#173a26; --ball:#f5f5f5; --cup:#0d1f14; --accent:#facc15; }
+  :root {
+    --fg:#f5f7ec; --muted:#94a99e; --panel:rgba(12,24,24,.88);
+    --fairway:#18705f; --rough:#093c37; --wall:#062825; --ball:#fbfff3; --cup:#031c1a;
+    --accent:#d8ff52; --hot:#ff5cce; --cyan:#62e9ff; --ink:#071312;
+  }
   * { box-sizing:border-box; margin:0; padding:0; }
   html,body { height:100%; }
   body {
-    background:#0a0f0c; color:var(--fg);
-    font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+    background:
+      radial-gradient(circle at 15% 10%, rgba(98,233,255,.12), transparent 28rem),
+      radial-gradient(circle at 88% 88%, rgba(255,92,206,.11), transparent 30rem),
+      linear-gradient(145deg,#061211,#091918 50%,#07100f);
+    color:var(--fg);
+    font:14px/1.4 "Avenir Next","Segoe UI",ui-sans-serif,system-ui,sans-serif;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     gap:12px; min-height:100dvh; padding:18px; overflow:auto; user-select:none; -webkit-user-select:none;
   }
+  body::before {
+    content:""; position:fixed; inset:0; pointer-events:none; opacity:.18;
+    background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+    background-size:28px 28px; mask-image:linear-gradient(to bottom,black,transparent 80%);
+  }
   #hud {
     width:min(720px,100%); display:grid; grid-template-columns:1.4fr repeat(4,1fr); gap:8px;
-    letter-spacing:.7px; text-transform:uppercase; font-size:11px;
+    letter-spacing:1.2px; text-transform:uppercase; font-size:10px;
   }
-  #hud span { background:var(--panel); border:1px solid var(--wall); border-radius:7px; padding:8px 10px; text-align:center; white-space:nowrap; }
-  #hud b { color:var(--accent); font-variant-numeric:tabular-nums; }
-  #hud .who { color:var(--fg); text-transform:none; opacity:.7; }
+  #hud span {
+    position:relative; overflow:hidden; background:var(--panel); border:1px solid rgba(98,233,255,.14);
+    border-radius:12px; padding:9px 10px; text-align:center; white-space:nowrap;
+    box-shadow:inset 0 1px rgba(255,255,255,.04),0 8px 24px rgba(0,0,0,.15);
+    backdrop-filter:blur(12px);
+  }
+  #hud span::after { content:""; position:absolute; inset:auto 20% 0; height:1px; background:var(--cyan); opacity:.25; }
+  #hud b { color:var(--accent); font-size:12px; font-variant-numeric:tabular-nums; }
+  #hud .who { color:var(--fg); text-transform:none; opacity:1; }
+  #hud .who b { color:var(--hot); }
+  .status-dot { display:inline-block; width:7px; height:7px; margin-right:7px; border-radius:50%; background:var(--accent); box-shadow:0 0 10px var(--accent); }
   canvas {
     display:block; width:auto; height:auto; max-width:100%; max-height:calc(100dvh - 165px);
-    background:var(--rough); border:1px solid var(--wall); border-radius:10px;
-    box-shadow:0 18px 50px rgba(0,0,0,.26); touch-action:none; cursor:crosshair;
+    background:var(--rough); border:1px solid rgba(98,233,255,.32); border-radius:18px;
+    box-shadow:0 24px 70px rgba(0,0,0,.42),0 0 0 5px rgba(98,233,255,.035),0 0 42px rgba(98,233,255,.08);
+    touch-action:none; cursor:crosshair;
   }
-  #hint { font-size:11px; color:var(--muted); letter-spacing:.5px; min-height:16px; text-align:center; }
+  #hint { font-size:10px; color:var(--muted); letter-spacing:1.25px; min-height:16px; text-align:center; text-transform:uppercase; }
 
   /* live social toasts */
   #toasts { position:fixed; top:14px; right:14px; display:flex; flex-direction:column; gap:8px; z-index:20; align-items:flex-end; pointer-events:none; }
   .toast {
-    background:#0e1712; border:1px solid var(--accent); color:var(--fg);
-    padding:9px 13px; border-radius:8px; font-size:13px; letter-spacing:.4px;
-    box-shadow:0 4px 14px rgba(0,0,0,.45); max-width:280px;
+    background:rgba(7,19,18,.94); border:1px solid var(--accent); color:var(--fg);
+    padding:10px 14px; border-radius:12px; font-size:13px; letter-spacing:.4px;
+    box-shadow:0 8px 32px rgba(0,0,0,.5),0 0 20px rgba(216,255,82,.1); max-width:280px;
     opacity:0; transform:translateX(14px); transition:opacity .3s ease, transform .3s ease;
   }
   .toast.show { opacity:1; transform:none; }
@@ -39,50 +61,63 @@
   /* overlays */
   .overlay {
     position:fixed; inset:0; display:none; align-items:center; justify-content:center;
-    background:rgba(6,10,8,.9); z-index:10; padding:20px; overflow:auto;
+    background:rgba(3,11,10,.82); backdrop-filter:blur(12px); z-index:10; padding:20px; overflow:auto;
   }
   .overlay.show { display:flex; }
   .card {
-    position:relative;
-    background:#0e1712; border:1px solid var(--wall); border-radius:10px; padding:28px 30px;
+    position:relative; overflow:hidden;
+    background:linear-gradient(145deg,rgba(18,34,33,.98),rgba(7,20,19,.98));
+    border:1px solid rgba(98,233,255,.2); border-radius:22px; padding:32px;
     width:min(440px,100%); text-align:center;
+    box-shadow:0 28px 90px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.05);
   }
-  .card h1 { color:var(--accent); font-size:26px; letter-spacing:2px; margin-bottom:6px; }
-  .card .sub { font-size:12px; opacity:.55; letter-spacing:1px; margin-bottom:20px; }
+  .card::before { content:""; position:absolute; inset:0 0 auto; height:4px; background:linear-gradient(90deg,var(--hot),var(--cyan),var(--accent)); }
+  .card h1 { color:var(--fg); font-size:30px; font-weight:900; letter-spacing:-1.4px; margin-bottom:5px; text-transform:uppercase; }
+  .card h1::after { content:" •"; color:var(--hot); text-shadow:0 0 18px var(--hot); }
+  .card .sub { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:2px; margin-bottom:22px; }
+  .brand-mark {
+    display:inline-flex; align-items:center; gap:7px; margin-bottom:13px; padding:5px 10px;
+    color:var(--cyan); border:1px solid rgba(98,233,255,.22); border-radius:999px;
+    font-size:9px; font-weight:800; letter-spacing:2px; text-transform:uppercase;
+  }
+  .brand-mark::before { content:""; width:5px; height:5px; border-radius:50%; background:var(--hot); box-shadow:0 0 8px var(--hot); }
   .card input {
-    width:100%; padding:11px 13px; font:inherit; color:var(--fg);
-    background:#0a0f0c; border:1px solid var(--wall); border-radius:6px; text-align:center; margin-bottom:14px;
+    width:100%; padding:13px 14px; font:inherit; color:var(--fg);
+    background:rgba(2,12,11,.72); border:1px solid rgba(98,233,255,.18); border-radius:12px; text-align:center; margin-bottom:14px;
+    transition:border-color .2s,box-shadow .2s;
   }
-  .card input:focus { outline:1px solid var(--accent); }
+  .card input:focus { outline:0; border-color:var(--cyan); box-shadow:0 0 0 3px rgba(98,233,255,.1); }
   .card button {
-    width:100%; padding:11px; font:inherit; font-weight:600; letter-spacing:1px; text-transform:uppercase;
-    color:#0a0f0c; background:var(--accent); border:0; border-radius:6px; cursor:pointer;
+    width:100%; padding:13px; font:inherit; font-size:11px; font-weight:800; letter-spacing:1.5px; text-transform:uppercase;
+    color:var(--ink); background:linear-gradient(135deg,var(--accent),#aaff73); border:0; border-radius:12px; cursor:pointer;
+    box-shadow:0 8px 24px rgba(216,255,82,.14); transition:transform .18s,filter .18s,box-shadow .18s;
   }
-  .card button:hover { filter:brightness(1.08); }
+  .card button:hover { filter:brightness(1.08); transform:translateY(-1px); box-shadow:0 10px 30px rgba(216,255,82,.2); }
   .card .actions { display:grid; gap:9px; }
-  .card button.secondary { color:var(--fg); background:transparent; border:1px solid var(--wall); }
-  .card button.secondary:hover { color:var(--accent); border-color:var(--accent); filter:none; }
+  .card button.secondary { color:var(--fg); background:rgba(255,255,255,.02); border:1px solid rgba(98,233,255,.18); box-shadow:none; }
+  .card button.secondary:hover { color:var(--cyan); border-color:var(--cyan); filter:none; box-shadow:0 0 20px rgba(98,233,255,.08); }
   .result { font-size:15px; margin:6px 0 4px; }
   .result b { color:var(--accent); }
   .boards { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:18px 0 20px; text-align:left; }
   .board { flex:1; min-width:0; }
-  .board h2 { font-size:11px; letter-spacing:1px; text-transform:uppercase; opacity:.6; margin-bottom:8px; border-bottom:1px solid var(--wall); padding-bottom:5px; }
+  .board h2 { color:var(--cyan); font-size:10px; letter-spacing:2px; text-transform:uppercase; margin-bottom:8px; border-bottom:1px solid rgba(98,233,255,.16); padding-bottom:7px; }
   .board ol { list-style:none; font-size:13px; }
-  .board li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1px 8px; padding:5px 0; font-variant-numeric:tabular-nums; }
+  .board li { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1px 8px; padding:7px 8px; border-radius:8px; font-variant-numeric:tabular-nums; }
+  .board li:nth-child(odd) { background:rgba(255,255,255,.025); }
   .board li .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .board li .sc { color:var(--accent); }
   .board li .dt { grid-column:1 / -1; color:var(--muted); font-size:10px; letter-spacing:.3px; }
-  .board li.me { color:var(--accent); font-weight:600; }
+  .board li.me { color:var(--accent); font-weight:700; background:rgba(216,255,82,.07); }
   .board .empty { opacity:.4; font-size:12px; }
 
   /* footer links: how-it-works + github */
-  #links { display:flex; align-items:center; gap:16px; font-size:11px; letter-spacing:.5px; }
+  #links { display:flex; align-items:center; gap:18px; font-size:10px; letter-spacing:1.2px; text-transform:uppercase; }
   #links a, #links button {
     background:none; border:0; padding:0; font:inherit; color:var(--fg);
     text-decoration:none; opacity:.5; cursor:pointer;
   }
   #links a:hover, #links button:hover { opacity:1; color:var(--accent); }
-  #links #leaderboardBtn { color:var(--accent); opacity:.9; border:1px solid rgba(250,204,21,.45); border-radius:999px; padding:5px 10px; }
+  #links #leaderboardBtn { color:var(--accent); opacity:.95; border:1px solid rgba(216,255,82,.42); border-radius:999px; padding:6px 12px; box-shadow:0 0 18px rgba(216,255,82,.07); }
   #links #leaderboardBtn:hover { border-color:var(--accent); }
 
   #leaderboard { z-index:12; }
@@ -95,8 +130,8 @@
   #howto ul { list-style:disc; margin:2px 0 20px; padding-left:20px; font-size:13px; line-height:1.7; opacity:.9; }
   #howto ul li::marker { color:var(--accent); }
   .card .closeX {
-    position:absolute; top:10px; right:12px; width:auto; padding:0;
-    background:none; color:var(--fg); font-size:20px; line-height:1; opacity:.5;
+    position:absolute; top:13px; right:15px; width:30px; height:30px; padding:0;
+    background:rgba(255,255,255,.04); color:var(--fg); font-size:20px; line-height:1; opacity:.55; border-radius:50%; box-shadow:none;
   }
   .card .closeX:hover { opacity:1; filter:none; background:none; }
 
@@ -111,10 +146,13 @@
     .card { padding:24px 18px; }
     .boards { grid-template-columns:1fr; gap:18px; max-height:48dvh; overflow:auto; padding-right:3px; }
   }
+  @media (prefers-reduced-motion:reduce) {
+    *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; }
+  }
 </style>
 
 <div id="hud">
-  <span class="who">⛳ <b id="who">—</b></span>
+  <span class="who"><i class="status-dot"></i><b id="who">—</b></span>
   <span>Hole <b id="hole">1</b>/3</span>
   <span>Par <b id="par">3</b></span>
   <span>Strokes <b id="strokes">0</b></span>
@@ -147,6 +185,7 @@
 <!-- name entry -->
 <div id="start" class="overlay show">
   <div class="card">
+    <div class="brand-mark">After dark · est. 2026</div>
     <h1>MINI GOLF</h1>
     <div class="sub">3 holes · par 9 · fewest strokes wins</div>
     <input id="name" maxlength="20" placeholder="enter your name" autocomplete="off">
@@ -480,21 +519,63 @@ function roundRect(x, y, w, h, r) {
 }
 
 function draw() {
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--fairway').trim();
+  // deep turf with subtle mowing stripes
+  ctx.fillStyle = '#093c37';
+  ctx.fillRect(0, 0, W, H);
+  const turf = ctx.createLinearGradient(0, 0, W, H);
+  turf.addColorStop(0, '#1c7b67');
+  turf.addColorStop(.55, '#176b5b');
+  turf.addColorStop(1, '#115649');
+  ctx.fillStyle = turf;
   ctx.fillRect(MARGIN, MARGIN, W - MARGIN * 2, H - MARGIN * 2);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(MARGIN, MARGIN, W - MARGIN * 2, H - MARGIN * 2); ctx.clip();
+  ctx.strokeStyle = 'rgba(216,255,82,.035)'; ctx.lineWidth = 28;
+  for (let x = -H; x < W + H; x += 64) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + H, H); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(98,233,255,.1)';
+  for (let x = 50; x < W; x += 92) {
+    for (let y = 48; y < H; y += 86) {
+      if ((x + y) % 3 < 1.5) { ctx.beginPath(); ctx.arc(x, y, 1.2, 0, Math.PI * 2); ctx.fill(); }
+    }
+  }
+  ctx.restore();
 
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--wall').trim();
-  for (const [x, y, w, h] of walls) roundRect(x, y, w, h, 4), ctx.fill();
+  // chunky obstacles with a cool edge highlight
+  ctx.save();
+  ctx.fillStyle = '#062825';
+  ctx.shadowColor = 'rgba(0,0,0,.28)'; ctx.shadowBlur = 8; ctx.shadowOffsetY = 4;
+  for (const [x, y, w, h] of walls) roundRect(x, y, w, h, 7), ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.strokeStyle = 'rgba(98,233,255,.13)'; ctx.lineWidth = 1.5;
+  for (const [x, y, w, h] of walls) roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 7), ctx.stroke();
+  ctx.restore();
+
+  // tee marker makes the starting area feel intentional
+  if (strokes === 0 && !ball.moving) {
+    ctx.strokeStyle = 'rgba(216,255,82,.28)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, R + 8, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(216,255,82,.09)';
+    ctx.beginPath(); ctx.arc(ball.x, ball.y, R + 5, 0, Math.PI * 2); ctx.fill();
+  }
 
   // cup + flag
-  ctx.fillStyle = '#0d1f14';
+  const cupGlow = ctx.createRadialGradient(cup.x, cup.y, 2, cup.x, cup.y, CUP_R + 16);
+  cupGlow.addColorStop(0, 'rgba(255,92,206,.2)');
+  cupGlow.addColorStop(1, 'rgba(255,92,206,0)');
+  ctx.fillStyle = cupGlow;
+  ctx.beginPath(); ctx.arc(cup.x, cup.y, CUP_R + 16, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#031c1a';
   ctx.beginPath(); ctx.arc(cup.x, cup.y, CUP_R, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.strokeStyle = '#e5e5e5'; ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(98,233,255,.3)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.strokeStyle = '#f5f7ec'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cup.x, cup.y); ctx.lineTo(cup.x, cup.y - 40); ctx.stroke();
-  ctx.fillStyle = '#facc15';
+  ctx.fillStyle = '#ff5cce';
+  ctx.shadowColor = 'rgba(255,92,206,.65)'; ctx.shadowBlur = 10;
   ctx.beginPath(); ctx.moveTo(cup.x, cup.y - 40); ctx.lineTo(cup.x + 22, cup.y - 33);
   ctx.lineTo(cup.x, cup.y - 26); ctx.closePath(); ctx.fill();
+  ctx.shadowColor = 'transparent';
 
   // aim guide
   if (aim && !ball.moving) {
@@ -502,18 +583,31 @@ function draw() {
     const d = Math.hypot(dx, dy) || 1;
     const power = Math.min(d, MAX_DRAG) / MAX_DRAG;
     const len = power * 130;
-    ctx.strokeStyle = `rgba(250,204,21,${0.4 + power * 0.5})`;
-    ctx.lineWidth = 3; ctx.setLineDash([6, 6]);
+    ctx.strokeStyle = `rgba(216,255,82,${0.45 + power * 0.5})`;
+    ctx.shadowColor = 'rgba(216,255,82,.6)'; ctx.shadowBlur = 9;
+    ctx.lineWidth = 3; ctx.setLineDash([8, 6]);
     ctx.beginPath(); ctx.moveTo(ball.x, ball.y);
     ctx.lineTo(ball.x + (dx / d) * len, ball.y + (dy / d) * len); ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.setLineDash([]); ctx.shadowColor = 'transparent';
+    const tipX = ball.x + (dx / d) * len, tipY = ball.y + (dy / d) * len;
+    ctx.fillStyle = '#d8ff52';
+    ctx.beginPath(); ctx.arc(tipX, tipY, 3 + power * 3, 0, Math.PI * 2); ctx.fill();
   }
 
   // ball
-  ctx.fillStyle = 'rgba(0,0,0,.25)';
-  ctx.beginPath(); ctx.arc(ball.x + 1, ball.y + 2, R, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--ball').trim();
+  ctx.fillStyle = 'rgba(0,0,0,.3)';
+  ctx.beginPath(); ctx.ellipse(ball.x + 2, ball.y + 5, R + 2, R - 3, 0, 0, Math.PI * 2); ctx.fill();
+  const ballFill = ctx.createRadialGradient(ball.x - 3, ball.y - 4, 1, ball.x, ball.y, R + 1);
+  ballFill.addColorStop(0, '#ffffff');
+  ballFill.addColorStop(.55, '#f8ffe8');
+  ballFill.addColorStop(1, '#a9c7b5');
+  ctx.fillStyle = ballFill;
+  ctx.shadowColor = 'rgba(98,233,255,.35)'; ctx.shadowBlur = 7;
   ctx.beginPath(); ctx.arc(ball.x, ball.y, R, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = 'rgba(7,19,18,.22)';
+  ctx.beginPath(); ctx.arc(ball.x + 2, ball.y + 1, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(ball.x - 3, ball.y + 3, 1, 0, Math.PI * 2); ctx.fill();
 }
 
 function loop() { step(); if (ball) draw(); requestAnimationFrame(loop); }
