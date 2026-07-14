@@ -67,14 +67,15 @@ locals {
 }
 
 module "app" {
-  source = "git::https://github.com/rpuffe/flightdeck.git//modules/fargate-service?ref=v0.5.0"
+  source = "git::https://github.com/rpuffe/flightdeck.git//modules/fargate-service?ref=v0.5.1"
 
   name             = local.manifest.name
   port             = local.manifest.port
   healthcheck_path = local.manifest.healthcheck
   cpu              = local.manifest.cpu
   memory           = local.manifest.memory
-  env              = local.manifest.env
+  env              = try(local.manifest.env, {})
+  storage          = try(local.manifest.storage, "")
 
   image       = var.image
   environment = var.environment

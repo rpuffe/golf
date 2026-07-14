@@ -11,13 +11,15 @@ pushing/tagging if you want to know what's about to run.
   `refs/tags/v*`, deliberately excluding PR refs, so unmerged code never
   holds credentials. That's why there's no `terraform plan` preview on PRs:
   plan needs a role to assume, and PRs don't get one, on purpose.
-- **Push to `main`** builds, scans, pushes to ECR, then `terraform
-  plan`/`apply`s to **dev**: `https://<name>-dev.fd.robertpuffe.com`.
+- **Push to `main`** builds, scans, and pushes to the app's dev ECR
+  repository, then `terraform plan`/`apply`s to **dev**:
+  `https://<name>-dev.fd.robertpuffe.com`.
 - **Tag `v*`** promotes to **prod**: `https://<name>.fd.robertpuffe.com`.
-  Promotion does not rebuild or re-scan — it looks up the image already
-  pushed to ECR for the tagged commit's SHA and applies that exact image.
-  Dev and prod always run the bit-identical artifact; only the Terraform
-  state and target environment differ.
+  Promotion does not rebuild or re-scan — it copies the already-scanned OCI
+  manifest for the tagged commit from the dev ECR repository into the prod
+  repository, verifies the two digests match, and applies that exact image.
+  Separate repositories let dev and prod retain images independently; dev
+  churn cannot delete the image a sleeping prod service needs to restart.
 
 Both scan gates fail on HIGH/CRITICAL findings only — a deliberate,
 documented threshold, not every low-severity finding.
@@ -97,11 +99,23 @@ previous version, the new tag, and the exact file list it touched. Always
 follow with `git diff && git status` to review before committing — treat it
 like any dependency bump.
 
+**Immutable provenance**: before replacing anything, the upgrade resolves the
+requested tag to its commit, downloads the archive by that commit, checks the
+complete platform file set and embedded release marker, and confirms the tag
+still resolves to the same commit. Releases before v0.5.0 did not carry a
+marker, so their immutable archives are accepted only after the complete legacy
+file set passes validation. The upgrade then records the tag, commit, and
+downloaded archive SHA-256 in `.flightdeck-provenance`. A failed provenance or
+archive-integrity check leaves every file untouched.
+
 **One-time bootstrap for apps created before v0.5.0** (no `upgrade` target
 yet in their Makefile):
 
 ```
-curl -fsSL https://raw.githubusercontent.com/rpuffe/flightdeck/v0.5.0/template-app/Makefile -o Makefile && make upgrade
+curl -fsSL https://raw.githubusercontent.com/rpuffe/flightdeck/v0.5.0/template-app/Makefile -o Makefile
+git add Makefile && git commit -m "bootstrap v0.5.0 Makefile"
+make upgrade
+
 ```
 
 This pulls just enough of the new Makefile to gain the `upgrade` target, then
