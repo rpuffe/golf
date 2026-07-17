@@ -270,7 +270,9 @@
       <li><b>Power</b> goes furthest but runs hot. <b>Loft</b> clears hazards and lands soft. <b>Precision</b> stays grounded and follows the line exactly.</li>
       <li>Trees can be chipped over. Mountains and steel barriers cannot — route around them.</li>
       <li><b>Water</b> costs +1. <b>Lava</b> costs +2. Both replay from your last shot. Lofted balls can carry either.</li>
-      <li><b>Ice</b> barely slows a rolling ball. <b>Boost strips</b> launch ground shots in the arrow direction. Use both with care.</li>
+      <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
+      <li><b>Neon bumpers</b> reflect your incoming angle and return a little speed. Loft can chip over them; ground shots can call a bank.</li>
+      <li>On <b>Lucky Spiral</b>, a hard ground shot locks into two icy laps. The final bounce has a chance to drop for an ace; Loft can safely cross the rails instead.</li>
       <li>Nine escalating holes each hide a safe route and a dangerous scoring line. The final holes combine everything.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
@@ -290,28 +292,42 @@ const $ = id => document.getElementById(id);
 // Nine holes authored in landscape LAND_W x LAND_H. Every layout has its own
 // identity and supports more than one route instead of prescribing a single shot.
 const LAND_W = 960, LAND_H = 480;
+function spiralBumpers(cx, cy) {
+  const posts = [], start = Math.PI / 2, turns = Math.PI * 4;
+  for (let t = 0; t <= turns; t += .22) {
+    const theta = start - t, centerR = 185 - 140 * (t / turns);
+    for (const side of [-1, 1]) {
+      const r = centerR + side * 25;
+      posts.push([cx + Math.cos(theta) * r, cy + Math.sin(theta) * r, 12]);
+    }
+  }
+  return posts;
+}
 // AFTER DARK GAUNTLET — each hole introduces a new decision, then the back nine
-// combines them. Ice barely slows the ball, boosts redirect ground shots, and
-// lava is a severe +2 penalty. Every hole has a conservative and aggressive line.
+// combines them. Ice preserves speed, lava punishes greed, and every hole has
+// a conservative route plus a faster line that asks for nerve or height.
 const BASE_HOLES = [
-  { name:'The Invitation', tagline:'Take the wide welcome mat — or steal the neon rail', par:3, tee:[72,240], cup:[878,240],
-    walls:[[405,170,150,140,undefined,'mountain']], sands:[[250,72,190,74],[665,334,150,70]], waters:[], ice:[], lava:[], boosts:[[250,218,125,44,1,0]] },
+  { name:'The Invitation', tagline:'Go around the garden, or float straight over it', par:3, tee:[72,240], cup:[878,240],
+    walls:[[405,190,150,100,34,'trees']], sands:[[250,72,190,74],[665,334,150,70]], waters:[], ice:[], lava:[] },
   { name:'Black Ice', tagline:'The shortcut is frictionless. Braking is your problem.', par:3, tee:[75,390], cup:[870,90],
-    walls:[[392,170,165,58,38,'trees']], sands:[[625,55,130,82]], waters:[[215,65,115,240]], ice:[[335,260,360,115]], lava:[], boosts:[] },
+    walls:[[392,170,165,58,38,'trees']], sands:[[625,55,130,82]], waters:[[215,65,115,240]], ice:[[335,260,360,115]], lava:[] },
   { name:'Hot Route', tagline:'Three safe bends, or one shot across the furnace', par:4, tee:[75,240], cup:[875,240],
-    walls:[[315,75,58,125,undefined,'mountain'],[315,280,58,125,undefined,'mountain'],[650,75,58,125,undefined,'mountain'],[650,280,58,125,undefined,'mountain']], sands:[[445,48,125,72],[445,360,125,72]], waters:[], ice:[], lava:[[405,165,210,150]], boosts:[] },
-  { name:'The Slingshot', tagline:'Feed the accelerator straight, or play the calm outer lane', par:3, tee:[80,385], cup:[872,95],
-    walls:[[335,105,55,245,undefined,'mountain'],[650,130,55,245,undefined,'mountain']], sands:[[458,335,130,76]], waters:[[720,255,135,105]], ice:[], lava:[], boosts:[[420,322,175,44,0.82,-0.58],[718,166,105,42,0.92,-0.38]] },
-  { name:'False Summit', tagline:'The obvious lane climbs nowhere. The trees are the door.', par:4, tee:[75,390], cup:[865,88],
-    walls:[[280,250,390,62,undefined,'mountain'],[405,145,145,42,34,'trees']], sands:[[690,300,150,82]], waters:[[215,45,125,150]], ice:[[685,68,145,88]], lava:[], boosts:[] },
-  { name:'Cold Storage', tagline:'Bank on ice for distance, but do not arrive with speed', par:4, tee:[75,240], cup:[875,240],
-    walls:[[430,175,100,130,undefined,'mountain']], sands:[[705,170,95,140]], waters:[[250,185,115,110]], ice:[[185,58,590,72],[185,350,590,72]], lava:[], boosts:[[555,74,100,38,1,0],[555,368,100,38,1,0]] },
+    walls:[[315,75,58,125,undefined,'mountain'],[315,280,58,125,undefined,'mountain'],[650,75,58,125,undefined,'mountain'],[650,280,58,125,undefined,'mountain'],[750,205,62,70,34,'trees']], sands:[[445,48,125,72],[445,360,125,72]], waters:[], ice:[], lava:[[405,165,210,150]] },
+  { name:'Ricochet', tagline:'Take the long shoreline, or call your bank off the neon posts', par:3, tee:[80,385], cup:[872,95],
+    walls:[[455,18,50,115,undefined,'mountain']], sands:[[650,300,150,80]], waters:[[335,155,285,150]], ice:[], lava:[], bumpers:[[290,345,22],[655,135,22],[720,245,18]] },
+  { name:'Backdoor Island', tagline:'Fly the moat — or take the longer dry door around back', par:3, tee:[70,240], cup:[515,240],
+    walls:[[710,188,48,104,34,'trees']], sands:[[735,315,150,100]], waters:[[330,110,310,90],[330,280,310,90],[330,200,90,80]], ice:[], lava:[] },
   { name:'Double or Nothing', tagline:'The rift erases distance. The lava collects bad guesses.', par:4, tee:[75,390], cup:[875,90],
-    walls:[[370,18,72,335,undefined,'mountain'],[690,198,72,264,undefined,'mountain']], sands:[[465,345,180,75]], waters:[], ice:[], lava:[[770,245,130,155]], boosts:[], portals:[[255,315],[580,155]] },
-  { name:'The Casino', tagline:'Safe shots pay par. The center line pays glory.', par:4, tee:[75,240], cup:[875,240],
-    walls:[[275,145,58,190,undefined,'mountain'],[630,145,58,190,undefined,'mountain']], sands:[[365,58,230,70]], waters:[[365,352,230,70]], ice:[[352,190,260,100]], lava:[[445,205,75,70]], boosts:[[210,218,58,44,1,0],[695,218,70,44,1,0]] },
+    walls:[[370,18,72,335,undefined,'mountain'],[690,198,72,264,undefined,'mountain'],[805,65,42,72,32,'trees']], sands:[[465,345,180,75]], waters:[], ice:[], lava:[[770,245,130,155]], portals:[[255,315],[580,155]] },
+  { name:'Lucky Spiral', tagline:'Full-send the icy spiral for an ace — or chip across its rails', par:3, tee:[75,425], cup:[600,285],
+    walls:[], sands:[[770,330,115,80]], waters:[], ice:[[230,28,585,424]], lava:[], bumpers:spiralBumpers(600,240),
+    spiral:{ center:[600,240], entry:[600,425], start:Math.PI/2, direction:-1, turns:Math.PI*4, outer:185, inner:45 },
+    routeLabels:[[130,390,'FULL SEND','#ff5cce'],[150,95,'LOFT ROUTE','#62e9ff']] },
+  { name:'The Casino', tagline:'Choose now: safe upstairs, double over water, or jackpot through fire', par:4, tee:[75,240], cup:[875,240],
+    walls:[[350,145,350,35,undefined,'mountain'],[350,300,350,35,undefined,'mountain']], sands:[[410,52,205,68]], waters:[[370,352,245,78]], ice:[[315,195,340,90]], lava:[[210,205,78,70]],
+    routeLabels:[[135,95,'SAFE · +1 SHOT','#62e9ff'],[135,190,'JACKPOT','#d8ff52'],[135,385,'DOUBLE','#ff5cce']] },
   { name:'Event Horizon', tagline:'Everything you learned is now one impossible-looking shot', par:5, tee:[72,400], cup:[875,72],
-    walls:[[300,18,64,300,undefined,'mountain'],[610,162,64,300,undefined,'mountain'],[770,118,95,38,38,'trees']], sands:[[390,350,160,80]], waters:[[120,62,135,180]], ice:[[385,65,175,78]], lava:[[705,300,170,112]], boosts:[[402,286,150,42,0.72,-0.7]], portals:[[235,350],[735,210]] },
+    walls:[[300,18,64,300,undefined,'mountain'],[610,162,64,300,undefined,'mountain'],[770,118,95,38,38,'trees']], sands:[[390,350,160,80]], waters:[[120,62,135,180]], ice:[[385,65,175,78]], lava:[[705,300,170,112]], bumpers:[[410,325,20],[575,135,20]], portals:[[235,350],[735,210]] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
 const rotatePoint = ([x, y]) => [y, LAND_W - x];
@@ -321,7 +337,9 @@ const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
   name: h.name, tagline: h.tagline, par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
   walls: h.walls.map(rotateWall), sands: h.sands.map(rotateWall), waters: h.waters.map(rotateWall),
   ice: (h.ice || []).map(rotateWall), lava: (h.lava || []).map(rotateWall),
-  boosts: (h.boosts || []).map(([x,y,w,hh,dx,dy]) => [y, LAND_W-x-w, hh, w, dy, -dx]),
+  bumpers: (h.bumpers || []).map(([x,y,r]) => [...rotatePoint([x,y]),r]),
+  routeLabels: (h.routeLabels || []).map(([x,y,label,color]) => [...rotatePoint([x,y]),label,color]),
+  spiral: h.spiral ? { ...h.spiral, center:rotatePoint(h.spiral.center), entry:rotatePoint(h.spiral.entry), start:h.spiral.start-Math.PI/2 } : null,
   portals: (h.portals || []).map(rotatePoint),
 })) : BASE_HOLES;
 let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
@@ -353,7 +371,7 @@ const CLUBS = [
 let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0;
-let ball, walls, cup, sands = [], waters = [], ice = [], lava = [], boosts = [], portals = [], currentHole;
+let ball, walls, cup, sands = [], waters = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], currentHole, currentSpiral = null;
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
@@ -376,7 +394,9 @@ function loadHole(i) {
   waters = h.waters || [];
   ice = h.ice || [];
   lava = h.lava || [];
-  boosts = h.boosts || [];
+  bumpers = h.bumpers || [];
+  routeLabels = h.routeLabels || [];
+  currentSpiral = h.spiral || null;
   portals = h.portals || [];
   portalCooldown = 0; portalFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
@@ -612,18 +632,6 @@ function inWater(x, y) {
 function inRects(x, y, rects) {
   return rects.some(([rx, ry, rw, rh]) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh);
 }
-function checkBoost() {
-  if (performance.now() < (ball.boostCooldown || 0)) return;
-  for (const [x, y, w, h, dx, dy] of boosts) {
-    if (!inRects(ball.x, ball.y, [[x,y,w,h]])) continue;
-    const kick = Math.max(9, Math.hypot(ball.vx, ball.vy) * 1.32);
-    const d = Math.hypot(dx,dy) || 1;
-    ball.vx = dx / d * kick; ball.vy = dy / d * kick;
-    ball.boostCooldown = performance.now() + 500;
-    toast('<b>Overdrive!</b> Ground speed amplified');
-    return;
-  }
-}
 // A rift is a ground feature: lofted balls sail over it, while a rolling ball
 // exits its twin with the same direction and momentum. The cooldown keeps the
 // exit ring from immediately swallowing the ball again.
@@ -659,8 +667,40 @@ function hazardPenalty(kind = 'water') {
   }, 900);
 }
 
+function tryEnterSpiral() {
+  if (!currentSpiral || ball.z > .01 || ball.onSpiral) return false;
+  const [ex,ey] = currentSpiral.entry;
+  if (Math.hypot(ball.x-ex,ball.y-ey) > 34 || Math.hypot(ball.vx,ball.vy) < 4) return false;
+  ball.onSpiral = true; ball.spiralProgress = 0;
+  ball.spiralSpeed = Math.max(7, Math.hypot(ball.vx,ball.vy));
+  toast('<b>Rail locked!</b> Hold on for two icy laps');
+  return true;
+}
+
+function advanceSpiral() {
+  const s = currentSpiral;
+  const fraction = Math.min(1, ball.spiralProgress / s.turns);
+  const radius = s.outer + (s.inner-s.outer)*fraction;
+  ball.spiralProgress += ball.spiralSpeed / Math.max(45,radius);
+  ball.spiralSpeed *= .997;
+  const theta = s.start + s.direction*Math.min(ball.spiralProgress,s.turns);
+  const nextFraction = Math.min(1,ball.spiralProgress/s.turns);
+  const nextRadius = s.outer + (s.inner-s.outer)*nextFraction;
+  ball.x=s.center[0]+Math.cos(theta)*nextRadius;
+  ball.y=s.center[1]+Math.sin(theta)*nextRadius;
+  ball.vx=ball.vy=0; ball.z=ball.vz=0;
+  if(ball.spiralProgress<s.turns)return;
+  ball.onSpiral=false;
+  if(Math.random()<.38){toast('<b>Jackpot drop!</b> The spiral chose the cup');sink();return;}
+  const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+(Math.random()-.5)*1.35;
+  const exitSpeed=5+Math.random()*3;
+  ball.vx=Math.cos(angle)*exitSpeed;ball.vy=Math.sin(angle)*exitSpeed;
+  toast('<b>Rim lottery!</b> Finish what the spiral started');
+}
+
 function step() {
   if (!ball || !ball.moving) return;
+  if(ball.onSpiral){advanceSpiral();return;}
   const speed = Math.hypot(ball.vx, ball.vy);
   const sub = Math.max(1, Math.ceil(speed / (R * 0.5)));   // sub-step vs tunneling
   for (let s = 0; s < sub; s++) {
@@ -690,9 +730,26 @@ function step() {
       ball.x += nxv * push; ball.y += nyv * push;
       ball.vx *= 0.8; ball.vy *= 0.8;
     }
+    if(!airborne&&tryEnterSpiral())return;
+    // Neon bumpers are readable, player-controlled banks: they reflect the
+    // incoming angle and return a little pace. A committed Loft shot clears
+    // their 28px height, which creates a second route through bumper fields.
+    for (const [bx, by, br] of bumpers) {
+      if (airborne && ball.z >= 28) continue;
+      const dx = ball.x - bx, dy = ball.y - by;
+      const minD = br + R, d = Math.hypot(dx, dy);
+      if (d >= minD) continue;
+      const nx = dx / (d || 1), ny = dy / (d || 1);
+      const dot = ball.vx * nx + ball.vy * ny;
+      if (dot < 0) {
+        ball.vx = Math.max(-16, Math.min(16, (ball.vx - 2 * dot * nx) * 1.04));
+        ball.vy = Math.max(-16, Math.min(16, (ball.vy - 2 * dot * ny) * 1.04));
+        ball.bumperFlash = performance.now();
+      }
+      ball.x = bx + nx * minD; ball.y = by + ny * minD;
+    }
     if (!airborne) {                           // ground-only checks
       if (checkPortal()) continue;
-      checkBoost();
       if (inRects(ball.x, ball.y, lava)) { hazardPenalty('lava'); return; }
       if (inWater(ball.x, ball.y)) { hazardPenalty('water'); return; }
       const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
@@ -883,14 +940,6 @@ function draw() {
     ctx.restore();
   }
 
-  // Boost strips only catch grounded shots and snap them toward their arrows.
-  for (const [x,y,w,h,dx,dy] of boosts) {
-    ctx.save();ctx.fillStyle='rgba(216,255,82,.15)';ctx.strokeStyle='#d8ff52';ctx.lineWidth=2;roundRect(x,y,w,h,8);ctx.fill();ctx.stroke();
-    const angle=Math.atan2(dy,dx);ctx.translate(x+w/2,y+h/2);ctx.rotate(angle);ctx.fillStyle='#d8ff52';ctx.shadowColor='#d8ff52';ctx.shadowBlur=10;
-    for(let bx=-Math.max(w,h)*.25;bx<=Math.max(w,h)*.25;bx+=28){ctx.beginPath();ctx.moveTo(bx+10,0);ctx.lineTo(bx-5,-9);ctx.lineTo(bx-5,9);ctx.closePath();ctx.fill();}
-    ctx.restore();
-  }
-
   // Paired ground rifts: matching inner marks and animated counter-rotation make
   // their relationship and "enter here" behavior legible before the first shot.
   portals.forEach(([x, y], i) => {
@@ -915,6 +964,23 @@ function draw() {
       ctx.strokeStyle = `rgba(216,255,82,${1 - t})`; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(portalFlash.x, portalFlash.y, 28 + t * 32, 0, Math.PI * 2); ctx.stroke();
     }
+  }
+
+  // Player-aimed, chip-able pinball posts. Their concentric rings distinguish
+  // them from portals: bumpers reflect; rifts teleport.
+  for (const [x,y,r] of bumpers) {
+    const pulse = .72 + Math.sin(performance.now()/180 + x) * .18;
+    ctx.save();ctx.shadowColor='#ff5cce';ctx.shadowBlur=18;ctx.fillStyle='#132528';
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle=`rgba(255,92,206,${pulse})`;ctx.lineWidth=5;ctx.stroke();
+    ctx.strokeStyle='#62e9ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r-8,0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='#d8ff52';ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+
+  // Casino lane labels make the route choice legible before the first shot.
+  for (const [x,y,label,color] of routeLabels) {
+    ctx.save();ctx.fillStyle='rgba(3,20,18,.78)';roundRect(x-8,y-15,128,25,7);ctx.fill();
+    ctx.fillStyle=color;ctx.font='800 10px "Avenir Next","Segoe UI",sans-serif';ctx.fillText(label,x,y+2);ctx.restore();
   }
 
   // outer boundary walls remain understated; special internal obstacles render below
