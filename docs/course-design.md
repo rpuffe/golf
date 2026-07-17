@@ -11,6 +11,7 @@ their physics before the player takes a shot.
 | Mountains | Infinite height; every club collides with them | Permanent routing, doglegs, and separation between lanes |
 | Sand | Airborne shots pass over it; grounded balls lose speed quickly | Punish inaccurate landings without adding a stroke |
 | Water | Airborne shots pass over it; landing or rolling into it adds one stroke and resets the ball to its previous lie | Forced carries and high-risk shortcuts |
+| Paired rifts | Grounded balls teleport between the two rings while keeping their direction and speed; airborne shots pass over | Finale set pieces and impossible-looking routes |
 
 Do not draw a permanent barrier as a tree. Players should be able to rely on
 the visual rule: **trees can be chipped over; mountains cannot**. The plain
@@ -33,6 +34,7 @@ Holes live in `BASE_HOLES` in `index.html` and are authored in the landscape
   ],
   sands: [[420, 310, 130, 90]],
   waters: [[690, 80, 100, 120]],
+  portals: [[250, 240], [710, 120]],
 }
 ```
 
@@ -41,6 +43,7 @@ Obstacle arrays use `[x, y, width, height, clearanceHeight, type]`:
 - A tree obstacle requires a numeric clearance height and the type `'trees'`.
 - A mountain uses `undefined` for clearance height and the type `'mountain'`.
 - Sand and water use `[x, y, width, height]`.
+- A pair of rifts uses `portals: [[x1, y1], [x2, y2]]`; use exactly two.
 - Keep every obstacle inside the 18 px outer boundary.
 
 Collision still uses the full rectangular footprint. The tree and mountain
