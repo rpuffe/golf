@@ -34,8 +34,8 @@ Go server (main.go)
 Pure canvas, no assets. The whole thing is one file embedded into the binary
 at build time (`//go:embed index.html`).
 
-- **Course**: nine holes defined as data (`BASE_HOLES` — tee, cup, trees,
-  mountains, sand, and water). See the repeatable visual and physics rules in
+- **Course**: nine holes defined as data (`BASE_HOLES` — tee, cup, greens,
+  trees, mountains, sand, water, and special terrain). See the repeatable visual and physics rules in
   [the course-design guide](docs/course-design.md).
 - **Physics**: drag back from the ball to aim (slingshot), choose a club, and
   release to hit. Lofted shots can clear trees and ground hazards; mountains

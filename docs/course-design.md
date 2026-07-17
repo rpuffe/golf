@@ -7,6 +7,7 @@ their physics before the player takes a shot.
 
 | Visual | Gameplay rule | Course-design use |
 | --- | --- | --- |
+| Green | Firm turf adds a small rollout bonus while preserving the selected club's handling | Faster final approaches, delicate putts, and a clear visual target around the cup |
 | Trees | Finite height; a sufficiently high shot can clear them | Shortcuts, risk/reward lines, and prompts to use Loft |
 | Mountains | Infinite height; every club collides with them | Permanent routing, doglegs, and separation between lanes |
 | Sand | Airborne shots pass over it; grounded balls lose speed quickly | Punish inaccurate landings without adding a stroke |
@@ -31,6 +32,7 @@ Holes live in `BASE_HOLES` in `index.html` and are authored in the landscape
   par: 3,
   tee: [70, 240],
   cup: [850, 240],
+  greens: [[850, 240, 78, 58]],
   walls: [
     [330, 200, 160, 40, 38, 'trees'],
     [600, 18, 45, 260, undefined, 'mountain'],
@@ -49,6 +51,8 @@ Obstacle arrays use `[x, y, width, height, clearanceHeight, type]`:
 - A tree obstacle requires a numeric clearance height and the type `'trees'`.
 - A mountain uses `undefined` for clearance height and the type `'mountain'`.
 - Sand, water, ice, and lava use `[x, y, width, height]`.
+- Greens use `[centerX, centerY, radiusX, radiusY]` and should normally contain
+  the cup. They rotate with the rest of the course in portrait mode.
 - Bumpers use `[centerX, centerY, radius]`. Keep enough clearance around each
   bumper that a successful bank has somewhere useful to travel.
 - A pair of rifts uses `portals: [[x1, y1], [x2, y2]]`; use exactly two.
@@ -64,12 +68,14 @@ renderers only change how that footprint is presented.
 2. Use mountains to separate those routes or create a dogleg. Never let an
    impassable obstacle make the advertised shortcut a dead end.
 3. Add trees where a wedge shortcut should compete with the safer route.
-4. Add hazards to make misses meaningful without obscuring the route. Reserve
+4. Place a green around the cup with enough room for an approach to land and a
+   miss to roll visibly through. Avoid pointing a long ice lane directly at it.
+5. Add hazards to make misses meaningful without obscuring the route. Reserve
    lava for an optional high-reward line or a late-course climax.
-5. Check that the intended tree shortcut needs visible loft and that the
+6. Check that the intended tree shortcut needs visible loft and that the
    mountain route cannot be cleared by any club.
-6. Test both landscape and portrait layouts; the same obstacle data rotates.
-7. Update the displayed hole count and total par if the course length changes.
+7. Test both landscape and portrait layouts; the same obstacle data rotates.
+8. Update the displayed hole count and total par if the course length changes.
 
 Aim for one memorable decision per hole. A hole is not finished until both its
 safe and high-risk/high-reward routes are visually readable and practically
@@ -78,5 +84,6 @@ before combining them on the final three holes.
 
 `Lucky Spiral` is the intentional exception to ordinary free-ball movement: a
 fast grounded ball entering its marked icy rail follows two tightening laps.
-The final release has a controlled random chance to hole out. Its safe route is
-still fully player-driven: Loft can clear the 28 px bumper rails in stages.
+Its final release is deterministic: a faster, cleaner entry earns a straighter
+ace run, while a marginal entry exits wider. Its safe route is still fully
+player-driven: Loft can clear the 28 px bumper rails in stages.
