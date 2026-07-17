@@ -290,60 +290,62 @@ const $ = id => document.getElementById(id);
 // identity and supports more than one route instead of prescribing a single shot.
 const LAND_W = 960, LAND_H = 480;
 const BASE_HOLES = [
-  // Split Decision — a central bunker asks for a safe lane or an ambitious carry.
-  { name: 'Split Decision', par: 3, tee: [70, 240], cup: [850, 240],
-    walls: [[455, 170, 70, 140, 34, 'trees']],
-    sands: [[330, 55, 125, 125], [525, 300, 125, 125]],
-    waters: [] },
-  // Neon Bend — play the long dogleg or loft a wedge across the low ridge.
-  { name: 'Neon Bend', par: 4, tee: [85, 390], cup: [850, 90],
-    walls: [[275, 18, 55, 275, undefined, 'mountain'], [535, 187, 55, 275, undefined, 'mountain'], [330, 230, 205, 38, 42, 'trees']],
-    sands: [[350, 315, 165, 105]],
-    waters: [[650, 180, 115, 95]] },
-  // Blue Horizon — lay up, then commit to a clean carry onto the far green.
-  { name: 'Blue Horizon', par: 3, tee: [75, 240], cup: [865, 240],
-    walls: [[790, 95, 28, 95, 26, 'trees'], [790, 290, 28, 95, 26, 'trees']],
-    sands: [[330, 75, 100, 105], [330, 300, 100, 105]],
-    waters: [[535, 55, 180, 370]] },
-  // Switchback — mountains alternate from each edge to form a climbing slalom.
-  { name: 'Switchback', par: 4, tee: [75, 405], cup: [875, 75],
-    walls: [[245, 165, 55, 297, undefined, 'mountain'], [470, 18, 55, 285, undefined, 'mountain'], [695, 165, 55, 297, undefined, 'mountain'], [525, 235, 170, 36, 40, 'trees']],
-    sands: [[325, 330, 120, 95]],
-    waters: [] },
-  // Twin Lakes — thread the dry center or carry either lake to a wider landing.
-  { name: 'Twin Lakes', par: 3, tee: [70, 240], cup: [875, 240],
-    walls: [[455, 205, 70, 70, 32, 'trees']],
-    sands: [[700, 195, 105, 90]],
-    waters: [[300, 45, 300, 145], [300, 290, 300, 145]] },
-  // Forest Gate — staggered groves reward controlled wedges on a diagonal line.
-  { name: 'Forest Gate', par: 3, tee: [75, 390], cup: [875, 90],
-    walls: [[260, 275, 150, 42, 34, 'trees'], [440, 190, 150, 42, 38, 'trees'], [620, 105, 150, 42, 34, 'trees']],
-    sands: [[335, 55, 130, 95], [600, 330, 130, 95]],
-    waters: [] },
-  // Quarry Run — a central massif creates two genuinely different routes.
-  { name: 'Quarry Run', par: 4, tee: [70, 240], cup: [880, 240],
-    walls: [[370, 125, 220, 230, undefined, 'mountain']],
-    sands: [[305, 45, 350, 70]],
-    waters: [[305, 365, 350, 70]],
+  // Split Decision - an inviting opener with two honest routes and one greedy carry.
+  { name: 'Split Decision', tagline: 'Choose the clean lane, or cut the pond for a birdie look', par: 3, tee: [70, 240], cup: [875, 240],
+    walls: [[405, 168, 135, 144, undefined, 'mountain'], [250, 72, 185, 40, 32, 'trees'], [665, 325, 155, 40, 34, 'trees']],
+    sands: [[245, 330, 190, 78], [705, 95, 130, 70]],
+    waters: [[575, 82, 150, 82], [575, 315, 150, 82]] },
+  // Sidewinder - a slalom dogleg with a tempting wedge shortcut through the trees.
+  { name: 'Sidewinder', tagline: 'Snake through the canyon, or loft the corner and pray it lands soft', par: 4, tee: [85, 390], cup: [850, 90],
+    walls: [[300, 82, 64, 260, undefined, 'mountain'], [555, 138, 64, 260, undefined, 'mountain'], [410, 104, 170, 38, 38, 'trees']],
+    sands: [[382, 342, 140, 82], [704, 78, 125, 72]],
+    waters: [[655, 265, 150, 86]] },
+  // Needle Harbor - staggered water makes the safe play feel like threading a needle.
+  { name: 'Needle Harbor', tagline: 'Hop the harbor in pieces, or send one brave shot over blue', par: 3, tee: [75, 240], cup: [865, 240],
+    walls: [[760, 160, 42, 68, 28, 'trees'], [760, 252, 42, 68, 28, 'trees']],
+    sands: [[255, 78, 110, 86], [600, 320, 132, 82]],
+    waters: [[292, 48, 145, 158], [292, 274, 145, 158], [535, 135, 148, 210]] },
+  // Clockwork Canyon - the straight shot is blocked, so banks and pace matter.
+  { name: 'Clockwork Canyon', tagline: 'The walls want to help, but only if you hit them on purpose', par: 4, tee: [80, 85], cup: [870, 390],
+    walls: [[245, 18, 58, 266, undefined, 'mountain'], [455, 196, 58, 266, undefined, 'mountain'], [665, 18, 58, 266, undefined, 'mountain'], [526, 96, 128, 38, 36, 'trees']],
+    sands: [[328, 342, 108, 76], [742, 292, 106, 74]],
+    waters: [[338, 58, 96, 76], [556, 344, 96, 76]] },
+  // Backdoor Island — carry the moat, or circle the water and enter from the right.
+  { name: 'Backdoor Island', tagline: 'Fly the moat — or find the dry door around back', par: 3, tee: [70, 240], cup: [515, 240],
+    walls: [[710, 188, 48, 104, 34, 'trees']],
+    sands: [[735, 315, 150, 100]],
+    waters: [[330, 110, 310, 90], [330, 280, 310, 90], [330, 200, 90, 80]] },
+  // Canal Key - a dry side door mirrors the island idea, but flipped into a dogleg.
+  { name: 'Canal Key', tagline: 'The green is open from the side, not from where you start', par: 4, tee: [80, 385], cup: [735, 118],
+    walls: [[610, 92, 52, 170, 34, 'trees'], [310, 252, 150, 42, 36, 'trees']],
+    sands: [[690, 245, 150, 86], [405, 72, 120, 82]],
+    waters: [[270, 88, 300, 82], [270, 328, 300, 82], [270, 170, 88, 158]] },
+  // Pinball Quarry - two routes wrap the same rock, with a nasty miss on either edge.
+  { name: 'Pinball Quarry', tagline: 'Bank around the rock, or thread the skinny center lane', par: 4, tee: [70, 240], cup: [880, 240],
+    walls: [[382, 108, 196, 264, undefined, 'mountain'], [220, 106, 120, 42, 34, 'trees'], [620, 332, 122, 42, 34, 'trees']],
+    sands: [[292, 48, 300, 70], [615, 122, 116, 86]],
+    waters: [[292, 362, 300, 70], [236, 186, 88, 108]],
   },
-  // Stepping Stones — dry landing shelves zigzag through a broad water hazard.
-  { name: 'Stepping Stones', par: 3, tee: [75, 390], cup: [875, 90],
-    walls: [[420, 205, 115, 55, 30, 'trees']],
-    sands: [[590, 55, 115, 85]],
-    waters: [[245, 45, 150, 260], [565, 175, 150, 260]] },
-  // Summit — the finale mixes every learned choice on the climb to the flag.
-  { name: 'Summit', par: 4, tee: [70, 405], cup: [880, 75],
-    walls: [[255, 160, 60, 302, undefined, 'mountain'], [570, 18, 60, 285, undefined, 'mountain'], [350, 310, 175, 38, 42, 'trees'], [650, 125, 155, 38, 38, 'trees']],
-    sands: [[345, 55, 150, 95]],
-    waters: [[665, 330, 145, 95]] },
+  // Skybridge - the penultimate hole asks for confidence before the finale gets weird.
+  { name: 'Skybridge', tagline: 'Three shelves, two ponds, one very nervous landing', par: 3, tee: [75, 390], cup: [875, 90],
+    walls: [[410, 205, 120, 48, 34, 'trees'], [735, 120, 46, 132, undefined, 'mountain']],
+    sands: [[565, 55, 118, 82], [735, 318, 112, 78]],
+    waters: [[242, 46, 152, 260], [560, 176, 152, 260]] },
+  // Paradox — the apparent dead end is solved by carrying momentum through a rift.
+  { name: 'Paradox', tagline: 'The mountain is impossible. The glowing rings disagree.', par: 4, tee: [75, 390], cup: [875, 75],
+    walls: [[410, 18, 70, 350, undefined, 'mountain'], [735, 325, 155, 42, 38, 'trees']],
+    sands: [[480, 365, 235, 80]],
+    waters: [[735, 385, 155, 60]],
+    portals: [[285, 300], [650, 165]] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
 const rotatePoint = ([x, y]) => [y, LAND_W - x];
 // keep optional obstacle height + visual type when rotating; hazards have only 4 values
 const rotateWall = ([x, y, w, h, hz, type]) => [y, LAND_W - x - w, h, w, hz, type];
 const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
-  par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
+  name: h.name, tagline: h.tagline, par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
   walls: h.walls.map(rotateWall), sands: h.sands.map(rotateWall), waters: h.waters.map(rotateWall),
+  portals: (h.portals || []).map(rotatePoint),
 })) : BASE_HOLES;
 let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
 let H = PORTRAIT_COURSE ? LAND_W : LAND_H;
@@ -373,16 +375,18 @@ const CLUBS = [
 let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0;
-let ball, walls, cup, sands = [], waters = [];
+let ball, walls, cup, sands = [], waters = [], portals = [], currentHole;
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
+let portalCooldown = 0, portalFlash = null; // prevents instant re-entry and lights the exit
 let started = false, done = false;   // started: name entered; done: round over
 let aim = null;                      // { x, y } current pointer while dragging
 let playerName = '';
 
 function loadHole(i) {
   const h = HOLES[i];
+  currentHole = h;
   ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, z: 0, vz: 0, moving: false, groundFriction: CLUBS[0].friction };
   cup = { x: h.cup[0], y: h.cup[1] };
   walls = [
@@ -392,6 +396,8 @@ function loadHole(i) {
   ];
   sands = h.sands || [];
   waters = h.waters || [];
+  portals = h.portals || [];
+  portalCooldown = 0; portalFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
   strokes = 0; aim = null;
   setClub(0);                       // every hole starts with the driver in hand
@@ -622,6 +628,26 @@ function inWater(x, y) {
   }
   return false;
 }
+// A rift is a ground feature: lofted balls sail over it, while a rolling ball
+// exits its twin with the same direction and momentum. The cooldown keeps the
+// exit ring from immediately swallowing the ball again.
+function checkPortal() {
+  if (portals.length !== 2 || performance.now() < portalCooldown) return false;
+  for (let i = 0; i < portals.length; i++) {
+    const [px, py] = portals[i];
+    if (Math.hypot(ball.x - px, ball.y - py) > 25) continue;
+    const [ex, ey] = portals[1 - i];
+    const speed = Math.hypot(ball.vx, ball.vy);
+    const nx = speed > 0.01 ? ball.vx / speed : 1;
+    const ny = speed > 0.01 ? ball.vy / speed : 0;
+    ball.x = ex + nx * 38; ball.y = ey + ny * 38;
+    portalCooldown = performance.now() + 650;
+    portalFlash = { x: ex, y: ey, start: performance.now() };
+    toast('<b>Rift jump!</b> Momentum preserved');
+    return true;
+  }
+  return false;
+}
 // ball found water while on the ground: +1 penalty stroke, then (after a beat) replay from where it was hit
 function waterPenalty() {
   ball.moving = false; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
@@ -668,6 +694,7 @@ function step() {
       ball.vx *= 0.8; ball.vy *= 0.8;
     }
     if (!airborne) {                           // ground-only checks
+      if (checkPortal()) continue;
       if (inWater(ball.x, ball.y)) { waterPenalty(); return; }   // landed/rolled into the pond
       const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
       if (dc < CUP_R - 2 && speed < 7) { sink(); return; }
@@ -833,6 +860,32 @@ function draw() {
     roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 12); ctx.stroke();
   }
 
+  // Paired ground rifts: matching inner marks and animated counter-rotation make
+  // their relationship and "enter here" behavior legible before the first shot.
+  portals.forEach(([x, y], i) => {
+    const t = performance.now() / 700;
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.shadowColor = i ? '#62e9ff' : '#ff5cce'; ctx.shadowBlur = 18;
+    ctx.strokeStyle = i ? '#62e9ff' : '#ff5cce'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 25, t * (i ? -1 : 1), t * (i ? -1 : 1) + Math.PI * 1.45); ctx.stroke();
+    ctx.rotate(t * (i ? 1 : -1));
+    ctx.strokeStyle = '#d8ff52'; ctx.lineWidth = 2; ctx.setLineDash([4, 6]);
+    ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#f5f7ec'; ctx.font = '900 10px "Avenir Next","Segoe UI",sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(i ? 'B' : 'A', 0, 0);
+    ctx.restore();
+  });
+  if (portalFlash) {
+    const t = (performance.now() - portalFlash.start) / 500;
+    if (t >= 1) portalFlash = null;
+    else {
+      ctx.strokeStyle = `rgba(216,255,82,${1 - t})`; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(portalFlash.x, portalFlash.y, 28 + t * 32, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+
   // outer boundary walls remain understated; special internal obstacles render below
   ctx.save();
   ctx.fillStyle = '#062825';
@@ -846,6 +899,18 @@ function draw() {
     if (w[5] === 'trees') drawTrees(w[0], w[1], w[2], w[3], w[4]);
     else if (w[5] === 'mountain') drawMountain(w[0], w[1], w[2], w[3]);
     else if (w[4] !== undefined) drawWall3D(w[0], w[1], w[2], w[3], w[4]);
+  }
+
+  // Hole identity doubles as a compact clue for its signature decision.
+  if (currentHole) {
+    ctx.save();
+    ctx.fillStyle = 'rgba(3,20,18,.82)';
+    roundRect(MARGIN + 12, MARGIN + 10, Math.min(W - MARGIN * 2 - 24, 390), 48, 10); ctx.fill();
+    ctx.fillStyle = '#d8ff52'; ctx.font = '800 13px "Avenir Next","Segoe UI",sans-serif';
+    ctx.fillText(`HOLE ${holeIdx + 1}  ·  ${currentHole.name.toUpperCase()}`, MARGIN + 25, MARGIN + 30);
+    ctx.fillStyle = 'rgba(245,247,236,.7)'; ctx.font = '10px "Avenir Next","Segoe UI",sans-serif';
+    ctx.fillText(currentHole.tagline || '', MARGIN + 25, MARGIN + 48, Math.min(W - 80, 350));
+    ctx.restore();
   }
 
   // tee marker makes the starting area feel intentional

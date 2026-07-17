@@ -3,7 +3,7 @@
 A tiny browser mini-golf game with a live leaderboard and real-time social
 notifications, deployed on [flightdeck](./CLAUDE.md).
 
-Play three hand-designed holes, drag-to-putt, and race for the fewest strokes.
+Play nine hand-designed holes, drag-to-putt, and race for the fewest strokes.
 Scores persist to S3, and while you play you get a toast whenever another
 player currently online finishes a hole.
 
