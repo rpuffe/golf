@@ -204,9 +204,9 @@
 </div>
 <canvas id="c" width="720" height="480"></canvas>
 <div id="clubs">
-  <button class="club" data-i="0" type="button"><b>Driver</b><small>long &middot; low</small><span class="key">1</span></button>
-  <button class="club" data-i="1" type="button"><b>Wedge</b><small>high &middot; soft</small><span class="key">2</span></button>
-  <button class="club" data-i="2" type="button"><b>Putter</b><small>ground &middot; exact</small><span class="key">3</span></button>
+  <button class="club" data-i="0" type="button"><b>Power</b><small>long &middot; wild rollout</small><span class="key">1</span></button>
+  <button class="club" data-i="1" type="button"><b>Loft</b><small>high &middot; sticks landing</small><span class="key">2</span></button>
+  <button class="club" data-i="2" type="button"><b>Precision</b><small>ground &middot; laser line</small><span class="key">3</span></button>
 </div>
 <div id="hint">drag back from the ball to aim &amp; set power — release to hit</div>
 <div id="links">
@@ -236,7 +236,7 @@
   <div class="card">
     <div class="brand-mark">After dark · est. 2026</div>
     <h1>MINI GOLF</h1>
-    <div class="sub">9 holes · par 31 · pick your club · fewest strokes wins</div>
+    <div class="sub">9 holes · risk everything · fewest strokes wins</div>
     <input id="name" maxlength="20" placeholder="enter your name" autocomplete="off">
     <div class="actions">
       <button id="startBtn">Start Round</button>
@@ -267,10 +267,11 @@
     <ul>
       <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to hit.</li>
       <li>Pick a club before each shot — tap the chips below the course, or press 1 / 2 / 3 (C cycles).</li>
-      <li><b>Driver</b> flies long and low. <b>Wedge</b> lofts high to clear sand and trees. <b>Putter</b> stays on the ground and is dead accurate.</li>
+      <li><b>Power</b> goes furthest but runs hot. <b>Loft</b> clears hazards and lands soft. <b>Precision</b> stays grounded and follows the line exactly.</li>
       <li>Trees can be chipped over. Mountains and steel barriers cannot — route around them.</li>
-      <li>Carry the water in the air — land in the pond and it's a <b>+1 penalty</b>, replayed from where you last hit.</li>
-      <li>Nine hand-built holes combine split fairways, doglegs, forest shortcuts, water carries, and mountain routes. Fewest strokes wins.</li>
+      <li><b>Water</b> costs +1. <b>Lava</b> costs +2. Both replay from your last shot. Lofted balls can carry either.</li>
+      <li><b>Ice</b> barely slows a rolling ball. <b>Boost strips</b> launch ground shots in the arrow direction. Use both with care.</li>
+      <li>Nine escalating holes each hide a safe route and a dangerous scoring line. The final holes combine everything.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
     <button id="howtoOk">Got it</button>
@@ -289,54 +290,28 @@ const $ = id => document.getElementById(id);
 // Nine holes authored in landscape LAND_W x LAND_H. Every layout has its own
 // identity and supports more than one route instead of prescribing a single shot.
 const LAND_W = 960, LAND_H = 480;
+// AFTER DARK GAUNTLET — each hole introduces a new decision, then the back nine
+// combines them. Ice barely slows the ball, boosts redirect ground shots, and
+// lava is a severe +2 penalty. Every hole has a conservative and aggressive line.
 const BASE_HOLES = [
-  // Split Decision - an inviting opener with two honest routes and one greedy carry.
-  { name: 'Split Decision', tagline: 'Choose the clean lane, or cut the pond for a birdie look', par: 3, tee: [70, 240], cup: [875, 240],
-    walls: [[405, 168, 135, 144, undefined, 'mountain'], [250, 72, 185, 40, 32, 'trees'], [665, 325, 155, 40, 34, 'trees']],
-    sands: [[245, 330, 190, 78], [705, 95, 130, 70]],
-    waters: [[575, 82, 150, 82], [575, 315, 150, 82]] },
-  // Sidewinder - a slalom dogleg with a tempting wedge shortcut through the trees.
-  { name: 'Sidewinder', tagline: 'Snake through the canyon, or loft the corner and pray it lands soft', par: 4, tee: [85, 390], cup: [850, 90],
-    walls: [[300, 82, 64, 260, undefined, 'mountain'], [555, 138, 64, 260, undefined, 'mountain'], [410, 104, 170, 38, 38, 'trees']],
-    sands: [[382, 342, 140, 82], [704, 78, 125, 72]],
-    waters: [[655, 265, 150, 86]] },
-  // Needle Harbor - staggered water makes the safe play feel like threading a needle.
-  { name: 'Needle Harbor', tagline: 'Hop the harbor in pieces, or send one brave shot over blue', par: 3, tee: [75, 240], cup: [865, 240],
-    walls: [[760, 160, 42, 68, 28, 'trees'], [760, 252, 42, 68, 28, 'trees']],
-    sands: [[255, 78, 110, 86], [600, 320, 132, 82]],
-    waters: [[292, 48, 145, 158], [292, 274, 145, 158], [535, 135, 148, 210]] },
-  // Clockwork Canyon - the straight shot is blocked, so banks and pace matter.
-  { name: 'Clockwork Canyon', tagline: 'The walls want to help, but only if you hit them on purpose', par: 4, tee: [80, 85], cup: [870, 390],
-    walls: [[245, 18, 58, 266, undefined, 'mountain'], [455, 196, 58, 266, undefined, 'mountain'], [665, 18, 58, 266, undefined, 'mountain'], [526, 96, 128, 38, 36, 'trees']],
-    sands: [[328, 342, 108, 76], [742, 292, 106, 74]],
-    waters: [[338, 58, 96, 76], [556, 344, 96, 76]] },
-  // Backdoor Island — carry the moat, or circle the water and enter from the right.
-  { name: 'Backdoor Island', tagline: 'Fly the moat — or find the dry door around back', par: 3, tee: [70, 240], cup: [515, 240],
-    walls: [[710, 188, 48, 104, 34, 'trees']],
-    sands: [[735, 315, 150, 100]],
-    waters: [[330, 110, 310, 90], [330, 280, 310, 90], [330, 200, 90, 80]] },
-  // Canal Key - a dry side door mirrors the island idea, but flipped into a dogleg.
-  { name: 'Canal Key', tagline: 'The green is open from the side, not from where you start', par: 4, tee: [80, 385], cup: [735, 118],
-    walls: [[610, 92, 52, 170, 34, 'trees'], [310, 252, 150, 42, 36, 'trees']],
-    sands: [[690, 245, 150, 86], [405, 72, 120, 82]],
-    waters: [[270, 88, 300, 82], [270, 328, 300, 82], [270, 170, 88, 158]] },
-  // Pinball Quarry - two routes wrap the same rock, with a nasty miss on either edge.
-  { name: 'Pinball Quarry', tagline: 'Bank around the rock, or thread the skinny center lane', par: 4, tee: [70, 240], cup: [880, 240],
-    walls: [[382, 108, 196, 264, undefined, 'mountain'], [220, 106, 120, 42, 34, 'trees'], [620, 332, 122, 42, 34, 'trees']],
-    sands: [[292, 48, 300, 70], [615, 122, 116, 86]],
-    waters: [[292, 362, 300, 70], [236, 186, 88, 108]],
-  },
-  // Skybridge - the penultimate hole asks for confidence before the finale gets weird.
-  { name: 'Skybridge', tagline: 'Three shelves, two ponds, one very nervous landing', par: 3, tee: [75, 390], cup: [875, 90],
-    walls: [[410, 205, 120, 48, 34, 'trees'], [735, 120, 46, 132, undefined, 'mountain']],
-    sands: [[565, 55, 118, 82], [735, 318, 112, 78]],
-    waters: [[242, 46, 152, 260], [560, 176, 152, 260]] },
-  // Paradox — the apparent dead end is solved by carrying momentum through a rift.
-  { name: 'Paradox', tagline: 'The mountain is impossible. The glowing rings disagree.', par: 4, tee: [75, 390], cup: [875, 75],
-    walls: [[410, 18, 70, 350, undefined, 'mountain'], [735, 325, 155, 42, 38, 'trees']],
-    sands: [[480, 365, 235, 80]],
-    waters: [[735, 385, 155, 60]],
-    portals: [[285, 300], [650, 165]] },
+  { name:'The Invitation', tagline:'Take the wide welcome mat — or steal the neon rail', par:3, tee:[72,240], cup:[878,240],
+    walls:[[405,170,150,140,undefined,'mountain']], sands:[[250,72,190,74],[665,334,150,70]], waters:[], ice:[], lava:[], boosts:[[250,218,125,44,1,0]] },
+  { name:'Black Ice', tagline:'The shortcut is frictionless. Braking is your problem.', par:3, tee:[75,390], cup:[870,90],
+    walls:[[392,170,165,58,38,'trees']], sands:[[625,55,130,82]], waters:[[215,65,115,240]], ice:[[335,260,360,115]], lava:[], boosts:[] },
+  { name:'Hot Route', tagline:'Three safe bends, or one shot across the furnace', par:4, tee:[75,240], cup:[875,240],
+    walls:[[315,75,58,125,undefined,'mountain'],[315,280,58,125,undefined,'mountain'],[650,75,58,125,undefined,'mountain'],[650,280,58,125,undefined,'mountain']], sands:[[445,48,125,72],[445,360,125,72]], waters:[], ice:[], lava:[[405,165,210,150]], boosts:[] },
+  { name:'The Slingshot', tagline:'Feed the accelerator straight, or play the calm outer lane', par:3, tee:[80,385], cup:[872,95],
+    walls:[[335,105,55,245,undefined,'mountain'],[650,130,55,245,undefined,'mountain']], sands:[[458,335,130,76]], waters:[[720,255,135,105]], ice:[], lava:[], boosts:[[420,322,175,44,0.82,-0.58],[718,166,105,42,0.92,-0.38]] },
+  { name:'False Summit', tagline:'The obvious lane climbs nowhere. The trees are the door.', par:4, tee:[75,390], cup:[865,88],
+    walls:[[280,250,390,62,undefined,'mountain'],[405,145,145,42,34,'trees']], sands:[[690,300,150,82]], waters:[[215,45,125,150]], ice:[[685,68,145,88]], lava:[], boosts:[] },
+  { name:'Cold Storage', tagline:'Bank on ice for distance, but do not arrive with speed', par:4, tee:[75,240], cup:[875,240],
+    walls:[[430,175,100,130,undefined,'mountain']], sands:[[705,170,95,140]], waters:[[250,185,115,110]], ice:[[185,58,590,72],[185,350,590,72]], lava:[], boosts:[[555,74,100,38,1,0],[555,368,100,38,1,0]] },
+  { name:'Double or Nothing', tagline:'The rift erases distance. The lava collects bad guesses.', par:4, tee:[75,390], cup:[875,90],
+    walls:[[370,18,72,335,undefined,'mountain'],[690,198,72,264,undefined,'mountain']], sands:[[465,345,180,75]], waters:[], ice:[], lava:[[770,245,130,155]], boosts:[], portals:[[255,315],[580,155]] },
+  { name:'The Casino', tagline:'Safe shots pay par. The center line pays glory.', par:4, tee:[75,240], cup:[875,240],
+    walls:[[275,145,58,190,undefined,'mountain'],[630,145,58,190,undefined,'mountain']], sands:[[365,58,230,70]], waters:[[365,352,230,70]], ice:[[352,190,260,100]], lava:[[445,205,75,70]], boosts:[[210,218,58,44,1,0],[695,218,70,44,1,0]] },
+  { name:'Event Horizon', tagline:'Everything you learned is now one impossible-looking shot', par:5, tee:[72,400], cup:[875,72],
+    walls:[[300,18,64,300,undefined,'mountain'],[610,162,64,300,undefined,'mountain'],[770,118,95,38,38,'trees']], sands:[[390,350,160,80]], waters:[[120,62,135,180]], ice:[[385,65,175,78]], lava:[[705,300,170,112]], boosts:[[402,286,150,42,0.72,-0.7]], portals:[[235,350],[735,210]] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
 const rotatePoint = ([x, y]) => [y, LAND_W - x];
@@ -345,6 +320,8 @@ const rotateWall = ([x, y, w, h, hz, type]) => [y, LAND_W - x - w, h, w, hz, typ
 const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
   name: h.name, tagline: h.tagline, par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
   walls: h.walls.map(rotateWall), sands: h.sands.map(rotateWall), waters: h.waters.map(rotateWall),
+  ice: (h.ice || []).map(rotateWall), lava: (h.lava || []).map(rotateWall),
+  boosts: (h.boosts || []).map(([x,y,w,hh,dx,dy]) => [y, LAND_W-x-w, hh, w, dy, -dx]),
   portals: (h.portals || []).map(rotatePoint),
 })) : BASE_HOLES;
 let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
@@ -364,18 +341,19 @@ const STOP = 0.06;      // speed below which the ball halts
 const GRAVITY = 0.55;   // downward pull per step on an airborne ball
 const LAND_DAMP = 0.72; // fraction of horizontal speed kept when the ball touches down
 const SAND_FRICTION = 0.80; // heavy per-step decay while rolling through a bunker
+const ICE_FRICTION = 0.993; // ice preserves pace and makes stopping intentionally difficult
 
 // clubs reshape the shot: speed = horizontal px/step at full power, loft = upward
 // launch velocity, friction = per-step ground decay (higher = rolls farther)
 const CLUBS = [
-  { name: 'Driver', speed: 14.44, loft: 3.3, friction: 0.965 },  // long, penetrating flight, big rollout
-  { name: 'Wedge',  speed: 8,  loft: 8,   friction: 0.93 },   // high, clears sand + ridge, checks up
-  { name: 'Putter', speed: 11, loft: 0,   friction: 0.955 },  // grounded & precise
+  { name: 'Power',    speed: 15.2, loft: 3.1, friction: 0.972 }, // maximum carry and a dangerous rollout
+  { name: 'Loft',     speed: 8.4,  loft: 8.4, friction: 0.91 },  // clears tall danger and checks quickly
+  { name: 'Precision',speed: 10.2, loft: 0,   friction: 0.95 },  // exact ground placement
 ];
 let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0;
-let ball, walls, cup, sands = [], waters = [], portals = [], currentHole;
+let ball, walls, cup, sands = [], waters = [], ice = [], lava = [], boosts = [], portals = [], currentHole;
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
@@ -396,6 +374,9 @@ function loadHole(i) {
   ];
   sands = h.sands || [];
   waters = h.waters || [];
+  ice = h.ice || [];
+  lava = h.lava || [];
+  boosts = h.boosts || [];
   portals = h.portals || [];
   portalCooldown = 0; portalFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
@@ -628,6 +609,21 @@ function inWater(x, y) {
   }
   return false;
 }
+function inRects(x, y, rects) {
+  return rects.some(([rx, ry, rw, rh]) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh);
+}
+function checkBoost() {
+  if (performance.now() < (ball.boostCooldown || 0)) return;
+  for (const [x, y, w, h, dx, dy] of boosts) {
+    if (!inRects(ball.x, ball.y, [[x,y,w,h]])) continue;
+    const kick = Math.max(9, Math.hypot(ball.vx, ball.vy) * 1.32);
+    const d = Math.hypot(dx,dy) || 1;
+    ball.vx = dx / d * kick; ball.vy = dy / d * kick;
+    ball.boostCooldown = performance.now() + 500;
+    toast('<b>Overdrive!</b> Ground speed amplified');
+    return;
+  }
+}
 // A rift is a ground feature: lofted balls sail over it, while a rolling ball
 // exits its twin with the same direction and momentum. The cooldown keeps the
 // exit ring from immediately swallowing the ball again.
@@ -649,10 +645,11 @@ function checkPortal() {
   return false;
 }
 // ball found water while on the ground: +1 penalty stroke, then (after a beat) replay from where it was hit
-function waterPenalty() {
+function hazardPenalty(kind = 'water') {
   ball.moving = false; ball.vx = ball.vy = ball.vz = 0; ball.z = 0;
-  strokes++; $('strokes').textContent = strokes;
-  toast('<b>Splash!</b> +1 stroke &middot; drop where you last hit');
+  const cost = kind === 'lava' ? 2 : 1;
+  strokes += cost; $('strokes').textContent = strokes;
+  toast(kind === 'lava' ? '<b>Incinerated!</b> +2 strokes &middot; replay the shot' : '<b>Splash!</b> +1 stroke &middot; replay the shot');
   waterHold = true;                                    // hide the ball & block input during the pause
   splashPos = { x: ball.x, y: ball.y }; splashStart = performance.now();
   ball.hidden = true;
@@ -695,13 +692,15 @@ function step() {
     }
     if (!airborne) {                           // ground-only checks
       if (checkPortal()) continue;
-      if (inWater(ball.x, ball.y)) { waterPenalty(); return; }   // landed/rolled into the pond
+      checkBoost();
+      if (inRects(ball.x, ball.y, lava)) { hazardPenalty('lava'); return; }
+      if (inWater(ball.x, ball.y)) { hazardPenalty('water'); return; }
       const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
-      if (dc < CUP_R - 2 && speed < 7) { sink(); return; }
+      if (dc < CUP_R - 2 && Math.hypot(ball.vx, ball.vy) < 7) { sink(); return; }
     }
   }
   if (ball.z <= 0.01) {                         // ground drag; sand bogs it down
-    const f = inSand(ball.x, ball.y) ? SAND_FRICTION : ball.groundFriction;
+    const f = inSand(ball.x, ball.y) ? SAND_FRICTION : inRects(ball.x, ball.y, ice) ? ICE_FRICTION : ball.groundFriction;
     ball.vx *= f; ball.vy *= f;
     if (Math.hypot(ball.vx, ball.vy) < STOP) { ball.vx = ball.vy = 0; ball.moving = false; }
   }
@@ -858,6 +857,38 @@ function draw() {
     ctx.restore();
     ctx.strokeStyle = 'rgba(120,205,255,.45)'; ctx.lineWidth = 1.5;
     roundRect(x + .75, y + .75, w - 1.5, h - 1.5, 12); ctx.stroke();
+  }
+
+  // Ice is a speed hazard: shots glide almost without friction and can sail past
+  // otherwise easy targets. The diagonal cuts make its directionless slickness clear.
+  for (const [x,y,w,h] of ice) {
+    ctx.save();
+    const ig = ctx.createLinearGradient(x,y,x+w,y+h);
+    ig.addColorStop(0,'rgba(175,245,255,.72)'); ig.addColorStop(1,'rgba(70,175,220,.62)');
+    ctx.fillStyle=ig; roundRect(x,y,w,h,12); ctx.fill();
+    ctx.beginPath(); roundRect(x,y,w,h,12); ctx.clip();
+    ctx.strokeStyle='rgba(245,255,255,.42)'; ctx.lineWidth=2;
+    for(let k=-h;k<w;k+=34){ctx.beginPath();ctx.moveTo(x+k,y+h);ctx.lineTo(x+k+h,y);ctx.stroke();}
+    ctx.restore();
+    ctx.strokeStyle='rgba(210,250,255,.72)'; ctx.lineWidth=1.5; roundRect(x+.75,y+.75,w-1.5,h-1.5,12);ctx.stroke();
+  }
+
+  // Lava is the expensive miss. It reads hotter and less forgiving than water.
+  for (const [x,y,w,h] of lava) {
+    ctx.save();
+    const lg=ctx.createLinearGradient(x,y,x,y+h); lg.addColorStop(0,'#ffb329');lg.addColorStop(.45,'#f04d28');lg.addColorStop(1,'#6f1223');
+    ctx.fillStyle=lg; ctx.shadowColor='rgba(255,75,35,.5)';ctx.shadowBlur=18;roundRect(x,y,w,h,12);ctx.fill();
+    ctx.beginPath();roundRect(x,y,w,h,12);ctx.clip();ctx.strokeStyle='rgba(255,235,105,.55)';ctx.lineWidth=3;
+    for(let ly=y+14;ly<y+h;ly+=24){ctx.beginPath();ctx.moveTo(x,ly);ctx.bezierCurveTo(x+w*.3,ly-9,x+w*.7,ly+9,x+w,ly);ctx.stroke();}
+    ctx.restore();
+  }
+
+  // Boost strips only catch grounded shots and snap them toward their arrows.
+  for (const [x,y,w,h,dx,dy] of boosts) {
+    ctx.save();ctx.fillStyle='rgba(216,255,82,.15)';ctx.strokeStyle='#d8ff52';ctx.lineWidth=2;roundRect(x,y,w,h,8);ctx.fill();ctx.stroke();
+    const angle=Math.atan2(dy,dx);ctx.translate(x+w/2,y+h/2);ctx.rotate(angle);ctx.fillStyle='#d8ff52';ctx.shadowColor='#d8ff52';ctx.shadowBlur=10;
+    for(let bx=-Math.max(w,h)*.25;bx<=Math.max(w,h)*.25;bx+=28){ctx.beginPath();ctx.moveTo(bx+10,0);ctx.lineTo(bx-5,-9);ctx.lineTo(bx-5,9);ctx.closePath();ctx.fill();}
+    ctx.restore();
   }
 
   // Paired ground rifts: matching inner marks and animated counter-rotation make

@@ -7,10 +7,13 @@ their physics before the player takes a shot.
 
 | Visual | Gameplay rule | Course-design use |
 | --- | --- | --- |
-| Trees | Finite height; a sufficiently high shot can clear them | Shortcuts, risk/reward lines, and prompts to use the wedge |
+| Trees | Finite height; a sufficiently high shot can clear them | Shortcuts, risk/reward lines, and prompts to use Loft |
 | Mountains | Infinite height; every club collides with them | Permanent routing, doglegs, and separation between lanes |
 | Sand | Airborne shots pass over it; grounded balls lose speed quickly | Punish inaccurate landings without adding a stroke |
 | Water | Airborne shots pass over it; landing or rolling into it adds one stroke and resets the ball to its previous lie | Forced carries and high-risk shortcuts |
+| Lava | Airborne shots pass over it; landing or rolling into it adds two strokes and resets the ball | Severe punishment around the most rewarding lines |
+| Ice | Grounded balls retain almost all their speed; airborne shots are unaffected | Overshoot danger, long banks, and braking puzzles |
+| Boost strip | A grounded ball is accelerated in the arrow direction; airborne shots pass over | Slingshots, fast shortcuts, and deliberately risky redirects |
 | Paired rifts | Grounded balls teleport between the two rings while keeping their direction and speed; airborne shots pass over | Finale set pieces and impossible-looking routes |
 
 Do not draw a permanent barrier as a tree. Players should be able to rely on
@@ -34,6 +37,9 @@ Holes live in `BASE_HOLES` in `index.html` and are authored in the landscape
   ],
   sands: [[420, 310, 130, 90]],
   waters: [[690, 80, 100, 120]],
+  ice: [[180, 70, 280, 70]],
+  lava: [[500, 300, 120, 90]],
+  boosts: [[250, 220, 100, 40, 1, 0]],
   portals: [[250, 240], [710, 120]],
 }
 ```
@@ -42,7 +48,9 @@ Obstacle arrays use `[x, y, width, height, clearanceHeight, type]`:
 
 - A tree obstacle requires a numeric clearance height and the type `'trees'`.
 - A mountain uses `undefined` for clearance height and the type `'mountain'`.
-- Sand and water use `[x, y, width, height]`.
+- Sand, water, ice, and lava use `[x, y, width, height]`.
+- Boosts use `[x, y, width, height, directionX, directionY]`; the direction
+  vector is normalized by the game and rotates correctly in portrait mode.
 - A pair of rifts uses `portals: [[x1, y1], [x2, y2]]`; use exactly two.
 - Keep every obstacle inside the 18 px outer boundary.
 
@@ -54,11 +62,13 @@ renderers only change how that footprint is presented.
 1. Begin with a clear tee-to-cup route that cannot trap the ball.
 2. Use mountains to shape the required route or create a dogleg.
 3. Add trees where a wedge shortcut should compete with the safer route.
-4. Add sand or water to make misses meaningful without obscuring the route.
+4. Add hazards to make misses meaningful without obscuring the route. Reserve
+   lava for an optional high-reward line or a late-course climax.
 5. Check that the intended tree shortcut needs visible loft and that the
    mountain route cannot be cleared by any club.
 6. Test both landscape and portrait layouts; the same obstacle data rotates.
 7. Update the displayed hole count and total par if the course length changes.
 
-Aim for one memorable decision per hole. Reusing the visual language is good;
-reusing the same obstacle arrangement is not.
+Aim for one memorable decision per hole and always preserve a lower-risk route.
+The After Dark Gauntlet introduces boost, ice, lava, and rifts separately before
+combining them on the final three holes.
