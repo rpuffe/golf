@@ -329,8 +329,9 @@ const BASE_HOLES = [
     routeLabels:[[120,250,'THE GAP','#d8ff52'],[120,385,'BANK LINE','#ff5cce']] },
   { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
     walls:[[810,160,55,55,32,'trees']], sands:[[800,330,90,60]], waters:[[370,90,220,300]], greens:[[880,240,70,58]], ice:[], lava:[], portals:[[250,240],[700,330]] },
-  { name:'Cyclone', tagline:'Feed the rail at full speed and let it sling you home', par:3, tee:[80,425], cup:[545,272],
-    walls:[], sands:[[200,55,100,60],[720,90,100,60]], waters:[], greens:[[545,272,66,50]], ice:[[320,80,320,320],[150,398,310,52]], lava:[], bumpers:spiralBumpers(480,240),
+  { name:'Cyclone', tagline:'Feed the rail, then shape the release into the braking green', par:3, tee:[80,425], cup:[545,272],
+    walls:[], sands:[[200,55,100,60],[720,90,100,60]], waters:[], greens:[[545,272,66,50]],
+    ice:[[320,80,320,130],[320,210,155,124],[615,210,25,124],[320,334,320,66],[150,398,310,52]], lava:[], bumpers:spiralBumpers(480,240),
     spiral:{ center:[480,240], entry:[480,425], start:Math.PI/2, direction:-1, turns:Math.PI*4, outer:185, inner:45 },
     routeLabels:[[110,390,'FULL SEND','#ff5cce'],[125,75,'SKY ROUTE','#62e9ff']] },
   { name:'Meltwater', tagline:'The ice river ends in fire. Get off before the falls.', par:4, tee:[75,80], cup:[880,400],
@@ -792,6 +793,7 @@ function advanceSpiral() {
   const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+releaseBias;
   const exitSpeed=4.8+quality*1.4;
   ball.vx=Math.cos(angle)*exitSpeed;ball.vy=Math.sin(angle)*exitSpeed;
+  ball.spiralExitGrace=performance.now()+350; // clear the inner rail before bumpers become live again
   const projectedMiss=Math.abs(Math.sin(releaseBias))*Math.hypot(cup.x-ball.x,cup.y-ball.y);
   toast(quality>.75&&projectedMiss<CUP_R-2?'<b>Clean release!</b> That earned an ace run':'<b>Wide release!</b> Finish the recovery');
 }
@@ -832,7 +834,7 @@ function step() {
     // Neon bumpers are readable, player-controlled banks: they reflect the
     // incoming angle and return a little pace. A committed Loft shot clears
     // their 28px height, which creates a second route through bumper fields.
-    for (const [bx, by, br] of bumpers) {
+    for (const [bx, by, br] of performance.now() < (ball.spiralExitGrace || 0) ? [] : bumpers) {
       if (airborne && ball.z >= 28) continue;
       const dx = ball.x - bx, dy = ball.y - by;
       const minD = br + R, d = Math.hypot(dx, dy);
