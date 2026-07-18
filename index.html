@@ -268,7 +268,7 @@
       <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to hit.</li>
       <li>Pick a club before each shot — tap the chips below the course, or press 1 / 2 / 3 (C cycles).</li>
       <li><b>Power</b> goes furthest but runs hot. <b>Loft</b> clears hazards and lands soft. <b>Precision</b> stays grounded and follows the line exactly.</li>
-      <li>Trees can be chipped over. Mountains and steel barriers cannot — route around them.</li>
+      <li><b>Loft flies over trees, bumpers, water and lava — never mountains.</b> Steel barriers are permanent too, so route around them.</li>
       <li><b>Water</b> costs +1. <b>Lava</b> costs +2. Both replay from your last shot. Lofted balls can carry either.</li>
       <li><b>Greens</b> are firmer than the fairway, so every club rolls a little farther around the flag.</li>
       <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
@@ -304,31 +304,34 @@ function spiralBumpers(cx, cy) {
   }
   return posts;
 }
-// AFTER DARK GAUNTLET — each hole introduces a new decision, then the back nine
-// combines them. Ice preserves speed, lava punishes greed, and every hole has
-// a conservative route plus a faster line that asks for nerve or height.
+// NEON MERIDIAN — a fresh nine. The front six introduce one mechanic at a
+// time (water, ice, lava, bumpers, rifts, the rail), the last three stack
+// them. Every hole keeps a patient route next to a line that pays for nerve.
 const BASE_HOLES = [
-  { name:'The Invitation', tagline:'Take the garden path, or float straight over it', par:3, tee:[72,240], cup:[875,240],
-    walls:[[195,190,72,100,34,'trees']], sands:[[245,78,150,62],[245,340,150,62]], waters:[], greens:[[875,240,65,60]], ice:[], lava:[] },
-  { name:'Black Ice', tagline:'The shortcut is frictionless. Braking is your problem.', par:3, tee:[75,390], cup:[870,90],
-    walls:[[430,145,145,62,38,'trees']], sands:[[885,38,48,110]], waters:[[205,62,110,220]], greens:[[850,105,82,58]], ice:[[330,245,365,105]], lava:[] },
-  { name:'Hot Route', tagline:'Three safe bends, or one shot across the furnace', par:4, tee:[75,240], cup:[875,240],
-    walls:[[315,120,58,70,undefined,'mountain'],[315,290,58,70,undefined,'mountain'],[650,120,58,70,undefined,'mountain'],[650,290,58,70,undefined,'mountain'],[770,315,58,62,34,'trees']], sands:[[445,30,125,52],[445,398,125,52]], waters:[], greens:[[875,240,65,58]], ice:[], lava:[[405,170,210,140]] },
-  { name:'Ricochet', tagline:'Take the long shoreline, or call your bank off the neon posts', par:3, tee:[80,385], cup:[872,95],
-    walls:[[455,18,50,105,undefined,'mountain']], sands:[[625,320,155,72]], waters:[[370,155,220,145]], greens:[[865,100,78,58]], ice:[], lava:[], bumpers:[[300,350,22],[640,135,22],[750,175,18]] },
-  { name:'Backdoor Island', tagline:'Fly the moat — or sneak through the dry door', par:3, tee:[70,240], cup:[525,240],
-    walls:[[640,190,46,100,34,'trees']], sands:[[620,315,130,72]], waters:[[325,105,300,85],[325,290,300,85],[325,190,90,100]], greens:[[525,240,82,58]], ice:[], lava:[] },
-  { name:'Double or Nothing', tagline:'The rift erases distance. The lava collects bad guesses.', par:4, tee:[75,390], cup:[875,90],
-    walls:[[350,18,75,320,undefined,'mountain'],[690,180,70,282,undefined,'mountain'],[805,62,44,76,32,'trees']], sands:[[465,350,175,68]], waters:[], greens:[[875,90,65,55]], ice:[], lava:[[610,235,155,145]], portals:[[250,280],[570,210]] },
-  { name:'Lucky Spiral', tagline:'A clean full-send earns the sweetest exit', par:3, tee:[75,425], cup:[665,275],
-    walls:[], sands:[[285,72,105,62],[790,340,105,70]], waters:[], greens:[[665,275,70,52]], ice:[[420,120,390,300]], lava:[], bumpers:spiralBumpers(600,240),
-    spiral:{ center:[600,240], entry:[600,425], start:Math.PI/2, direction:-1, turns:Math.PI*4, outer:185, inner:45 },
-    routeLabels:[[120,390,'FULL SEND','#ff5cce'],[135,92,'LOFT ROUTE','#62e9ff']] },
-  { name:'The Casino', tagline:'Choose now: safe upstairs, double over water, or jackpot through fire', par:4, tee:[75,240], cup:[850,185],
-    walls:[[350,140,350,35,undefined,'mountain'],[350,305,350,35,undefined,'mountain']], sands:[[420,48,190,62]], waters:[[380,365,235,68]], greens:[[850,185,78,58]], ice:[[315,205,170,75],[525,230,155,60]], lava:[[205,205,85,70]],
-    routeLabels:[[135,95,'SAFE · +1 SHOT','#62e9ff'],[135,190,'JACKPOT','#d8ff52'],[135,385,'DOUBLE','#ff5cce']] },
-  { name:'Event Horizon', tagline:'Bank, rift, control the ice, then fly the final grove', par:5, tee:[72,400], cup:[875,72],
-    walls:[[290,18,65,300,undefined,'mountain'],[640,170,65,292,undefined,'mountain'],[775,88,100,45,38,'trees']], sands:[[390,350,150,70]], waters:[[400,48,180,72]], greens:[[875,72,65,50]], ice:[[440,140,155,88]], lava:[[450,245,155,95]], bumpers:[[155,360,20],[585,125,20]], portals:[[220,350],[430,200]] },
+  { name:'First Light', tagline:'Every legend starts with one canal. Carry it — or respect it.', par:3, tee:[70,240], cup:[880,240],
+    walls:[], sands:[[560,200,90,80],[385,110,45,260]], waters:[[430,110,100,260]], greens:[[880,240,70,60]], ice:[], lava:[] },
+  { name:'Glacier Run', tagline:'The ice carries pace you cannot cancel', par:3, tee:[80,80], cup:[875,410],
+    walls:[[560,18,60,140,undefined,'mountain']], sands:[[820,300,90,60]], waters:[[520,330,170,120]], greens:[[875,410,72,55]], ice:[[300,160,400,160]], lava:[] },
+  { name:'The Forge', tagline:'Thread the cool corridor, or clear the melt in one brave carry', par:4, tee:[75,400], cup:[880,80],
+    walls:[[300,18,60,200,undefined,'mountain'],[620,240,60,222,undefined,'mountain'],[780,140,64,60,34,'trees']], sands:[[420,380,120,60]], waters:[], greens:[[880,80,65,55]], ice:[], lava:[[360,200,200,140]] },
+  { name:'Needle\'s Eye', tagline:'A slim gap, a low bank, or the high road over everything', par:3, tee:[75,90], cup:[880,90],
+    walls:[[430,18,100,200,undefined,'mountain']], sands:[[770,170,110,60]], waters:[[430,300,100,120]], greens:[[880,90,70,55]], ice:[], lava:[], bumpers:[[350,435,14],[600,435,14]],
+    routeLabels:[[120,250,'THE GAP','#d8ff52'],[120,385,'BANK LINE','#ff5cce']] },
+  { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
+    walls:[[810,160,55,55,32,'trees']], sands:[[800,330,90,60]], waters:[[370,90,220,300]], greens:[[880,240,70,58]], ice:[], lava:[], portals:[[250,240],[700,330]] },
+  { name:'Cyclone', tagline:'Feed the rail at full speed and let it sling you home', par:3, tee:[80,425], cup:[545,272],
+    walls:[], sands:[[200,55,100,60],[720,90,100,60]], waters:[], greens:[[545,272,66,50]], ice:[[320,80,320,320],[150,398,310,52]], lava:[], bumpers:spiralBumpers(480,240),
+    spiral:{ center:[480,240], entry:[480,425], start:Math.PI/2, direction:-1, turns:Math.PI*4, outer:185, inner:45 },
+    routeLabels:[[110,390,'FULL SEND','#ff5cce'],[125,75,'SKY ROUTE','#62e9ff']] },
+  { name:'Meltwater', tagline:'The ice river ends in fire. Get off before the falls.', par:4, tee:[75,80], cup:[880,400],
+    walls:[[250,18,70,120,undefined,'mountain'],[790,300,60,60,34,'trees']], sands:[[430,300,160,70],[620,190,90,100]], waters:[[740,40,180,110]], greens:[[880,400,68,55]], ice:[[250,190,370,100]], lava:[[710,190,110,100]],
+    routeLabels:[[110,60,'ICE EXPRESS','#62e9ff'],[110,440,'DRY LINE','#d8ff52']] },
+  { name:'Triple Threat', tagline:'Pick a lane: patient sand, frozen jackpot, or the gamble over water', par:4, tee:[75,240], cup:[880,120],
+    walls:[[330,150,300,30,undefined,'mountain'],[330,300,300,30,undefined,'mountain']], sands:[[400,60,180,60],[550,190,90,100]], waters:[[400,350,220,90]], greens:[[880,120,72,55]], ice:[[330,190,220,100]], lava:[[640,190,90,100]], bumpers:[[775,245,18]],
+    routeLabels:[[130,80,'SAFE · +1','#62e9ff'],[140,190,'JACKPOT','#d8ff52'],[130,380,'GAMBLE','#ff5cce']] },
+  { name:'Supernova', tagline:'Everything you\'ve learned. One hole. Go supernova.', par:5, tee:[70,430], cup:[885,60],
+    walls:[[240,140,60,322,undefined,'mountain'],[540,18,60,300,undefined,'mountain'],[770,80,70,50,36,'trees']], sands:[[800,255,80,70]], waters:[[330,60,140,80]], greens:[[885,60,62,50]], ice:[[300,340,200,90]], lava:[[620,330,140,90]], bumpers:[[420,250,18],[60,300,16]], portals:[[150,120],[720,220]],
+    routeLabels:[[110,60,'RIFT HEIST','#ff5cce'],[130,300,'THE LONG BURN','#62e9ff']] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
 const rotatePoint = ([x, y]) => [y, LAND_W - x];
@@ -373,12 +376,13 @@ const CLUBS = [
 ];
 let currentClub = 0;
 
-let holeIdx = 0, strokes = 0, total = 0;
+let holeIdx = 0, strokes = 0, total = 0, underParStreak = 0;
 let ball, walls, cup, sands = [], waters = [], greens = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], currentHole, currentSpiral = null;
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
 let portalCooldown = 0, portalFlash = null; // prevents instant re-entry and lights the exit
+let cupFlash = null, lipFlash = null;
 let started = false, done = false;   // started: name entered; done: round over
 let aim = null;                      // { x, y } current pointer while dragging
 let playerName = '';
@@ -386,7 +390,7 @@ let playerName = '';
 function loadHole(i) {
   const h = HOLES[i];
   currentHole = h;
-  ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, z: 0, vz: 0, moving: false, groundFriction: CLUBS[0].friction };
+  ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, z: 0, vz: 0, moving: false, groundFriction: CLUBS[currentClub].friction };
   cup = { x: h.cup[0], y: h.cup[1] };
   walls = [
     [0, 0, W, MARGIN], [0, H - MARGIN, W, MARGIN],
@@ -402,14 +406,15 @@ function loadHole(i) {
   routeLabels = h.routeLabels || [];
   currentSpiral = h.spiral || null;
   portals = h.portals || [];
-  portalCooldown = 0; portalFlash = null;
+  portalCooldown = 0; portalFlash = null; cupFlash = null; lipFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
   strokes = 0; aim = null;
-  setClub(0);                       // every hole starts with the driver in hand
+  setClub(currentClub);
   $('hole').textContent = i + 1;
   $('par').textContent = h.par;
   $('strokes').textContent = 0;
   $('total').textContent = total;
+  if (started && i === HOLES.length - 1) toast('<b>Final hole.</b> Everything the Meridian taught you — all at once.');
 }
 
 // ---- name entry / round lifecycle ----
@@ -417,7 +422,7 @@ function beginRound(name) {
   playerName = name;
   $('who').textContent = name;
   localStorage.setItem('golf_name', name);
-  holeIdx = 0; total = 0; done = false; started = true;
+  holeIdx = 0; total = 0; underParStreak = 0; done = false; started = true;
   $('start').classList.remove('show');
   $('end').classList.remove('show');
   loadHole(0);
@@ -425,7 +430,12 @@ function beginRound(name) {
 
 $('startBtn').addEventListener('click', () => {
   const n = $('name').value.trim() || 'Player';
+  const firstRound = !localStorage.getItem('golf_seen_howto');
   beginRound(n);
+  if (firstRound) {
+    localStorage.setItem('golf_seen_howto', '1');
+    $('howto').classList.add('show');
+  }
 });
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('startBtn').click(); });
 $('againBtn').addEventListener('click', () => beginRound(playerName));
@@ -539,6 +549,12 @@ function connectLive() {
   es.addEventListener('holeout', ev => {
     let d; try { d = JSON.parse(ev.data); } catch { return; }
     if (!d || d.id === CLIENT_ID) return;      // ignore our own hole-outs
+    const peerPar = Number.isFinite(d.par) ? d.par : HOLES[d.hole - 1]?.par;
+    if (Number.isFinite(peerPar)) {
+      const diff = d.strokes - peerPar;
+      const verb = d.strokes === 1 ? 'aced' : diff <= -2 ? 'eagled' : diff === -1 ? 'birdied' : diff === 0 ? 'made par on' : '';
+      if (verb) { toast(`<b>${esc(d.name)}</b> ${verb} hole ${d.hole}`); return; }
+    }
     const s = d.strokes === 1 ? 'stroke' : 'strokes';
     toast(`<b>${esc(d.name)}</b> finished hole ${d.hole} in ${d.strokes} ${s}`);
   });
@@ -548,7 +564,7 @@ function connectLive() {
 function broadcastHole(hole, holeStrokes) {
   fetch('/api/hole', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ id: CLIENT_ID, name: playerName, hole, strokes: holeStrokes }),
+    body: JSON.stringify({ id: CLIENT_ID, name: playerName, hole, strokes: holeStrokes, par: currentHole.par }),
   }).catch(() => {});
 }
 
@@ -605,6 +621,7 @@ function onUp(e) {
   ball.vz = club.loft * power;             // loft sends it airborne (0 for the putter)
   ball.z = 0;
   ball.groundFriction = club.friction;     // this club's roll persists for the whole shot
+  ball.lipOutShown = false;
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
 }
@@ -669,7 +686,7 @@ function hazardPenalty(kind = 'water') {
   strokes += cost; $('strokes').textContent = strokes;
   toast(kind === 'lava' ? '<b>Incinerated!</b> +2 strokes &middot; replay the shot' : '<b>Splash!</b> +1 stroke &middot; replay the shot');
   waterHold = true;                                    // hide the ball & block input during the pause
-  splashPos = { x: ball.x, y: ball.y }; splashStart = performance.now();
+  splashPos = { x: ball.x, y: ball.y, kind }; splashStart = performance.now();
   ball.hidden = true;
   setTimeout(() => {                                   // ball reappears at the drop after the splash settles
     ball.x = lastShotPos.x; ball.y = lastShotPos.y;
@@ -680,7 +697,7 @@ function hazardPenalty(kind = 'water') {
 function tryEnterSpiral() {
   if (!currentSpiral || ball.z > .01 || ball.onSpiral) return false;
   const [ex,ey] = currentSpiral.entry;
-  if (Math.hypot(ball.x-ex,ball.y-ey) > 34 || Math.hypot(ball.vx,ball.vy) < 4) return false;
+  if (Math.hypot(ball.x-ex,ball.y-ey) > 44 || Math.hypot(ball.vx,ball.vy) < 3) return false;
   ball.onSpiral = true; ball.spiralProgress = 0;
   ball.spiralEntrySpeed = Math.hypot(ball.vx,ball.vy);
   ball.spiralSpeed = Math.max(7, ball.spiralEntrySpeed);
@@ -702,7 +719,7 @@ function advanceSpiral() {
   ball.vx=ball.vy=0; ball.z=ball.vz=0;
   if(ball.spiralProgress<s.turns)return;
   ball.onSpiral=false;
-  const quality=Math.max(0,Math.min(1,(ball.spiralEntrySpeed-4)/5));
+  const quality=Math.max(0,Math.min(1,(ball.spiralEntrySpeed-3)/4));
   const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+(.28-quality*.22);
   const exitSpeed=4.8+quality*1.4;
   ball.vx=Math.cos(angle)*exitSpeed;ball.vy=Math.sin(angle)*exitSpeed;
@@ -759,12 +776,18 @@ function step() {
       }
       ball.x = bx + nx * minD; ball.y = by + ny * minD;
     }
-    if (!airborne) {                           // ground-only checks
+    const hazardAirborne = ball.z > 3;
+    if (!hazardAirborne) {                     // low hops no longer ghost over ground features
       if (checkPortal()) continue;
       if (inRects(ball.x, ball.y, lava)) { hazardPenalty('lava'); return; }
       if (inWater(ball.x, ball.y)) { hazardPenalty('water'); return; }
       const dc = Math.hypot(ball.x - cup.x, ball.y - cup.y);
-      if (dc < CUP_R - 2 && Math.hypot(ball.vx, ball.vy) < 7) { sink(); return; }
+      const cupSpeed = Math.hypot(ball.vx, ball.vy);
+      if (!airborne && dc < CUP_R + 4 && cupSpeed >= 7 && !ball.lipOutShown) {
+        ball.lipOutShown = true; lipFlash = { x: cup.x, y: cup.y, start: performance.now() };
+        toast('<b>Lip out!</b> The cup said not today');
+      }
+      if (dc < CUP_R - 2 && cupSpeed < 7) { sink(); return; }
     }
   }
   if (ball.z <= 0.01) {                         // ground drag; sand bogs it down
@@ -780,6 +803,16 @@ function step() {
 function sink() {
   ball.moving = false; ball.vx = ball.vy = 0; ball.z = 0; ball.vz = 0;
   ball.x = cup.x; ball.y = cup.y;
+  const diff = strokes - currentHole.par;
+  if (strokes === 1) toast('<b>ACE!</b> One swing. One legend.');
+  else if (diff <= -2) toast('<b>EAGLE!</b> Tore the sky off that one.');
+  else if (diff === -1) toast('<b>Birdie!</b> Meridian magic.');
+  else if (diff === 0) toast('<b>Par.</b> Clean work. Keep moving.');
+  if (diff < 0) {
+    cupFlash = { x: cup.x, y: cup.y, start: performance.now() };
+    underParStreak++;
+    if (underParStreak >= 2) toast(`<b>On fire!</b> ${underParStreak} under-par holes running`);
+  } else underParStreak = 0;
   total += strokes; $('total').textContent = total;
   if (started) broadcastHole(holeIdx + 1, strokes);   // notify other live players
   setTimeout(() => {
@@ -1010,8 +1043,9 @@ function draw() {
 
   // Casino lane labels make the route choice legible before the first shot.
   for (const [x,y,label,color] of routeLabels) {
-    ctx.save();ctx.fillStyle='rgba(3,20,18,.78)';roundRect(x-8,y-15,128,25,7);ctx.fill();
-    ctx.fillStyle=color;ctx.font='800 10px "Avenir Next","Segoe UI",sans-serif';ctx.fillText(label,x,y+2);ctx.restore();
+    const boxWidth=128,boxX=Math.max(MARGIN,Math.min(x-8,W-MARGIN-boxWidth));
+    ctx.save();ctx.fillStyle='rgba(3,20,18,.78)';roundRect(boxX,y-15,boxWidth,25,7);ctx.fill();
+    ctx.fillStyle=color;ctx.font='800 10px "Avenir Next","Segoe UI",sans-serif';ctx.fillText(label,boxX+8,y+2);ctx.restore();
   }
 
   // outer boundary walls remain understated; special internal obstacles render below
@@ -1069,6 +1103,24 @@ function draw() {
   ctx.beginPath(); ctx.moveTo(cup.x, cup.y - 40); ctx.lineTo(cup.x + 22, cup.y - 33);
   ctx.lineTo(cup.x, cup.y - 26); ctx.closePath(); ctx.fill();
   ctx.shadowColor = 'transparent';
+  if (cupFlash) {
+    const t = (performance.now() - cupFlash.start) / 650;
+    if (t >= 1) cupFlash = null;
+    else for (let ring = 0; ring < 3; ring++) {
+      const rt = Math.max(0, Math.min(1, t * 1.35 - ring * .16));
+      ctx.strokeStyle = ring % 2 ? `rgba(255,92,206,${1-rt})` : `rgba(216,255,82,${1-rt})`;
+      ctx.lineWidth = 3 - ring * .5;
+      ctx.beginPath(); ctx.arc(cup.x, cup.y, 18 + rt * (34 + ring * 8), 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+  if (lipFlash) {
+    const t = (performance.now() - lipFlash.start) / 380;
+    if (t >= 1) lipFlash = null;
+    else {
+      ctx.strokeStyle = `rgba(255,92,206,${1-t})`; ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(cup.x, cup.y, CUP_R + 3 + t * 18, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
 
   // aim guide
   if (aim && !ball.moving) {
@@ -1089,6 +1141,7 @@ function draw() {
     // lofted clubs: trace the real flight arc (dots lift off the ground and curve back
     // down) + a landing ring, so the height and carry are legible before you swing
     const club = CLUBS[currentClub];
+    let landingX = ball.x, landingY = ball.y;
     if (club.loft > 0) {
       let sx = ball.x, sy = ball.y, sz = 0;
       let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power, svz = club.loft * power;
@@ -1098,18 +1151,38 @@ function draw() {
         if (sz < 0) break;
         if (n % 4 === 0) { ctx.beginPath(); ctx.arc(sx, sy - sz, 1.8, 0, Math.PI * 2); ctx.fill(); }
       }
-      ctx.strokeStyle = 'rgba(216,255,82,.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
+      landingX = sx; landingY = sy;
+      const hotLanding = currentClub === 1 && (inWater(sx, sy) || inRects(sx, sy, lava));
+      ctx.strokeStyle = hotLanding ? 'rgba(255,80,60,.9)' : 'rgba(216,255,82,.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
+    }
+    if (club.loft === 0 || currentClub === 0) {
+      let sx = landingX, sy = landingY;
+      let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power;
+      if (club.loft > 0) { svx *= LAND_DAMP; svy *= LAND_DAMP; }
+      for (let n = 0; n < 2500 && Math.hypot(svx, svy) >= STOP; n++) {
+        sx += svx; sy += svy;
+        const f = inSand(sx, sy) ? SAND_FRICTION
+          : inRects(sx, sy, ice) ? ICE_FRICTION
+          : inGreen(sx, sy) ? Math.min(.988, club.friction + GREEN_FRICTION_BONUS)
+          : club.friction;
+        svx *= f; svy *= f;
+      }
+      ctx.fillStyle = 'rgba(255,92,206,.95)';
+      ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
     }
   }
 
   // splash ripple where the ball entered the water, during the penalty pause
   if (splashPos) {
     const t = Math.min(1, (performance.now() - splashStart) / 900);
-    ctx.strokeStyle = `rgba(170,225,255,${0.65 * (1 - t)})`; ctx.lineWidth = 2;
+    const lavaSplash = splashPos.kind === 'lava';
+    ctx.shadowColor = lavaSplash ? '#ff4b23' : 'transparent'; ctx.shadowBlur = lavaSplash ? 12 : 0;
+    ctx.strokeStyle = lavaSplash ? `rgba(255,180,60,${0.75*(1-t)})` : `rgba(170,225,255,${0.65*(1-t)})`; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(splashPos.x, splashPos.y, 4 + t * 24, 0, Math.PI * 2); ctx.stroke();
     ctx.beginPath(); ctx.arc(splashPos.x, splashPos.y, 2 + t * 13, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowColor = 'transparent';
   }
   if (ball.hidden) return;   // ball is out of play during the water-drop pause
 
