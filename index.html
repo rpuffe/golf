@@ -142,6 +142,7 @@
   #leaderboardStatus { min-height:16px; color:var(--muted); font-size:11px; margin-top:4px; }
 
   /* how-it-works modal */
+  #howto { z-index:22; }
   #howto .card { text-align:left; }
   #howto h1 { text-align:center; }
   #howto ul { list-style:disc; margin:2px 0 20px; padding-left:20px; font-size:13px; line-height:1.7; opacity:.9; }
@@ -190,6 +191,15 @@
     canvas { max-height:calc(100svh - 242px); }
     .brand-mark { font-size:8px; letter-spacing:1.25px; }
   }
+  @media (max-height:700px) and (orientation:portrait) {
+    body { gap:4px; }
+    #hud .who { display:none; }
+    canvas { max-height:calc(100svh - 125px); }
+    #clubs .club { padding:4px 2px; }
+    #clubs .club small,#clubs .club .key { display:none; }
+    #hint { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+    #links { display:none; }
+  }
   @media (prefers-reduced-motion:reduce) {
     *,*::before,*::after { scroll-behavior:auto!important; transition:none!important; }
   }
@@ -202,25 +212,25 @@
   <span>Strokes <b id="strokes">0</b></span>
   <span>Total <b id="total">0</b></span>
 </div>
-<canvas id="c" width="720" height="480"></canvas>
+<canvas id="c" width="720" height="480" tabindex="0" aria-describedby="hint" aria-label="Mini golf course. Use a pointer, or use left and right arrows to aim, up and down arrows for power, then Space to hit."></canvas>
 <div id="clubs">
   <button class="club" data-i="0" type="button"><b>Power</b><small>long &middot; wild rollout</small><span class="key">1</span></button>
   <button class="club" data-i="1" type="button"><b>Loft</b><small>high &middot; sticks landing</small><span class="key">2</span></button>
   <button class="club" data-i="2" type="button"><b>Precision</b><small>ground &middot; laser line</small><span class="key">3</span></button>
 </div>
-<div id="hint">drag back from the ball to aim &amp; set power — release to hit</div>
+<div id="hint" aria-live="polite">drag back from the ball to aim &amp; set power — release to hit</div>
 <div id="links">
   <button id="leaderboardBtn" type="button">leaderboard</button>
   <button id="howtoBtn" type="button">how it works</button>
   <a href="https://github.com/rpuffe/golf" target="_blank" rel="noopener">github ↗</a>
 </div>
-<div id="toasts"></div>
+<div id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 
 <!-- leaderboard available before, during, and after a round -->
-<div id="leaderboard" class="overlay">
+<div id="leaderboard" class="overlay" role="dialog" aria-modal="true" aria-labelledby="leaderboardTitle">
   <div class="card">
     <button class="closeX" id="leaderboardClose" type="button" aria-label="Close">&times;</button>
-    <h1>LEADERBOARD</h1>
+    <h1 id="leaderboardTitle" tabindex="-1">LEADERBOARD</h1>
     <div class="sub">fewest strokes wins</div>
     <div id="leaderboardStatus">Loading scores…</div>
     <div class="boards">
@@ -260,12 +270,12 @@
 </div>
 
 <!-- how it works -->
-<div id="howto" class="overlay">
+<div id="howto" class="overlay" role="dialog" aria-modal="true" aria-labelledby="howtoTitle">
   <div class="card">
     <button class="closeX" id="howtoClose" type="button" aria-label="Close">&times;</button>
-    <h1>HOW IT WORKS</h1>
+    <h1 id="howtoTitle" tabindex="-1">HOW IT WORKS</h1>
     <ul>
-      <li>On touch screens, drag anywhere on the course to aim. With a mouse, drag back from the ball. Release to hit.</li>
+      <li>On touch screens, drag backward anywhere on the course to aim. With a mouse, drag back from the ball. Release to hit.</li>
       <li>Pick a club before each shot — tap the chips below the course, or press 1 / 2 / 3 (C cycles).</li>
       <li><b>Power</b> goes furthest but runs hot. <b>Loft</b> clears hazards and lands soft. <b>Precision</b> stays grounded and follows the line exactly.</li>
       <li><b>Loft flies over trees, bumpers, water and lava — never mountains.</b> Steel barriers are permanent too, so route around them.</li>
@@ -273,7 +283,7 @@
       <li><b>Greens</b> are firmer than the fairway, so every club rolls a little farther around the flag.</li>
       <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
       <li><b>Neon bumpers</b> reflect your incoming angle and return a little speed. Loft can chip over them; ground shots can call a bank.</li>
-      <li>On <b>Lucky Spiral</b>, a hard, clean entry locks into two icy laps and earns the best exit; Loft can safely cross the rails instead.</li>
+      <li>On the <b>Cyclone rail</b>, a hard, shaped entry locks into two icy laps and earns the best exit; Loft can safely cross the rails instead.</li>
       <li>Nine escalating holes each hide a safe route and a dangerous scoring line. The final holes combine everything.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
@@ -314,7 +324,7 @@ const BASE_HOLES = [
     walls:[[560,18,60,140,undefined,'mountain']], sands:[[820,300,90,60]], waters:[[520,330,170,120]], greens:[[875,410,72,55]], ice:[[300,160,400,160]], lava:[] },
   { name:'The Forge', tagline:'Thread the cool corridor, or clear the melt in one brave carry', par:4, tee:[75,400], cup:[880,80],
     walls:[[300,18,60,200,undefined,'mountain'],[620,240,60,222,undefined,'mountain'],[780,140,64,60,34,'trees']], sands:[[420,380,120,60]], waters:[], greens:[[880,80,65,55]], ice:[], lava:[[360,200,200,140]] },
-  { name:'Needle\'s Eye', tagline:'A slim gap, a low bank, or the high road over everything', par:3, tee:[75,90], cup:[880,90],
+  { name:'Needle\'s Eye', tagline:'Thread the slim gap, or call the low bank', par:3, tee:[75,90], cup:[880,90],
     walls:[[430,18,100,200,undefined,'mountain']], sands:[[770,170,110,60]], waters:[[430,300,100,120]], greens:[[880,90,70,55]], ice:[], lava:[], bumpers:[[350,435,14],[600,435,14]],
     routeLabels:[[120,250,'THE GAP','#d8ff52'],[120,385,'BANK LINE','#ff5cce']] },
   { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
@@ -334,6 +344,7 @@ const BASE_HOLES = [
     routeLabels:[[110,60,'RIFT HEIST','#ff5cce'],[130,300,'THE LONG BURN','#62e9ff']] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const rotatePoint = ([x, y]) => [y, LAND_W - x];
 const rotateGreen = ([x, y, rx, ry]) => [...rotatePoint([x, y]), ry, rx];
 // keep optional obstacle height + visual type when rotating; hazards have only 4 values
@@ -351,9 +362,10 @@ let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
 let H = PORTRAIT_COURSE ? LAND_W : LAND_H;
 canvas.width = W;
 canvas.height = H;
-$('hint').textContent = PORTRAIT_COURSE
-  ? 'drag anywhere to aim & set power · pick a club below · release to hit'
+const DEFAULT_HINT = PORTRAIT_COURSE
+  ? 'drag backward anywhere to aim & set power · pick a club below · release to hit'
   : 'drag back from the ball to aim & set power · pick a club below · release to hit';
+$('hint').textContent = DEFAULT_HINT;
 const PAR = HOLES.reduce((a, h) => a + h.par, 0);
 
 const R = 9;            // ball radius
@@ -385,6 +397,7 @@ let portalCooldown = 0, portalFlash = null; // prevents instant re-entry and lig
 let cupFlash = null, lipFlash = null;
 let started = false, done = false;   // started: name entered; done: round over
 let aim = null;                      // { x, y } current pointer while dragging
+let keyboardAngle = 0, keyboardPower = .65;
 let playerName = '';
 
 function loadHole(i) {
@@ -408,7 +421,8 @@ function loadHole(i) {
   portals = h.portals || [];
   portalCooldown = 0; portalFlash = null; cupFlash = null; lipFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
-  strokes = 0; aim = null;
+  strokes = 0; aim = null; keyboardAngle = 0; keyboardPower = .65;
+  $('hint').textContent = DEFAULT_HINT;
   setClub(currentClub);
   $('hole').textContent = i + 1;
   $('par').textContent = h.par;
@@ -426,16 +440,14 @@ function beginRound(name) {
   $('start').classList.remove('show');
   $('end').classList.remove('show');
   loadHole(0);
+  requestAnimationFrame(() => canvas.focus());
 }
 
 $('startBtn').addEventListener('click', () => {
   const n = $('name').value.trim() || 'Player';
   const firstRound = !localStorage.getItem('golf_seen_howto');
   beginRound(n);
-  if (firstRound) {
-    localStorage.setItem('golf_seen_howto', '1');
-    $('howto').classList.add('show');
-  }
+  if (firstRound) openHowto();
 });
 $('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('startBtn').click(); });
 $('againBtn').addEventListener('click', () => beginRound(playerName));
@@ -452,6 +464,22 @@ $('clubs').addEventListener('click', e => {
 });
 document.addEventListener('keydown', e => {
   if (!started || done) return;
+  if (document.querySelector('.overlay.show')) return;
+  if (document.activeElement === canvas && !ball.moving && !waterHold) {
+    let keyboardChanged = true;
+    if (e.key === 'ArrowLeft') keyboardAngle -= Math.PI / 36;
+    else if (e.key === 'ArrowRight') keyboardAngle += Math.PI / 36;
+    else if (e.key === 'ArrowUp') keyboardPower = Math.min(1, keyboardPower + .05);
+    else if (e.key === 'ArrowDown') keyboardPower = Math.max(.1, keyboardPower - .05);
+    else if ((e.key === ' ' || e.key === 'Enter') && aim) { e.preventDefault(); shootAim(); return; }
+    else keyboardChanged = false;
+    if (keyboardChanged) {
+      e.preventDefault();
+      aim = { x: ball.x - Math.cos(keyboardAngle) * MAX_DRAG * keyboardPower, y: ball.y - Math.sin(keyboardAngle) * MAX_DRAG * keyboardPower };
+      $('hint').textContent = `keyboard aim ${Math.round((keyboardAngle * 180 / Math.PI + 360) % 360)}° · power ${Math.round(keyboardPower * 100)}% · space to hit`;
+      return;
+    }
+  }
   if (e.key === '1') setClub(0);
   else if (e.key === '2') setClub(1);
   else if (e.key === '3') setClub(2);
@@ -459,18 +487,44 @@ document.addEventListener('keydown', e => {
 });
 
 // ---- how it works modal ----
-$('howtoBtn').addEventListener('click', () => $('howto').classList.add('show'));
-$('howtoClose').addEventListener('click', () => $('howto').classList.remove('show'));
-$('howtoOk').addEventListener('click', () => $('howto').classList.remove('show'));
-$('howto').addEventListener('click', e => { if (e.target === $('howto')) $('howto').classList.remove('show'); });
+let howtoReturnFocus = null;
+function openHowto() {
+  howtoReturnFocus = document.activeElement;
+  $('howto').classList.add('show');
+  requestAnimationFrame(() => { document.querySelector('#howto .card').scrollTop = 0; $('howtoTitle').focus(); });
+}
+function closeHowto() {
+  $('howto').classList.remove('show');
+  localStorage.setItem('golf_seen_howto', '1');
+  if (howtoReturnFocus?.offsetParent && howtoReturnFocus.focus) howtoReturnFocus.focus();
+  else if (started) canvas.focus();
+}
+$('howtoBtn').addEventListener('click', openHowto);
+$('howtoClose').addEventListener('click', closeHowto);
+$('howtoOk').addEventListener('click', closeHowto);
+$('howto').addEventListener('click', e => { if (e.target === $('howto')) closeHowto(); });
+$('howto').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeHowto(); return; }
+  if (e.key !== 'Tab') return;
+  const first = $('howtoClose'), last = $('howtoOk');
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 
 // ---- leaderboard available throughout the game ----
-function closeLeaderboard() { $('leaderboard').classList.remove('show'); }
+let leaderboardReturnFocus = null;
+function closeLeaderboard() {
+  $('leaderboard').classList.remove('show');
+  if (leaderboardReturnFocus?.offsetParent && leaderboardReturnFocus.focus) leaderboardReturnFocus.focus();
+  else if (started) canvas.focus();
+}
 $('leaderboardClose').addEventListener('click', closeLeaderboard);
 $('leaderboardOk').addEventListener('click', closeLeaderboard);
 $('leaderboard').addEventListener('click', e => { if (e.target === $('leaderboard')) closeLeaderboard(); });
 async function openLeaderboard() {
+  leaderboardReturnFocus = document.activeElement;
   $('leaderboard').classList.add('show');
+  requestAnimationFrame(() => { document.querySelector('#leaderboard .card').scrollTop = 0; $('leaderboardTitle').focus(); });
   $('leaderboardStatus').textContent = 'Loading scores…';
   renderBoard('leaderboardToday', [], playerName);
   renderBoard('leaderboardAll', [], playerName);
@@ -487,6 +541,13 @@ async function openLeaderboard() {
     $('leaderboardAll').innerHTML = '';
   }
 }
+$('leaderboard').addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeLeaderboard(); return; }
+  if (e.key !== 'Tab') return;
+  const first = $('leaderboardClose'), last = $('leaderboardOk');
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 $('leaderboardBtn').addEventListener('click', openLeaderboard);
 $('startLeaderboardBtn').addEventListener('click', openLeaderboard);
 
@@ -589,6 +650,7 @@ let dragOrigin = null;
 let touchAim = false;
 function onDown(e) {
   if (!started || ball.moving || done || waterHold) return;
+  canvas.focus(); $('hint').textContent = DEFAULT_HINT;
   const p = ptr(e);
   touchAim = e.pointerType === 'touch' || e.pointerType === 'pen';
   if (touchAim || Math.hypot(p.x - ball.x, p.y - ball.y) < 60) {
@@ -606,7 +668,7 @@ function onMove(e) {
     : p;
   e.preventDefault();
 }
-function onUp(e) {
+function shootAim() {
   if (!aim) return;
   // shoot opposite the drag (slingshot), power by drag length
   let dx = ball.x - aim.x, dy = ball.y - aim.y;
@@ -624,7 +686,9 @@ function onUp(e) {
   ball.lipOutShown = false;
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
+  $('hint').textContent = DEFAULT_HINT;
 }
+function onUp(e) { shootAim(); }
 canvas.addEventListener('pointerdown', onDown);
 canvas.addEventListener('pointermove', onMove);
 canvas.addEventListener('pointerup', onUp);
@@ -700,6 +764,9 @@ function tryEnterSpiral() {
   if (Math.hypot(ball.x-ex,ball.y-ey) > 44 || Math.hypot(ball.vx,ball.vy) < 3) return false;
   ball.onSpiral = true; ball.spiralProgress = 0;
   ball.spiralEntrySpeed = Math.hypot(ball.vx,ball.vy);
+  const tx = currentSpiral.direction * -Math.sin(currentSpiral.start);
+  const ty = currentSpiral.direction * Math.cos(currentSpiral.start);
+  ball.spiralEntryOffset = tx * (ball.y - ey) - ty * (ball.x - ex);
   ball.spiralSpeed = Math.max(7, ball.spiralEntrySpeed);
   toast('<b>Rail locked!</b> Hold on for two icy laps');
   return true;
@@ -720,10 +787,13 @@ function advanceSpiral() {
   if(ball.spiralProgress<s.turns)return;
   ball.onSpiral=false;
   const quality=Math.max(0,Math.min(1,(ball.spiralEntrySpeed-3)/4));
-  const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+(.28-quality*.22);
+  const shapedEntry=Math.max(-1,Math.min(1,ball.spiralEntryOffset/44));
+  const releaseBias=.30-quality*.09-shapedEntry*.26;
+  const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+releaseBias;
   const exitSpeed=4.8+quality*1.4;
   ball.vx=Math.cos(angle)*exitSpeed;ball.vy=Math.sin(angle)*exitSpeed;
-  toast(quality>.75?'<b>Clean release!</b> That earned an ace run':'<b>Wide release!</b> Finish the recovery');
+  const projectedMiss=Math.abs(Math.sin(releaseBias))*Math.hypot(cup.x-ball.x,cup.y-ball.y);
+  toast(quality>.75&&projectedMiss<CUP_R-2?'<b>Clean release!</b> That earned an ace run':'<b>Wide release!</b> Finish the recovery');
 }
 
 function step() {
@@ -786,6 +856,13 @@ function step() {
       if (!airborne && dc < CUP_R + 4 && cupSpeed >= 7 && !ball.lipOutShown) {
         ball.lipOutShown = true; lipFlash = { x: cup.x, y: cup.y, start: performance.now() };
         toast('<b>Lip out!</b> The cup said not today');
+        let nx = (ball.x - cup.x) / (dc || 1), ny = (ball.y - cup.y) / (dc || 1);
+        if (dc < 1) { nx = -ball.vy / cupSpeed; ny = ball.vx / cupSpeed; }
+        const dot = ball.vx * nx + ball.vy * ny;
+        if (dot < 0) { ball.vx -= 1.35 * dot * nx; ball.vy -= 1.35 * dot * ny; }
+        ball.vx = (ball.vx + nx * cupSpeed * .28) * .82;
+        ball.vy = (ball.vy + ny * cupSpeed * .28) * .82;
+        ball.x = cup.x + nx * (CUP_R + R + .5); ball.y = cup.y + ny * (CUP_R + R + .5);
       }
       if (dc < CUP_R - 2 && cupSpeed < 7) { sink(); return; }
     }
@@ -830,6 +907,24 @@ function roundRect(x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r);
   ctx.arcTo(x, y, x + w, y, r);
   ctx.closePath();
+}
+function wrappedLines(text, maxWidth, maxLines = 2) {
+  const words = text.split(/\s+/), lines = [];
+  let cursor = 0;
+  while (cursor < words.length && lines.length < maxLines) {
+    let line = '';
+    while (cursor < words.length) {
+      const next = line ? line + ' ' + words[cursor] : words[cursor];
+      if (line && ctx.measureText(next).width > maxWidth) break;
+      line = next; cursor++;
+    }
+    if (lines.length === maxLines - 1 && cursor < words.length) {
+      while (line && ctx.measureText(line + '…').width > maxWidth) line = line.split(' ').slice(0,-1).join(' ');
+      line += '…'; cursor = words.length;
+    }
+    lines.push(line);
+  }
+  return lines;
 }
 
 // a raised wall drawn as an extruded block: footprint on the ground, body lifted
@@ -1043,9 +1138,10 @@ function draw() {
 
   // Casino lane labels make the route choice legible before the first shot.
   for (const [x,y,label,color] of routeLabels) {
-    const boxWidth=128,boxX=Math.max(MARGIN,Math.min(x-8,W-MARGIN-boxWidth));
-    ctx.save();ctx.fillStyle='rgba(3,20,18,.78)';roundRect(boxX,y-15,boxWidth,25,7);ctx.fill();
-    ctx.fillStyle=color;ctx.font='800 10px "Avenir Next","Segoe UI",sans-serif';ctx.fillText(label,boxX+8,y+2);ctx.restore();
+    const boxWidth=PORTRAIT_COURSE?160:128,boxHeight=PORTRAIT_COURSE?34:25;
+    const boxX=Math.max(MARGIN,Math.min(x-8,W-MARGIN-boxWidth));
+    ctx.save();ctx.fillStyle='rgba(3,20,18,.78)';roundRect(boxX,y-(PORTRAIT_COURSE?21:15),boxWidth,boxHeight,7);ctx.fill();
+    ctx.fillStyle=color;ctx.font=`800 ${PORTRAIT_COURSE?15:10}px "Avenir Next","Segoe UI",sans-serif`;ctx.fillText(label,boxX+8,y+(PORTRAIT_COURSE?4:2));ctx.restore();
   }
 
   // outer boundary walls remain understated; special internal obstacles render below
@@ -1067,15 +1163,17 @@ function draw() {
   if (currentHole) {
     ctx.save();
     const identityWidth = PORTRAIT_COURSE ? 205 : Math.min(W - MARGIN * 2 - 24, 390);
+    const identityHeight = PORTRAIT_COURSE ? 74 : 48;
     const identityX = PORTRAIT_COURSE && cup.x < W / 2
       ? W - MARGIN - 12 - identityWidth
       : MARGIN + 12;
     ctx.fillStyle = 'rgba(3,20,18,.82)';
-    roundRect(identityX, MARGIN + 10, identityWidth, 48, 10); ctx.fill();
-    ctx.fillStyle = '#d8ff52'; ctx.font = '800 13px "Avenir Next","Segoe UI",sans-serif';
+    roundRect(identityX, MARGIN + 10, identityWidth, identityHeight, 10); ctx.fill();
+    ctx.fillStyle = '#d8ff52'; ctx.font = `800 ${PORTRAIT_COURSE?15:13}px "Avenir Next","Segoe UI",sans-serif`;
     ctx.fillText(`HOLE ${holeIdx + 1}  ·  ${currentHole.name.toUpperCase()}`, identityX + 13, MARGIN + 30, identityWidth - 26);
-    ctx.fillStyle = 'rgba(245,247,236,.7)'; ctx.font = '10px "Avenir Next","Segoe UI",sans-serif';
-    ctx.fillText(currentHole.tagline || '', identityX + 13, MARGIN + 48, identityWidth - 26);
+    ctx.fillStyle = 'rgba(245,247,236,.7)'; ctx.font = `${PORTRAIT_COURSE?13:10}px "Avenir Next","Segoe UI",sans-serif`;
+    if (PORTRAIT_COURSE) wrappedLines(currentHole.tagline || '', identityWidth - 26).forEach((line,i) => ctx.fillText(line,identityX+13,MARGIN+49+i*15));
+    else ctx.fillText(currentHole.tagline || '', identityX + 13, MARGIN + 48, identityWidth - 26);
     ctx.restore();
   }
 
@@ -1104,8 +1202,9 @@ function draw() {
   ctx.lineTo(cup.x, cup.y - 26); ctx.closePath(); ctx.fill();
   ctx.shadowColor = 'transparent';
   if (cupFlash) {
-    const t = (performance.now() - cupFlash.start) / 650;
-    if (t >= 1) cupFlash = null;
+    const age = performance.now() - cupFlash.start;
+    const t = REDUCED_MOTION ? .65 : age / 650;
+    if (age >= 650) cupFlash = null;
     else for (let ring = 0; ring < 3; ring++) {
       const rt = Math.max(0, Math.min(1, t * 1.35 - ring * .16));
       ctx.strokeStyle = ring % 2 ? `rgba(255,92,206,${1-rt})` : `rgba(216,255,82,${1-rt})`;
@@ -1114,8 +1213,9 @@ function draw() {
     }
   }
   if (lipFlash) {
-    const t = (performance.now() - lipFlash.start) / 380;
-    if (t >= 1) lipFlash = null;
+    const age = performance.now() - lipFlash.start;
+    const t = REDUCED_MOTION ? .55 : age / 380;
+    if (age >= 380) lipFlash = null;
     else {
       ctx.strokeStyle = `rgba(255,92,206,${1-t})`; ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(cup.x, cup.y, CUP_R + 3 + t * 18, 0, Math.PI * 2); ctx.stroke();
@@ -1142,6 +1242,7 @@ function draw() {
     // down) + a landing ring, so the height and carry are legible before you swing
     const club = CLUBS[currentClub];
     let landingX = ball.x, landingY = ball.y;
+    let previewImpact = null, previewFeature = null;
     if (club.loft > 0) {
       let sx = ball.x, sy = ball.y, sz = 0;
       let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power, svz = club.loft * power;
@@ -1149,28 +1250,70 @@ function draw() {
       for (let n = 1; n <= 600 && sz >= 0; n++) {
         sx += svx; sy += svy; svz -= GRAVITY; sz += svz;
         if (sz < 0) break;
+        if (sz <= 3 && (inWater(sx, sy) || inRects(sx, sy, lava))) { previewImpact = { x:sx, y:sy }; break; }
+        if (sz <= 3 && portals.some(([px,py]) => Math.hypot(sx-px,sy-py) <= 25)) { previewFeature = { x:sx, y:sy, label:'RIFT' }; break; }
+        if (sz <= .01 && currentSpiral && Math.hypot(sx-currentSpiral.entry[0],sy-currentSpiral.entry[1]) <= 44 && Math.hypot(svx,svy) >= 3) {
+          previewFeature = { x:sx, y:sy, label:'RAIL' }; break;
+        }
         if (n % 4 === 0) { ctx.beginPath(); ctx.arc(sx, sy - sz, 1.8, 0, Math.PI * 2); ctx.fill(); }
       }
       landingX = sx; landingY = sy;
-      const hotLanding = currentClub === 1 && (inWater(sx, sy) || inRects(sx, sy, lava));
+      const hotLanding = previewImpact || (currentClub === 1 && (inWater(sx, sy) || inRects(sx, sy, lava)));
       ctx.strokeStyle = hotLanding ? 'rgba(255,80,60,.9)' : 'rgba(216,255,82,.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
       ctx.setLineDash([]);
     }
-    if (club.loft === 0 || currentClub === 0) {
+    if ((club.loft === 0 || currentClub === 0) && !previewImpact && !previewFeature) {
       let sx = landingX, sy = landingY;
       let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power;
+      let usedPortal = false;
       if (club.loft > 0) { svx *= LAND_DAMP; svy *= LAND_DAMP; }
       for (let n = 0; n < 2500 && Math.hypot(svx, svy) >= STOP; n++) {
         sx += svx; sy += svy;
+        if (inWater(sx, sy) || inRects(sx, sy, lava)) { previewImpact = { x:sx, y:sy }; break; }
+        if (!usedPortal && portals.length === 2) {
+          const portalIdx = portals.findIndex(([px,py]) => Math.hypot(sx-px,sy-py) <= 25);
+          if (portalIdx >= 0) {
+            const [ex,ey] = portals[1-portalIdx], speed = Math.hypot(svx,svy) || 1;
+            sx = ex + svx/speed*38; sy = ey + svy/speed*38; usedPortal = true;
+          }
+        }
+        if (currentSpiral && Math.hypot(sx-currentSpiral.entry[0],sy-currentSpiral.entry[1]) <= 44 && Math.hypot(svx,svy) >= 3) {
+          previewFeature = { x:sx, y:sy, label:'RAIL' }; break;
+        }
+        if (Math.hypot(sx-cup.x,sy-cup.y) < CUP_R-2 && Math.hypot(svx,svy) < 7) { sx=cup.x; sy=cup.y; break; }
+        if (sx < MARGIN+R || sx > W-MARGIN-R || sy < MARGIN+R || sy > H-MARGIN-R) {
+          sx=Math.max(MARGIN+R,Math.min(W-MARGIN-R,sx)); sy=Math.max(MARGIN+R,Math.min(H-MARGIN-R,sy)); break;
+        }
         const f = inSand(sx, sy) ? SAND_FRICTION
           : inRects(sx, sy, ice) ? ICE_FRICTION
           : inGreen(sx, sy) ? Math.min(.988, club.friction + GREEN_FRICTION_BONUS)
           : club.friction;
         svx *= f; svy *= f;
       }
-      ctx.fillStyle = 'rgba(255,92,206,.95)';
-      ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
+      if (!previewImpact && !previewFeature) {
+        ctx.fillStyle = 'rgba(255,92,206,.95)';
+        ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    if (previewImpact) {
+      ctx.strokeStyle='rgba(255,80,60,.95)';ctx.lineWidth=3;
+      ctx.beginPath();ctx.moveTo(previewImpact.x-7,previewImpact.y-7);ctx.lineTo(previewImpact.x+7,previewImpact.y+7);
+      ctx.moveTo(previewImpact.x+7,previewImpact.y-7);ctx.lineTo(previewImpact.x-7,previewImpact.y+7);ctx.stroke();
+      const marker='HAZARD',markerSize=PORTRAIT_COURSE?14:9;
+      ctx.fillStyle='#ff503c';ctx.font=`900 ${markerSize}px "Avenir Next","Segoe UI",sans-serif`;
+      const markerWidth=ctx.measureText(marker).width;
+      const markerX=Math.max(MARGIN,Math.min(W-MARGIN-markerWidth,previewImpact.x+11+markerWidth>W-MARGIN?previewImpact.x-11-markerWidth:previewImpact.x+11));
+      const markerY=Math.max(MARGIN+markerSize,Math.min(H-MARGIN,previewImpact.y+3));
+      ctx.fillText(marker,markerX,markerY);
+    } else if (previewFeature) {
+      ctx.strokeStyle='#62e9ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(previewFeature.x,previewFeature.y,9,0,Math.PI*2);ctx.stroke();
+      const markerSize=PORTRAIT_COURSE?14:9;
+      ctx.fillStyle='#62e9ff';ctx.font=`900 ${markerSize}px "Avenir Next","Segoe UI",sans-serif`;
+      const markerWidth=ctx.measureText(previewFeature.label).width;
+      const markerX=Math.max(MARGIN,Math.min(W-MARGIN-markerWidth,previewFeature.x+12+markerWidth>W-MARGIN?previewFeature.x-12-markerWidth:previewFeature.x+12));
+      const markerY=Math.max(MARGIN+markerSize,Math.min(H-MARGIN,previewFeature.y+3));
+      ctx.fillText(previewFeature.label,markerX,markerY);
     }
   }
 
@@ -1189,7 +1332,7 @@ function draw() {
   // ball — shadow stays on the ground; the body lifts by its height (z) so you read altitude
   const z = ball.z || 0;
   const drawY = ball.y - z;                              // higher z = drawn further "up"
-  const hr = R + Math.min(z * 0.04, 3.5);                // subtly bigger the higher it is
+  const hr = R + (PORTRAIT_COURSE ? 2 : 0) + Math.min(z * 0.04, 3.5); // portrait keeps the ball finger-readable
   const shScale = 1 / (1 + z * 0.014);                  // shadow tightens as it climbs
   ctx.fillStyle = `rgba(0,0,0,${Math.max(0.16, 0.44 - z * 0.004)})`;
   ctx.beginPath(); ctx.ellipse(ball.x, ball.y + 3, (R + 1) * shScale, (R - 3) * shScale, 0, 0, Math.PI * 2); ctx.fill();
