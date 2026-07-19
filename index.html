@@ -283,7 +283,7 @@
       <li><b>Greens</b> are firmer than the fairway, so every club rolls a little farther around the flag.</li>
       <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
       <li><b>Neon bumpers</b> reflect your incoming angle and return a little speed. Loft can chip over them; ground shots can call a bank.</li>
-      <li>On the <b>Cyclone rail</b>, a hard, shaped entry locks into two icy laps and earns the best exit; Loft can safely cross the rails instead.</li>
+      <li>On <b>Gravity Bloom</b>, rolling shots bend around the newborn star. Loft can rise above its pull; the glowing rings show where gravity begins.</li>
       <li>Nine escalating holes each hide a safe route and a dangerous scoring line. The final holes combine everything.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
@@ -303,19 +303,8 @@ const $ = id => document.getElementById(id);
 // Nine holes authored in landscape LAND_W x LAND_H. Every layout has its own
 // identity and supports more than one route instead of prescribing a single shot.
 const LAND_W = 960, LAND_H = 480;
-function spiralBumpers(cx, cy) {
-  const posts = [], start = Math.PI / 2, turns = Math.PI * 4;
-  for (let t = 0; t <= turns; t += .32) {
-    const theta = start - t, centerR = 185 - 140 * (t / turns);
-    for (const side of [-1, 1]) {
-      const r = centerR + side * 25;
-      posts.push([cx + Math.cos(theta) * r, cy + Math.sin(theta) * r, 12]);
-    }
-  }
-  return posts;
-}
 // NEON MERIDIAN — a fresh nine. The front six introduce one mechanic at a
-// time (water, ice, lava, bumpers, rifts, the rail), the last three stack
+// time (water, ice, lava, bumpers, rifts, gravity), the last three stack
 // them. Every hole keeps a patient route next to a line that pays for nerve.
 const BASE_HOLES = [
   { name:'First Light', tagline:'Every legend starts with one canal. Carry it — or respect it.', par:3, tee:[70,240], cup:[880,240],
@@ -329,11 +318,10 @@ const BASE_HOLES = [
     routeLabels:[[120,250,'THE GAP','#d8ff52'],[120,385,'BANK LINE','#ff5cce']] },
   { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
     walls:[[810,160,55,55,32,'trees']], sands:[[800,330,90,60]], waters:[[370,90,220,300]], greens:[[880,240,70,58]], ice:[], lava:[], portals:[[250,240],[700,330]] },
-  { name:'Cyclone', tagline:'Feed the rail, then shape the release into the braking green', par:3, tee:[80,425], cup:[545,272],
-    walls:[], sands:[[200,55,100,60],[720,90,100,60]], waters:[], greens:[[545,272,66,50]],
-    ice:[[320,80,320,130],[320,210,155,124],[615,210,25,124],[320,334,320,66],[150,398,310,52]], lava:[], bumpers:spiralBumpers(480,240),
-    spiral:{ center:[480,240], entry:[480,425], start:Math.PI/2, direction:-1, turns:Math.PI*4, outer:185, inner:45 },
-    routeLabels:[[110,390,'FULL SEND','#ff5cce'],[125,75,'SKY ROUTE','#62e9ff']] },
+  { name:'Gravity Bloom', tagline:'Skim the newborn star. Let gravity write the shot.', par:3, tee:[75,390], cup:[875,90],
+    walls:[[310,18,60,175,undefined,'mountain'],[650,285,60,177,undefined,'mountain']], sands:[[755,155,105,68]], waters:[], greens:[[875,90,72,55]], ice:[], lava:[],
+    wells:[{ center:[500,240], radius:160, core:30, pull:.012, spin:-.09, maxSpeed:14 }],
+    routeLabels:[[105,340,'KISS THE STAR','#ff5cce'],[110,75,'MOONWALK','#62e9ff']] },
   { name:'Meltwater', tagline:'The ice river ends in fire. Get off before the falls.', par:4, tee:[75,80], cup:[880,400],
     walls:[[250,18,70,120,undefined,'mountain'],[790,300,60,60,34,'trees']], sands:[[430,300,160,70],[620,190,90,100]], waters:[[740,40,180,110]], greens:[[880,400,68,55]], ice:[[250,190,370,100]], lava:[[710,190,110,100]],
     routeLabels:[[110,60,'ICE EXPRESS','#62e9ff'],[110,440,'DRY LINE','#d8ff52']] },
@@ -356,7 +344,7 @@ const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
   greens: (h.greens || []).map(rotateGreen), ice: (h.ice || []).map(rotateWall), lava: (h.lava || []).map(rotateWall),
   bumpers: (h.bumpers || []).map(([x,y,r]) => [...rotatePoint([x,y]),r]),
   routeLabels: (h.routeLabels || []).map(([x,y,label,color]) => [...rotatePoint([x,y]),label,color]),
-  spiral: h.spiral ? { ...h.spiral, center:rotatePoint(h.spiral.center), entry:rotatePoint(h.spiral.entry), start:h.spiral.start-Math.PI/2 } : null,
+  wells: (h.wells || []).map(w => ({ ...w, center:rotatePoint(w.center) })),
   portals: (h.portals || []).map(rotatePoint),
 })) : BASE_HOLES;
 let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
@@ -390,7 +378,7 @@ const CLUBS = [
 let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0, underParStreak = 0;
-let ball, walls, cup, sands = [], waters = [], greens = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], currentHole, currentSpiral = null;
+let ball, walls, cup, sands = [], waters = [], greens = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], wells = [], currentHole;
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
@@ -418,7 +406,7 @@ function loadHole(i) {
   lava = h.lava || [];
   bumpers = h.bumpers || [];
   routeLabels = h.routeLabels || [];
-  currentSpiral = h.spiral || null;
+  wells = h.wells || [];
   portals = h.portals || [];
   portalCooldown = 0; portalFlash = null; cupFlash = null; lipFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
@@ -685,6 +673,7 @@ function shootAim() {
   ball.z = 0;
   ball.groundFriction = club.friction;     // this club's roll persists for the whole shot
   ball.lipOutShown = false;
+  ball.wellInside = false; ball.wellVisited = false; ball.wellExitToasted = false; ball.wellCoreHit = false; ball.gravityTrail = [];
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
   $('hint').textContent = DEFAULT_HINT;
@@ -759,48 +748,92 @@ function hazardPenalty(kind = 'water') {
   }, 900);
 }
 
-function tryEnterSpiral() {
-  if (!currentSpiral || ball.z > .01 || ball.onSpiral) return false;
-  const [ex,ey] = currentSpiral.entry;
-  if (Math.hypot(ball.x-ex,ball.y-ey) > 44 || Math.hypot(ball.vx,ball.vy) < 3) return false;
-  ball.onSpiral = true; ball.spiralProgress = 0;
-  ball.spiralEntrySpeed = Math.hypot(ball.vx,ball.vy);
-  const tx = currentSpiral.direction * -Math.sin(currentSpiral.start);
-  const ty = currentSpiral.direction * Math.cos(currentSpiral.start);
-  ball.spiralEntryOffset = tx * (ball.y - ey) - ty * (ball.x - ex);
-  ball.spiralSpeed = Math.max(7, ball.spiralEntrySpeed);
-  toast('<b>Rail locked!</b> Hold on for two icy laps');
-  return true;
+function gravityVelocity(well,x,y,vx,vy,scale=1) {
+  const dx=well.center[0]-x,dy=well.center[1]-y,d=Math.hypot(dx,dy);
+  if(d>=well.radius)return{vx,vy,inside:false,distance:d};
+  const falloff=Math.pow(1-d/well.radius,1.25),nx=dx/(d||1),ny=dy/(d||1);
+  const speed=Math.hypot(vx,vy),motionScale=Math.min(1,speed/2);
+  if(speed>0){
+    const bend=well.spin*falloff*scale*motionScale/Math.max(1,speed),c=Math.cos(bend),s=Math.sin(bend);
+    [vx,vy]=[vx*c-vy*s,vx*s+vy*c];
+  }
+  vx+=nx*well.pull*falloff*scale*motionScale;
+  vy+=ny*well.pull*falloff*scale*motionScale;
+  const nextSpeed=Math.hypot(vx,vy);
+  if(nextSpeed>well.maxSpeed){vx*=well.maxSpeed/nextSpeed;vy*=well.maxSpeed/nextSpeed;}
+  return{vx,vy,inside:true,distance:d};
 }
 
-function advanceSpiral() {
-  const s = currentSpiral;
-  const fraction = Math.min(1, ball.spiralProgress / s.turns);
-  const radius = s.outer + (s.inner-s.outer)*fraction;
-  ball.spiralProgress += ball.spiralSpeed / Math.max(45,radius);
-  ball.spiralSpeed *= .997;
-  const theta = s.start + s.direction*Math.min(ball.spiralProgress,s.turns);
-  const nextFraction = Math.min(1,ball.spiralProgress/s.turns);
-  const nextRadius = s.outer + (s.inner-s.outer)*nextFraction;
-  ball.x=s.center[0]+Math.cos(theta)*nextRadius;
-  ball.y=s.center[1]+Math.sin(theta)*nextRadius;
-  ball.vx=ball.vy=0; ball.z=ball.vz=0;
-  if(ball.spiralProgress<s.turns)return;
-  ball.onSpiral=false;
-  const quality=Math.max(0,Math.min(1,(ball.spiralEntrySpeed-3)/4));
-  const shapedEntry=Math.max(-1,Math.min(1,ball.spiralEntryOffset/44));
-  const releaseBias=.30-quality*.09-shapedEntry*.26;
-  const angle=Math.atan2(cup.y-ball.y,cup.x-ball.x)+releaseBias;
-  const exitSpeed=4.8+quality*1.4;
-  ball.vx=Math.cos(angle)*exitSpeed;ball.vy=Math.sin(angle)*exitSpeed;
-  ball.spiralExitGrace=performance.now()+350; // clear the inner rail before bumpers become live again
-  const projectedMiss=Math.abs(Math.sin(releaseBias))*Math.hypot(cup.x-ball.x,cup.y-ball.y);
-  toast(quality>.75&&projectedMiss<CUP_R-2?'<b>Clean release!</b> That earned an ace run':'<b>Wide release!</b> Finish the recovery');
+function gravityPreviewStep(x,y,vx,vy,scale=1) {
+  let inside=false;
+  for(const well of wells){
+    const g=gravityVelocity(well,x,y,vx,vy,scale);vx=g.vx;vy=g.vy;
+    if(!g.inside)continue;
+    inside=true;
+    const minD=well.core+R;
+    if(g.distance<minD){
+      let nx=(x-well.center[0])/(g.distance||1),ny=(y-well.center[1])/(g.distance||1);
+      if(g.distance<1){const speed=Math.hypot(vx,vy)||1;nx=-vy/speed;ny=vx/speed;}
+      const dot=vx*nx+vy*ny;
+      if(dot<0){vx-=1.8*dot*nx;vy-=1.8*dot*ny;}
+      vx*=.9;vy*=.9;x=well.center[0]+nx*(minD+.5);y=well.center[1]+ny*(minD+.5);
+    }
+  }
+  return{x,y,vx,vy,inside};
+}
+
+function gravityPreviewFrame(x,y,vx,vy,z=0,vz=0,arc=false) {
+  const sub=Math.max(1,Math.ceil(Math.hypot(vx,vy)/(R*.5)));
+  let inside=false,landed=false;
+  for(let s=0;s<sub;s++){
+    x+=vx/sub;y+=vy/sub;
+    if(arc&&(z>0||vz>0)){
+      vz-=GRAVITY/sub;z+=vz/sub;
+      if(z<=0){z=0;vz=0;vx*=LAND_DAMP;vy*=LAND_DAMP;landed=true;}
+    }
+    if(z<=3){const g=gravityPreviewStep(x,y,vx,vy,1/sub);x=g.x;y=g.y;vx=g.vx;vy=g.vy;inside=inside||g.inside;}
+  }
+  return{x,y,z,vx,vy,vz,inside,landed};
+}
+
+function applyGravityWells(sub) {
+  if(ball.z>3||!wells.length)return;
+  let inside=false;
+  for(const well of wells){
+    const beforeSpeed=Math.hypot(ball.vx,ball.vy),g=gravityVelocity(well,ball.x,ball.y,ball.vx,ball.vy,1/sub);
+    ball.vx=g.vx;ball.vy=g.vy;
+    if(!g.inside)continue;
+    inside=true;
+    if(!ball.wellVisited){
+      ball.wellVisited=true;ball.wellEntrySpeed=beforeSpeed;
+      toast('<b>Gravity caught.</b> Ride the bloom');
+    }
+    ball.gravityTrail=ball.gravityTrail||[];
+    ball.gravityTrail.push({x:ball.x,y:ball.y,t:performance.now()});
+    if(ball.gravityTrail.length>28)ball.gravityTrail.shift();
+    const minD=well.core+R;
+    if(g.distance<minD){
+      let nx=(ball.x-well.center[0])/(g.distance||1),ny=(ball.y-well.center[1])/(g.distance||1);
+      if(g.distance<1){const speed=Math.hypot(ball.vx,ball.vy)||1;nx=-ball.vy/speed;ny=ball.vx/speed;}
+      const dot=ball.vx*nx+ball.vy*ny;
+      if(dot<0){ball.vx-=1.8*dot*nx;ball.vy-=1.8*dot*ny;}
+      ball.vx*=.9;ball.vy*=.9;
+      ball.x=well.center[0]+nx*(minD+.5);ball.y=well.center[1]+ny*(minD+.5);
+      ball.wellCoreFlash=performance.now();
+      if(!ball.wellCoreHit){ball.wellCoreHit=true;toast('<b>Starstruck!</b> The core kicks back');}
+    }
+  }
+  if(ball.wellInside&&!inside&&!ball.wellExitToasted){
+    ball.wellExitToasted=true;
+    const speed=Math.hypot(ball.vx,ball.vy),toCup=Math.hypot(cup.x-ball.x,cup.y-ball.y)||1;
+    const alignment=(ball.vx*(cup.x-ball.x)+ball.vy*(cup.y-ball.y))/(Math.max(.01,speed)*toCup);
+    toast(alignment>.6?'<b>Gravity release!</b> The star bent the line':'<b>Orbit broken.</b> Find the green');
+  }
+  ball.wellInside=inside;
 }
 
 function step() {
   if (!ball || !ball.moving) return;
-  if(ball.onSpiral){advanceSpiral();return;}
   const speed = Math.hypot(ball.vx, ball.vy);
   const sub = Math.max(1, Math.ceil(speed / (R * 0.5)));   // sub-step vs tunneling
   for (let s = 0; s < sub; s++) {
@@ -816,6 +849,7 @@ function step() {
       }
     }
     const airborne = ball.z > 0.01;
+    applyGravityWells(sub);
     for (const w of walls) {
       const wh = w[4] === undefined ? Infinity : w[4];
       if (airborne && ball.z >= wh) continue;  // flying above this wall — sail over it
@@ -830,11 +864,10 @@ function step() {
       ball.x += nxv * push; ball.y += nyv * push;
       ball.vx *= 0.8; ball.vy *= 0.8;
     }
-    if(!airborne&&tryEnterSpiral())return;
     // Neon bumpers are readable, player-controlled banks: they reflect the
     // incoming angle and return a little pace. A committed Loft shot clears
     // their 28px height, which creates a second route through bumper fields.
-    for (const [bx, by, br] of performance.now() < (ball.spiralExitGrace || 0) ? [] : bumpers) {
+    for (const [bx, by, br] of bumpers) {
       if (airborne && ball.z >= 28) continue;
       const dx = ball.x - bx, dy = ball.y - by;
       const minD = br + R, d = Math.hypot(dx, dy);
@@ -1002,6 +1035,36 @@ function drawMountain(x, y, w, h) {
   ctx.restore();
 }
 
+function drawGravityWells() {
+  for(const well of wells){
+    const [x,y]=well.center,t=REDUCED_MOTION?0:performance.now()/900;
+    ctx.save();
+    const field=ctx.createRadialGradient(x,y,well.core,x,y,well.radius);
+    field.addColorStop(0,'rgba(255,92,206,.2)');field.addColorStop(.45,'rgba(98,233,255,.09)');field.addColorStop(1,'rgba(216,255,82,0)');
+    ctx.fillStyle=field;ctx.beginPath();ctx.arc(x,y,well.radius,0,Math.PI*2);ctx.fill();
+    const colors=['#62e9ff','#ff5cce','#d8ff52'];
+    [1,.72,.46].forEach((scale,i)=>{
+      ctx.strokeStyle=colors[i];ctx.globalAlpha=.34+i*.12;ctx.lineWidth=2+i*.4;ctx.setLineDash([18-i*3,13+i*2]);ctx.lineDashOffset=(i%2?1:-1)*t*24;
+      ctx.beginPath();ctx.arc(x,y,well.radius*scale,t*(i%2?-1:1),t*(i%2?-1:1)+Math.PI*1.55);ctx.stroke();
+    });
+    ctx.setLineDash([]);ctx.globalAlpha=1;
+    if(!REDUCED_MOTION&&ball?.gravityTrail?.length>1){
+      const now=performance.now();ball.gravityTrail=ball.gravityTrail.filter(p=>now-p.t<850);
+      for(let i=1;i<ball.gravityTrail.length;i++){
+        const p=ball.gravityTrail[i-1],q=ball.gravityTrail[i],a=(i/ball.gravityTrail.length)*(1-(now-q.t)/850);
+        ctx.strokeStyle=`rgba(${i%2?'255,92,206':'98,233,255'},${a*.62})`;ctx.lineWidth=1+a*4;
+        ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(q.x,q.y);ctx.stroke();
+      }
+    }
+    const core=ctx.createRadialGradient(x-8,y-9,2,x,y,well.core);
+    core.addColorStop(0,'#fffbd2');core.addColorStop(.25,'#d8ff52');core.addColorStop(.62,'#ff5cce');core.addColorStop(1,'#071312');
+    ctx.shadowColor='#ff5cce';ctx.shadowBlur=24;ctx.fillStyle=core;ctx.beginPath();ctx.arc(x,y,well.core,0,Math.PI*2);ctx.fill();
+    const flashAge=performance.now()-(ball?.wellCoreFlash||0),flashT=REDUCED_MOTION ? .55 : flashAge/420;
+    if(flashAge<420){ctx.strokeStyle=`rgba(216,255,82,${1-flashT})`;ctx.lineWidth=4;ctx.beginPath();ctx.arc(x,y,well.core+8+flashT*34,0,Math.PI*2);ctx.stroke();}
+    ctx.restore();
+  }
+}
+
 function draw() {
   // deep turf with subtle mowing stripes
   ctx.fillStyle = '#093c37';
@@ -1042,6 +1105,8 @@ function draw() {
     ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.restore();
   }
+
+  drawGravityWells();
 
   // sand bunkers sit on the turf — fly over them, don't roll through
   for (const [x, y, w, h] of sands) {
@@ -1243,23 +1308,21 @@ function draw() {
     // lofted clubs: trace the real flight arc (dots lift off the ground and curve back
     // down) + a landing ring, so the height and carry are legible before you swing
     const club = CLUBS[currentClub];
-    let landingX = ball.x, landingY = ball.y;
+    let landingX = ball.x, landingY = ball.y, landingVx = 0, landingVy = 0;
     let previewImpact = null, previewFeature = null;
+    const previewCurve = [];
     if (club.loft > 0) {
       let sx = ball.x, sy = ball.y, sz = 0;
       let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power, svz = club.loft * power;
       ctx.fillStyle = 'rgba(216,255,82,.9)';
       for (let n = 1; n <= 600 && sz >= 0; n++) {
-        sx += svx; sy += svy; svz -= GRAVITY; sz += svz;
-        if (sz < 0) break;
+        const g=gravityPreviewFrame(sx,sy,svx,svy,sz,svz,true);sx=g.x;sy=g.y;sz=g.z;svx=g.vx;svy=g.vy;svz=g.vz;if(g.inside)previewCurve.push({x:sx,y:sy});
         if (sz <= 3 && (inWater(sx, sy) || inRects(sx, sy, lava))) { previewImpact = { x:sx, y:sy }; break; }
         if (sz <= 3 && portals.some(([px,py]) => Math.hypot(sx-px,sy-py) <= 25)) { previewFeature = { x:sx, y:sy, label:'RIFT' }; break; }
-        if (sz <= .01 && currentSpiral && Math.hypot(sx-currentSpiral.entry[0],sy-currentSpiral.entry[1]) <= 44 && Math.hypot(svx,svy) >= 3) {
-          previewFeature = { x:sx, y:sy, label:'RAIL' }; break;
-        }
         if (n % 4 === 0) { ctx.beginPath(); ctx.arc(sx, sy - sz, 1.8, 0, Math.PI * 2); ctx.fill(); }
+        if(g.landed)break;
       }
-      landingX = sx; landingY = sy;
+      landingX = sx; landingY = sy; landingVx = svx; landingVy = svy;
       const hotLanding = previewImpact || (currentClub === 1 && (inWater(sx, sy) || inRects(sx, sy, lava)));
       ctx.strokeStyle = hotLanding ? 'rgba(255,80,60,.9)' : 'rgba(216,255,82,.9)'; ctx.lineWidth = 2; ctx.setLineDash([4, 4]);
       ctx.beginPath(); ctx.arc(sx, sy, 9, 0, Math.PI * 2); ctx.stroke();
@@ -1267,11 +1330,12 @@ function draw() {
     }
     if ((club.loft === 0 || currentClub === 0) && !previewImpact && !previewFeature) {
       let sx = landingX, sy = landingY;
-      let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power;
+      let svx = club.loft > 0 ? landingVx : (dx / d) * club.speed * power;
+      let svy = club.loft > 0 ? landingVy : (dy / d) * club.speed * power;
       let usedPortal = false;
-      if (club.loft > 0) { svx *= LAND_DAMP; svy *= LAND_DAMP; }
       for (let n = 0; n < 2500 && Math.hypot(svx, svy) >= STOP; n++) {
-        sx += svx; sy += svy;
+        const gravity=gravityPreviewFrame(sx,sy,svx,svy);sx=gravity.x;sy=gravity.y;svx=gravity.vx;svy=gravity.vy;
+        if(gravity.inside&&n%4===0)previewCurve.push({x:sx,y:sy});
         if (inWater(sx, sy) || inRects(sx, sy, lava)) { previewImpact = { x:sx, y:sy }; break; }
         if (!usedPortal && portals.length === 2) {
           const portalIdx = portals.findIndex(([px,py]) => Math.hypot(sx-px,sy-py) <= 25);
@@ -1279,9 +1343,6 @@ function draw() {
             const [ex,ey] = portals[1-portalIdx], speed = Math.hypot(svx,svy) || 1;
             sx = ex + svx/speed*38; sy = ey + svy/speed*38; usedPortal = true;
           }
-        }
-        if (currentSpiral && Math.hypot(sx-currentSpiral.entry[0],sy-currentSpiral.entry[1]) <= 44 && Math.hypot(svx,svy) >= 3) {
-          previewFeature = { x:sx, y:sy, label:'RAIL' }; break;
         }
         if (Math.hypot(sx-cup.x,sy-cup.y) < CUP_R-2 && Math.hypot(svx,svy) < 7) { sx=cup.x; sy=cup.y; break; }
         if (sx < MARGIN+R || sx > W-MARGIN-R || sy < MARGIN+R || sy > H-MARGIN-R) {
@@ -1298,6 +1359,7 @@ function draw() {
         ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI * 2); ctx.fill();
       }
     }
+    if(previewCurve.length){ctx.fillStyle='rgba(216,255,82,.7)';for(const p of previewCurve){ctx.beginPath();ctx.arc(p.x,p.y,1.7,0,Math.PI*2);ctx.fill();}}
     if (previewImpact) {
       ctx.strokeStyle='rgba(255,80,60,.95)';ctx.lineWidth=3;
       ctx.beginPath();ctx.moveTo(previewImpact.x-7,previewImpact.y-7);ctx.lineTo(previewImpact.x+7,previewImpact.y+7);
