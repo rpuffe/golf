@@ -281,6 +281,7 @@
       <li><b>Loft flies over trees, bumpers, water and lava — never mountains.</b> Steel barriers are permanent too, so route around them.</li>
       <li><b>Water</b> costs +1. <b>Lava</b> costs +2. Both replay from your last shot. Lofted balls can carry either.</li>
       <li><b>Greens</b> are firmer than the fairway, so every club rolls a little farther around the flag.</li>
+      <li>On <b>The Needle Green</b>, an approach that settles on the tiny target zooms into a full putting map. A direct chip-in still counts immediately.</li>
       <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
       <li><b>Neon bumpers</b> reflect your incoming angle and return a little speed. Loft can chip over them; ground shots can call a bank.</li>
       <li>On <b>Gravity Bloom</b>, rolling shots bend around the newborn star. Loft can rise above its pull; the glowing rings show where gravity begins.</li>
@@ -313,9 +314,13 @@ const BASE_HOLES = [
     walls:[[560,18,60,140,undefined,'mountain']], sands:[[820,300,90,60]], waters:[[520,330,170,120]], greens:[[875,410,72,55]], ice:[[300,160,400,160]], lava:[] },
   { name:'The Forge', tagline:'Thread the cool corridor, or clear the melt in one brave carry', par:4, tee:[75,400], cup:[880,80],
     walls:[[300,18,60,200,undefined,'mountain'],[620,240,60,222,undefined,'mountain'],[780,140,64,60,34,'trees']], sands:[[420,380,120,60]], waters:[], greens:[[880,80,65,55]], ice:[], lava:[[360,200,200,140]] },
-  { name:'Needle\'s Eye', tagline:'Thread the slim gap, or call the low bank', par:3, tee:[75,90], cup:[880,90],
-    walls:[[430,18,100,200,undefined,'mountain']], sands:[[770,170,110,60]], waters:[[430,300,100,120]], greens:[[880,90,70,55]], ice:[], lava:[], bumpers:[[350,435,14],[600,435,14]],
-    routeLabels:[[120,250,'THE GAP','#d8ff52'],[120,385,'BANK LINE','#ff5cce']] },
+  { name:'Neon Carom', tagline:'One bright kiss turns the whole hole.', par:3, tee:[80,90], cup:[875,90],
+    walls:[[390,18,120,255,undefined,'mountain']], sands:[[755,205,105,60]], waters:[[540,335,190,105]], greens:[[875,90,34,26]], ice:[], lava:[], bumpers:[[470,393,34,470,350]],
+    routeLabels:[[110,340,'ONE-BANK BIRDIE','#ff5cce'],[115,260,'THREAD FOR PAR','#d8ff52']],
+    microGreen:{ name:'The Needle Green', tagline:'The world gets small. Read the break.', cup:[790,190], approachDistance:320, captureFriction:.82,
+      greens:[[480,240,425,205]], sands:[[835,115,70,155]], walls:[],
+      hills:[{center:[430,235],radius:108,strength:.018},{center:[625,270],radius:92,strength:.014}],
+      routeLabels:[[95,88,'READ THE BREAK','#62e9ff'],[730,345,'MISS HIGH','#ff5cce']] } },
   { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
     walls:[[810,160,55,55,32,'trees']], sands:[[800,330,90,60]], waters:[[370,90,220,300]], greens:[[880,240,70,58]], ice:[], lava:[], portals:[[250,240],[700,330]] },
   { name:'Gravity Bloom', tagline:'Skim the newborn star. Let gravity write the shot.', par:3, tee:[75,390], cup:[875,90],
@@ -342,10 +347,14 @@ const HOLES = PORTRAIT_COURSE ? BASE_HOLES.map(h => ({
   name: h.name, tagline: h.tagline, par: h.par, tee: rotatePoint(h.tee), cup: rotatePoint(h.cup),
   walls: h.walls.map(rotateWall), sands: h.sands.map(rotateWall), waters: h.waters.map(rotateWall),
   greens: (h.greens || []).map(rotateGreen), ice: (h.ice || []).map(rotateWall), lava: (h.lava || []).map(rotateWall),
-  bumpers: (h.bumpers || []).map(([x,y,r]) => [...rotatePoint([x,y]),r]),
+  bumpers: (h.bumpers || []).map(([x,y,r,kx,ky]) => [...rotatePoint([x,y]),r,...(kx===undefined?[]:rotatePoint([kx,ky]))]),
   routeLabels: (h.routeLabels || []).map(([x,y,label,color]) => [...rotatePoint([x,y]),label,color]),
   wells: (h.wells || []).map(w => ({ ...w, center:rotatePoint(w.center) })),
   portals: (h.portals || []).map(rotatePoint),
+  microGreen: h.microGreen ? { ...h.microGreen, cup:rotatePoint(h.microGreen.cup),
+    greens:(h.microGreen.greens || []).map(rotateGreen), sands:(h.microGreen.sands || []).map(rotateWall),
+    walls:(h.microGreen.walls || []).map(rotateWall), hills:(h.microGreen.hills || []).map(v => ({...v,center:rotatePoint(v.center)})),
+    routeLabels:(h.microGreen.routeLabels || []).map(([x,y,label,color]) => [...rotatePoint([x,y]),label,color]) } : null,
 })) : BASE_HOLES;
 let W = PORTRAIT_COURSE ? LAND_H : LAND_W;
 let H = PORTRAIT_COURSE ? LAND_W : LAND_H;
@@ -367,6 +376,7 @@ const LAND_DAMP = 0.72; // fraction of horizontal speed kept when the ball touch
 const SAND_FRICTION = 0.80; // heavy per-step decay while rolling through a bunker
 const ICE_FRICTION = 0.993; // ice preserves pace and makes stopping intentionally difficult
 const GREEN_FRICTION_BONUS = 0.006; // firm greens add a small rollout without erasing club identity
+const BUMPER_REBOUND = 1.12;
 
 // clubs reshape the shot: speed = horizontal px/step at full power, loft = upward
 // launch velocity, friction = per-step ground decay (higher = rolls farther)
@@ -375,10 +385,12 @@ const CLUBS = [
   { name: 'Loft',     speed: 8.4,  loft: 8.4, friction: 0.91 },  // clears tall danger and checks quickly
   { name: 'Precision',speed: 10.2, loft: 0,   friction: 0.95 },  // exact ground placement
 ];
+const PUTTER = { name:'Putter', speed:5.1, loft:0, friction:.985 };
 let currentClub = 0;
 
 let holeIdx = 0, strokes = 0, total = 0, underParStreak = 0;
-let ball, walls, cup, sands = [], waters = [], greens = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], wells = [], currentHole;
+let ball, walls, cup, sands = [], waters = [], greens = [], ice = [], lava = [], bumpers = [], routeLabels = [], portals = [], wells = [], hills = [], currentHole;
+let onMicroGreen = false, greenZoom = null, preMicroClub = null, bumperFlashes = [];
 let lastShotPos = null;   // where the current shot was struck from — water sends the ball back here
 let waterHold = false;    // true during the splash pause: hides the ball and blocks input
 let splashPos = null, splashStart = 0;   // ripple animation at the point of entry
@@ -391,6 +403,9 @@ let playerName = '';
 
 function loadHole(i) {
   const h = HOLES[i];
+  if (onMicroGreen && preMicroClub !== null) currentClub = preMicroClub;
+  onMicroGreen = false; greenZoom = null; preMicroClub = null;
+  document.querySelectorAll('#clubs .club').forEach(el => el.disabled = false);
   currentHole = h;
   ball = { x: h.tee[0], y: h.tee[1], vx: 0, vy: 0, z: 0, vz: 0, moving: false, groundFriction: CLUBS[currentClub].friction };
   cup = { x: h.cup[0], y: h.cup[1] };
@@ -407,7 +422,9 @@ function loadHole(i) {
   bumpers = h.bumpers || [];
   routeLabels = h.routeLabels || [];
   wells = h.wells || [];
+  hills = [];
   portals = h.portals || [];
+  bumperFlashes = [];
   portalCooldown = 0; portalFlash = null; cupFlash = null; lipFlash = null;
   lastShotPos = { x: ball.x, y: ball.y };   // first shot replays from the tee if it finds water
   strokes = 0; aim = null; keyboardAngle = 0; keyboardPower = .65;
@@ -444,9 +461,11 @@ $('name').value = localStorage.getItem('golf_name') || '';
 
 // ---- club selection (chips + keyboard) ----
 function setClub(i) {
+  if (onMicroGreen && i !== 2) return;
   currentClub = i;
   document.querySelectorAll('#clubs .club').forEach((el, idx) => el.classList.toggle('active', idx === i));
 }
+function activeClub() { return onMicroGreen ? PUTTER : CLUBS[currentClub]; }
 $('clubs').addEventListener('click', e => {
   const b = e.target.closest('.club');
   if (b) setClub(+b.dataset.i);
@@ -454,7 +473,7 @@ $('clubs').addEventListener('click', e => {
 document.addEventListener('keydown', e => {
   if (!started || done) return;
   if (document.querySelector('.overlay.show')) return;
-  if (document.activeElement === canvas && !ball.moving && !waterHold) {
+  if (document.activeElement === canvas && !ball.moving && !waterHold && !greenZoom) {
     let keyboardChanged = true;
     if (e.key === 'ArrowLeft') keyboardAngle -= Math.PI / 36;
     else if (e.key === 'ArrowRight') keyboardAngle += Math.PI / 36;
@@ -638,7 +657,7 @@ function ptr(e) {
 let dragOrigin = null;
 let touchAim = false;
 function onDown(e) {
-  if (!started || ball.moving || done || waterHold) return;
+  if (!started || ball.moving || done || waterHold || greenZoom) return;
   canvas.focus(); $('hint').textContent = DEFAULT_HINT;
   const p = ptr(e);
   touchAim = e.pointerType === 'touch' || e.pointerType === 'pen';
@@ -658,14 +677,14 @@ function onMove(e) {
   e.preventDefault();
 }
 function shootAim() {
-  if (!aim) return;
+  if (!aim || greenZoom) return;
   // shoot opposite the drag (slingshot), power by drag length
   let dx = ball.x - aim.x, dy = ball.y - aim.y;
   const d = Math.hypot(dx, dy);
   aim = null; dragOrigin = null; touchAim = false;
   if (d < 6) return;                       // ignore taps
   lastShotPos = { x: ball.x, y: ball.y };  // remember where we hit from, in case of a water penalty
-  const club = CLUBS[currentClub];
+  const club = activeClub();
   const power = Math.min(d, MAX_DRAG) / MAX_DRAG;
   ball.vx = (dx / d) * club.speed * power;
   ball.vy = (dy / d) * club.speed * power;
@@ -673,6 +692,7 @@ function shootAim() {
   ball.z = 0;
   ball.groundFriction = club.friction;     // this club's roll persists for the whole shot
   ball.lipOutShown = false;
+  ball.lastBumperIdx = -1; ball.bumperToasted = false;
   ball.wellInside = false; ball.wellVisited = false; ball.wellExitToasted = false; ball.wellCoreHit = false; ball.gravityTrail = [];
   ball.moving = true;
   strokes++; $('strokes').textContent = strokes;
@@ -712,6 +732,39 @@ function inGreen(x, y) {
 }
 function inRects(x, y, rects) {
   return rects.some(([rx, ry, rw, rh]) => x >= rx && x <= rx + rw && y >= ry && y <= ry + rh);
+}
+function surfaceFriction(x,y,base) {
+  if(inSand(x,y))return SAND_FRICTION;
+  if(inRects(x,y,ice))return ICE_FRICTION;
+  if(inGreen(x,y)){
+    if(!onMicroGreen&&currentHole.microGreen)return currentHole.microGreen.captureFriction||base;
+    return onMicroGreen ? base : Math.min(.988,base+GREEN_FRICTION_BONUS);
+  }
+  return base;
+}
+
+function queueMicroGreen(vx,vy) {
+  if (onMicroGreen || greenZoom || !currentHole.microGreen) return;
+  const speed=Math.hypot(vx,vy)||1;
+  greenZoom={start:performance.now(),dir:{x:vx/speed,y:vy/speed}};
+  toast('<b>Green found.</b> Going microscopic');
+}
+
+function enterMicroGreen() {
+  const g=currentHole.microGreen,dir=greenZoom?.dir||{x:1,y:0};
+  onMicroGreen=true;greenZoom=null;preMicroClub=currentClub;currentClub=2;
+  document.querySelectorAll('#clubs .club').forEach((el,idx)=>el.disabled=idx!==2);
+  setClub(2);
+  cup={x:g.cup[0],y:g.cup[1]};
+  const pad=MARGIN+R+10,dist=g.approachDistance||Math.min(W,H)*.7;
+  const x=Math.max(pad,Math.min(W-pad,cup.x-dir.x*dist));
+  const y=Math.max(pad,Math.min(H-pad,cup.y-dir.y*dist));
+  ball={x,y,vx:0,vy:0,z:0,vz:0,moving:false,groundFriction:PUTTER.friction,lastBumperIdx:-1};
+  walls=[[0,0,W,MARGIN],[0,H-MARGIN,W,MARGIN],[0,0,MARGIN,H],[W-MARGIN,0,MARGIN,H],...(g.walls||[])];
+  sands=g.sands||[];waters=[];greens=g.greens||[];ice=[];lava=[];bumpers=[];wells=[];portals=[];hills=g.hills||[];
+  routeLabels=g.routeLabels||[];lastShotPos={x,y};aim=null;keyboardAngle=Math.atan2(cup.y-y,cup.x-x);keyboardPower=.5;
+  $('hint').textContent='putter only · read the contour rings · drag back gently';
+  toast('<b>Needle Green.</b> Read the break');
 }
 // A rift is a ground feature: lofted balls sail over it, while a rolling ball
 // exits its twin with the same direction and momentum. The cooldown keeps the
@@ -796,6 +849,53 @@ function gravityPreviewFrame(x,y,vx,vy,z=0,vz=0,arc=false) {
   return{x,y,z,vx,vy,vz,inside,landed};
 }
 
+function slopeVelocity(x,y,vx,vy,scale=1) {
+  const speed=Math.hypot(vx,vy),motionScale=Math.min(1,speed/1.5);
+  for(const hill of hills){
+    const dx=x-hill.center[0],dy=y-hill.center[1],d=Math.hypot(dx,dy);
+    if(d<=0||d>=hill.radius)continue;
+    const force=hill.strength*(1-d/hill.radius)*motionScale*scale;
+    vx+=dx/d*force;vy+=dy/d*force;
+  }
+  return{vx,vy};
+}
+
+function reflectBumper(x,y,vx,vy,bx,by,br,rebound=BUMPER_REBOUND) {
+  let dx=x-bx,dy=y-by,d=Math.hypot(dx,dy),minD=br+R;
+  if(d>=minD)return{x,y,vx,vy,hit:false,touching:false};
+  let nx=dx/(d||1),ny=dy/(d||1);
+  if(d<.01){const speed=Math.hypot(vx,vy)||1;nx=-vx/speed;ny=-vy/speed;d=0;}
+  const dot=vx*nx+vy*ny,hit=dot<0;
+  if(hit){
+    vx=Math.max(-16,Math.min(16,(vx-2*dot*nx)*rebound));
+    vy=Math.max(-16,Math.min(16,(vy-2*dot*ny)*rebound));
+  }
+  return{x:bx+nx*minD,y:by+ny*minD,vx,vy,hit,touching:true};
+}
+
+function previewGroundFrame(x,y,vx,vy,lastBumperIdx=-1) {
+  const sub=Math.max(1,Math.ceil(Math.hypot(vx,vy)/(R*.5))),hits=[];
+  for(let s=0;s<sub;s++){
+    x+=vx/sub;y+=vy/sub;
+    const gravity=gravityPreviewStep(x,y,vx,vy,1/sub);x=gravity.x;y=gravity.y;vx=gravity.vx;vy=gravity.vy;
+    const slope=slopeVelocity(x,y,vx,vy,1/sub);vx=slope.vx;vy=slope.vy;
+    for(const w of walls){
+      const c=circleRect(x,y,R,w[0],w[1],w[2],w[3]);if(!c.hit)continue;
+      const d=Math.hypot(c.dx,c.dy)||1,nx=c.dx/d,ny=c.dy/d,dot=vx*nx+vy*ny;
+      vx=(vx-2*dot*nx)*.8;vy=(vy-2*dot*ny)*.8;x+=nx*(R-d);y+=ny*(R-d);
+    }
+    for(let i=0;i<bumpers.length;i++){
+      const [bx,by,br]=bumpers[i],distance=Math.hypot(x-bx,y-by),minD=br+R;
+      if(lastBumperIdx===i&&distance>minD+3)lastBumperIdx=-1;
+      if(lastBumperIdx===i)continue;
+      const b=reflectBumper(x,y,vx,vy,bx,by,br);if(!b.touching)continue;
+      x=b.x;y=b.y;vx=b.vx;vy=b.vy;
+      if(b.hit){lastBumperIdx=i;hits.push({x,y,index:i});}
+    }
+  }
+  return{x,y,vx,vy,lastBumperIdx,hits};
+}
+
 function applyGravityWells(sub) {
   if(ball.z>3||!wells.length)return;
   let inside=false;
@@ -832,6 +932,11 @@ function applyGravityWells(sub) {
   ball.wellInside=inside;
 }
 
+function applyPuttingSlopes(sub) {
+  if(!onMicroGreen||ball.z>.01)return;
+  const s=slopeVelocity(ball.x,ball.y,ball.vx,ball.vy,1/sub);ball.vx=s.vx;ball.vy=s.vy;
+}
+
 function step() {
   if (!ball || !ball.moving) return;
   const speed = Math.hypot(ball.vx, ball.vy);
@@ -850,6 +955,7 @@ function step() {
     }
     const airborne = ball.z > 0.01;
     applyGravityWells(sub);
+    applyPuttingSlopes(sub);
     for (const w of walls) {
       const wh = w[4] === undefined ? Infinity : w[4];
       if (airborne && ball.z >= wh) continue;  // flying above this wall — sail over it
@@ -867,19 +973,18 @@ function step() {
     // Neon bumpers are readable, player-controlled banks: they reflect the
     // incoming angle and return a little pace. A committed Loft shot clears
     // their 28px height, which creates a second route through bumper fields.
-    for (const [bx, by, br] of bumpers) {
+    for (let i=0;i<bumpers.length;i++) {
+      const [bx,by,br]=bumpers[i],distance=Math.hypot(ball.x-bx,ball.y-by),minD=br+R;
+      if(ball.lastBumperIdx===i&&distance>minD+3)ball.lastBumperIdx=-1;
+      if(ball.lastBumperIdx===i)continue;
       if (airborne && ball.z >= 28) continue;
-      const dx = ball.x - bx, dy = ball.y - by;
-      const minD = br + R, d = Math.hypot(dx, dy);
-      if (d >= minD) continue;
-      const nx = dx / (d || 1), ny = dy / (d || 1);
-      const dot = ball.vx * nx + ball.vy * ny;
-      if (dot < 0) {
-        ball.vx = Math.max(-16, Math.min(16, (ball.vx - 2 * dot * nx) * 1.04));
-        ball.vy = Math.max(-16, Math.min(16, (ball.vy - 2 * dot * ny) * 1.04));
-        ball.bumperFlash = performance.now();
+      const b=reflectBumper(ball.x,ball.y,ball.vx,ball.vy,bx,by,br);
+      if(!b.touching)continue;
+      ball.x=b.x;ball.y=b.y;ball.vx=b.vx;ball.vy=b.vy;
+      if(b.hit){
+        ball.lastBumperIdx=i;bumperFlashes[i]=performance.now();
+        if(!ball.bumperToasted){ball.bumperToasted=true;toast('<b>Carom!</b> One bright kiss');}
       }
-      ball.x = bx + nx * minD; ball.y = by + ny * minD;
     }
     const hazardAirborne = ball.z > 3;
     if (!hazardAirborne) {                     // low hops no longer ghost over ground features
@@ -903,12 +1008,13 @@ function step() {
     }
   }
   if (ball.z <= 0.01) {                         // ground drag; sand bogs it down
-    const f = inSand(ball.x, ball.y) ? SAND_FRICTION
-      : inRects(ball.x, ball.y, ice) ? ICE_FRICTION
-      : inGreen(ball.x, ball.y) ? Math.min(0.988, ball.groundFriction + GREEN_FRICTION_BONUS)
-      : ball.groundFriction;
+    const f=surfaceFriction(ball.x,ball.y,ball.groundFriction);
     ball.vx *= f; ball.vy *= f;
-    if (Math.hypot(ball.vx, ball.vy) < STOP) { ball.vx = ball.vy = 0; ball.moving = false; }
+    if (Math.hypot(ball.vx, ball.vy) < STOP) {
+      const stopVx=ball.vx,stopVy=ball.vy;
+      ball.vx = ball.vy = 0; ball.moving = false;
+      if(!onMicroGreen&&currentHole.microGreen&&inGreen(ball.x,ball.y))queueMicroGreen(stopVx,stopVy);
+    }
   }
 }
 
@@ -1065,6 +1171,24 @@ function drawGravityWells() {
   }
 }
 
+function drawPuttingHills() {
+  for(const hill of hills){
+    const [x,y]=hill.center;
+    ctx.save();
+    const grade=ctx.createRadialGradient(x,y,3,x,y,hill.radius);
+    grade.addColorStop(0,'rgba(216,255,82,.13)');grade.addColorStop(1,'rgba(3,28,26,0)');
+    ctx.fillStyle=grade;ctx.beginPath();ctx.arc(x,y,hill.radius,0,Math.PI*2);ctx.fill();
+    ctx.strokeStyle='rgba(216,255,82,.24)';ctx.lineWidth=1.5;
+    for(const ring of [.3,.52,.74,.94]){ctx.beginPath();ctx.arc(x,y,hill.radius*ring,0,Math.PI*2);ctx.stroke();}
+    ctx.fillStyle='rgba(245,247,236,.58)';ctx.font='900 10px "Avenir Next","Segoe UI",sans-serif';ctx.textAlign='center';
+    for(let a=0;a<Math.PI*2;a+=Math.PI/2){
+      const ax=x+Math.cos(a)*hill.radius*.66,ay=y+Math.sin(a)*hill.radius*.66;
+      ctx.save();ctx.translate(ax,ay);ctx.rotate(a);ctx.fillText('›',0,3);ctx.restore();
+    }
+    ctx.restore();
+  }
+}
+
 function draw() {
   // deep turf with subtle mowing stripes
   ctx.fillStyle = '#093c37';
@@ -1107,6 +1231,7 @@ function draw() {
   }
 
   drawGravityWells();
+  drawPuttingHills();
 
   // sand bunkers sit on the turf — fly over them, don't roll through
   for (const [x, y, w, h] of sands) {
@@ -1194,14 +1319,24 @@ function draw() {
 
   // Player-aimed, chip-able pinball posts. Their concentric rings distinguish
   // them from portals: bumpers reflect; rifts teleport.
-  for (const [x,y,r] of bumpers) {
-    const pulse = .72 + Math.sin(performance.now()/180 + x) * .18;
+  bumpers.forEach(([x,y,r,kx,ky],i) => {
+    const pulse = REDUCED_MOTION ? .82 : .72 + Math.sin(performance.now()/180 + x) * .18;
     ctx.save();ctx.shadowColor='#ff5cce';ctx.shadowBlur=18;ctx.fillStyle='#132528';
     ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
     ctx.strokeStyle=`rgba(255,92,206,${pulse})`;ctx.lineWidth=5;ctx.stroke();
     ctx.strokeStyle='#62e9ff';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,r-8,0,Math.PI*2);ctx.stroke();
-    ctx.fillStyle='#d8ff52';ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();ctx.restore();
-  }
+    ctx.fillStyle='#d8ff52';ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);ctx.fill();
+    if(kx!==undefined){
+      const angle=Math.atan2(ky-y,kx-x);ctx.strokeStyle='#d8ff52';ctx.lineWidth=6;ctx.beginPath();ctx.arc(x,y,r+2,angle-.42,angle+.42);ctx.stroke();
+      ctx.fillStyle='#d8ff52';ctx.font='900 9px "Avenir Next","Segoe UI",sans-serif';ctx.textAlign='center';ctx.fillText('KISS',kx+Math.cos(angle)*13,ky+Math.sin(angle)*13);
+    }
+    const hitAt=bumperFlashes[i],age=hitAt?performance.now()-hitAt:Infinity;
+    if(age<360){
+      const t=REDUCED_MOTION ? .45 : age/360;ctx.strokeStyle=`rgba(245,247,236,${1-t})`;ctx.lineWidth=4;
+      for(let a=0;a<Math.PI*2;a+=Math.PI/4){const inner=r+7,outer=inner+8+t*13;ctx.beginPath();ctx.moveTo(x+Math.cos(a)*inner,y+Math.sin(a)*inner);ctx.lineTo(x+Math.cos(a)*outer,y+Math.sin(a)*outer);ctx.stroke();}
+    }
+    ctx.restore();
+  });
 
   // Casino lane labels make the route choice legible before the first shot.
   for (const [x,y,label,color] of routeLabels) {
@@ -1229,6 +1364,8 @@ function draw() {
   // Hole identity doubles as a compact clue for its signature decision.
   if (currentHole) {
     ctx.save();
+    const identityName=onMicroGreen?currentHole.microGreen.name:currentHole.name;
+    const identityTagline=onMicroGreen?currentHole.microGreen.tagline:currentHole.tagline;
     const identityWidth = PORTRAIT_COURSE ? 205 : Math.min(W - MARGIN * 2 - 24, 390);
     const identityHeight = PORTRAIT_COURSE ? 74 : 48;
     const identityX = PORTRAIT_COURSE && cup.x < W / 2
@@ -1237,10 +1374,10 @@ function draw() {
     ctx.fillStyle = 'rgba(3,20,18,.82)';
     roundRect(identityX, MARGIN + 10, identityWidth, identityHeight, 10); ctx.fill();
     ctx.fillStyle = '#d8ff52'; ctx.font = `800 ${PORTRAIT_COURSE?15:13}px "Avenir Next","Segoe UI",sans-serif`;
-    ctx.fillText(`HOLE ${holeIdx + 1}  ·  ${currentHole.name.toUpperCase()}`, identityX + 13, MARGIN + 30, identityWidth - 26);
+    ctx.fillText(`HOLE ${holeIdx + 1}  ·  ${identityName.toUpperCase()}`, identityX + 13, MARGIN + 30, identityWidth - 26);
     ctx.fillStyle = 'rgba(245,247,236,.7)'; ctx.font = `${PORTRAIT_COURSE?13:10}px "Avenir Next","Segoe UI",sans-serif`;
-    if (PORTRAIT_COURSE) wrappedLines(currentHole.tagline || '', identityWidth - 26).forEach((line,i) => ctx.fillText(line,identityX+13,MARGIN+49+i*15));
-    else ctx.fillText(currentHole.tagline || '', identityX + 13, MARGIN + 48, identityWidth - 26);
+    if (PORTRAIT_COURSE) wrappedLines(identityTagline || '', identityWidth - 26).forEach((line,i) => ctx.fillText(line,identityX+13,MARGIN+49+i*15));
+    else ctx.fillText(identityTagline || '', identityX + 13, MARGIN + 48, identityWidth - 26);
     ctx.restore();
   }
 
@@ -1307,10 +1444,10 @@ function draw() {
 
     // lofted clubs: trace the real flight arc (dots lift off the ground and curve back
     // down) + a landing ring, so the height and carry are legible before you swing
-    const club = CLUBS[currentClub];
+    const club = activeClub();
     let landingX = ball.x, landingY = ball.y, landingVx = 0, landingVy = 0;
     let previewImpact = null, previewFeature = null;
-    const previewCurve = [];
+    const previewCurve = [],previewRoll = [],previewBanks = [];
     if (club.loft > 0) {
       let sx = ball.x, sy = ball.y, sz = 0;
       let svx = (dx / d) * club.speed * power, svy = (dy / d) * club.speed * power, svz = club.loft * power;
@@ -1332,10 +1469,12 @@ function draw() {
       let sx = landingX, sy = landingY;
       let svx = club.loft > 0 ? landingVx : (dx / d) * club.speed * power;
       let svy = club.loft > 0 ? landingVy : (dy / d) * club.speed * power;
-      let usedPortal = false;
+      let usedPortal = false,lastPreviewBumper=-1;
       for (let n = 0; n < 2500 && Math.hypot(svx, svy) >= STOP; n++) {
-        const gravity=gravityPreviewFrame(sx,sy,svx,svy);sx=gravity.x;sy=gravity.y;svx=gravity.vx;svy=gravity.vy;
-        if(gravity.inside&&n%4===0)previewCurve.push({x:sx,y:sy});
+        const ground=previewGroundFrame(sx,sy,svx,svy,lastPreviewBumper);sx=ground.x;sy=ground.y;svx=ground.vx;svy=ground.vy;lastPreviewBumper=ground.lastBumperIdx;
+        if((wells.length||hills.length)&&n%4===0)previewCurve.push({x:sx,y:sy});
+        if(bumpers.length&&n%3===0)previewRoll.push({x:sx,y:sy});
+        if(ground.hits.length)previewBanks.push(...ground.hits);
         if (inWater(sx, sy) || inRects(sx, sy, lava)) { previewImpact = { x:sx, y:sy }; break; }
         if (!usedPortal && portals.length === 2) {
           const portalIdx = portals.findIndex(([px,py]) => Math.hypot(sx-px,sy-py) <= 25);
@@ -1348,10 +1487,7 @@ function draw() {
         if (sx < MARGIN+R || sx > W-MARGIN-R || sy < MARGIN+R || sy > H-MARGIN-R) {
           sx=Math.max(MARGIN+R,Math.min(W-MARGIN-R,sx)); sy=Math.max(MARGIN+R,Math.min(H-MARGIN-R,sy)); break;
         }
-        const f = inSand(sx, sy) ? SAND_FRICTION
-          : inRects(sx, sy, ice) ? ICE_FRICTION
-          : inGreen(sx, sy) ? Math.min(.988, club.friction + GREEN_FRICTION_BONUS)
-          : club.friction;
+        const f=surfaceFriction(sx,sy,club.friction);
         svx *= f; svy *= f;
       }
       if (!previewImpact && !previewFeature) {
@@ -1360,6 +1496,12 @@ function draw() {
       }
     }
     if(previewCurve.length){ctx.fillStyle='rgba(216,255,82,.7)';for(const p of previewCurve){ctx.beginPath();ctx.arc(p.x,p.y,1.7,0,Math.PI*2);ctx.fill();}}
+    if(previewRoll.length){
+      ctx.strokeStyle='rgba(255,92,206,.72)';ctx.lineWidth=2;ctx.setLineDash([4,5]);ctx.beginPath();ctx.moveTo(landingX,landingY);
+      for(const p of previewRoll)ctx.lineTo(p.x,p.y);ctx.stroke();ctx.setLineDash([]);
+    }
+    previewBanks.forEach((p,i)=>{ctx.fillStyle='#d8ff52';ctx.beginPath();ctx.arc(p.x,p.y,8,0,Math.PI*2);ctx.fill();ctx.fillStyle='#071312';ctx.font='900 9px "Avenir Next","Segoe UI",sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(String(i+1),p.x,p.y);});
+    ctx.textAlign='start';ctx.textBaseline='alphabetic';
     if (previewImpact) {
       ctx.strokeStyle='rgba(255,80,60,.95)';ctx.lineWidth=3;
       ctx.beginPath();ctx.moveTo(previewImpact.x-7,previewImpact.y-7);ctx.lineTo(previewImpact.x+7,previewImpact.y+7);
@@ -1417,9 +1559,18 @@ function draw() {
   ctx.fillStyle = 'rgba(7,19,18,.22)';
   ctx.beginPath(); ctx.arc(ball.x + 2, drawY + 1, 1.2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(ball.x - 3, drawY + 3, 1, 0, Math.PI * 2); ctx.fill();
+  if(greenZoom){
+    const age=performance.now()-greenZoom.start,t=REDUCED_MOTION ? .7 : Math.min(1,age/480);
+    ctx.fillStyle=`rgba(3,20,18,${.18+t*.7})`;ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle='#d8ff52';ctx.lineWidth=4;ctx.beginPath();ctx.arc(cup.x,cup.y,28+t*Math.max(W,H),0,Math.PI*2);ctx.stroke();
+    ctx.fillStyle='#f5f7ec';ctx.font=`900 ${PORTRAIT_COURSE?24:18}px "Avenir Next","Segoe UI",sans-serif`;ctx.textAlign='center';ctx.fillText('DIVING INTO THE NEEDLE GREEN',W/2,H/2);ctx.textAlign='start';
+  }
 }
 
-function loop() { step(); if (ball) draw(); requestAnimationFrame(loop); }
+function loop() {
+  if(greenZoom&&performance.now()-greenZoom.start>=(REDUCED_MOTION?100:480))enterMicroGreen();
+  step();if(ball)draw();requestAnimationFrame(loop);
+}
 loadHole(0);            // render a course behind the start overlay
 connectLive();          // subscribe to other players' hole-outs
 requestAnimationFrame(loop);
