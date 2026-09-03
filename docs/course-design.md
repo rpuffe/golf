@@ -79,11 +79,35 @@ renderers only change how that footprint is presented.
 
 Aim for one memorable decision per hole. A hole is not finished until both its
 safe and high-risk/high-reward routes are visually readable and practically
-playable. The After Dark Gauntlet introduces ice, lava, and rifts separately
-before combining them on the final three holes.
+playable.
 
-`Lucky Spiral` is the intentional exception to ordinary free-ball movement: a
-fast grounded ball entering its marked icy rail follows two tightening laps.
-Its final release is deterministic: a faster, cleaner entry earns a straighter
-ace run, while a marginal entry exits wider. Its safe route is still fully
-player-driven: Loft can clear the 28 px bumper rails in stages.
+## Two physics facts that shape every hole
+
+- **A clear straight line is an ace.** A rolling ball only lips out above
+  7 px/frame; on turf that means any shot that would stop within roughly
+  250 px past the cup drops in. So the short line on every hole must be
+  narrow (a gap, a bank, a rift, a hazard to skim) or blocked outright, or
+  the hole is a free ace.
+- **The aim preview shows landing and rollout for Power and Precision, but
+  not the rollout of a Loft.** Loft is the club that still needs feel, which
+  is why the hedge hole's only ace is a Loft.
+
+## The Neon Nine
+
+| # | Hole | Par | Lesson | Short line | Patient line |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Runway | 3 | Power + ice rollout | ease off down the ice strip: ace; flat out lips out and slides back | play the sides around the sand |
+| 2 | Splash Zone | 3 | carrying water | full drive through the footbridge, then hole out | Loft the canal, approach, putt |
+| 3 | Over the Hedge | 3 | height | one Loft over the hedge (rollout unpreviewed) | three shots around the end |
+| 4 | The Cage | 3 | banks | drive past the mountain, thread the posts | lay up in a corridor, tap through the door |
+| 5 | Glacier | 3 | ice | razor-thin bank off the bottom wall around the island | drive onto the ice, then approach |
+| 6 | Island | 3 | commitment | layup to the shore, Loft onto the island, hole the Loft | same, but putt |
+| 7 | Wormhole | 3 | rifts | roll into the rift, exit fires at the flag; a miss finds the lake | around the lake along the bottom |
+| 8 | Gravity Bloom | 3 | gravity | skim the star so it bends the roll to the green | Loft above the well |
+| 9 | Supernova | 5 | everything | rift heist up the left edge into the greenside bunker | canal, S-bend, ice, around the lava |
+
+Hole data is verified with a brute-force solver that runs the game's own
+`step()` over a grid of club × angle × power from the tee and again from the
+best landing cells, and reports ace windows, penalty counts, and two-shot
+hole-outs. Re-run it (`tools/course-solver.js`, pasted into the browser console) after
+moving anything.

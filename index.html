@@ -281,11 +281,11 @@
       <li><b>Loft flies over trees, bumpers, water and lava — never mountains.</b> Steel barriers are permanent too, so route around them.</li>
       <li><b>Water</b> costs +1. <b>Lava</b> costs +2. Both replay from your last shot. Lofted balls can carry either.</li>
       <li><b>Greens</b> are firmer than the fairway, so every club rolls a little farther around the flag.</li>
-      <li>On <b>The Needle Green</b>, an approach that settles on the tiny target zooms into a full putting map. A direct chip-in still counts immediately.</li>
       <li><b>Ice</b> barely slows a rolling ball, so it can create huge banks or brutal overshoots.</li>
+      <li><b>Rifts</b> come in pairs: a rolling ball that enters one exits the other with the same direction and speed. Lofted balls fly straight over them.</li>
       <li><b>Neon bumpers</b> reflect your incoming angle and return a little speed. Loft can chip over them; ground shots can call a bank.</li>
       <li>On <b>Gravity Bloom</b>, rolling shots bend around the newborn star. Loft can rise above its pull; the glowing rings show where gravity begins.</li>
-      <li>Nine escalating holes each hide a safe route and a dangerous scoring line. The final holes combine everything.</li>
+      <li>Nine escalating holes. Each has a patient route that makes par and a short line that needs nerve or precision for birdie. Read the aim preview: it shows where the ball lands and rolls, but not how far a Loft runs after it lands.</li>
       <li>Your best round is saved to a live leaderboard (Today + All-time), and you'll see when other players online finish.</li>
     </ul>
     <button id="howtoOk">Got it</button>
@@ -304,38 +304,59 @@ const $ = id => document.getElementById(id);
 // Nine holes authored in landscape LAND_W x LAND_H. Every layout has its own
 // identity and supports more than one route instead of prescribing a single shot.
 const LAND_W = 960, LAND_H = 480;
-// NEON MERIDIAN — a fresh nine. The front six introduce one mechanic at a
-// time (water, ice, lava, bumpers, rifts, gravity), the last three stack
-// them. Every hole keeps a patient route next to a line that pays for nerve.
+// THE NEON NINE — every hole is built around one decision. The front five
+// teach one tool each (rollout, carry, loft, banks, ice); the back four add
+// islands, rifts, gravity, and a finale that stacks all of it. On every hole
+// the short line needs nerve or precision; the long line only needs patience.
 const BASE_HOLES = [
-  { name:'First Light', tagline:'Every legend starts with one canal. Carry it — or respect it.', par:3, tee:[70,240], cup:[880,240],
-    walls:[], sands:[[560,200,90,80],[385,110,45,260]], waters:[[430,110,100,260]], greens:[[880,240,70,60]], ice:[], lava:[] },
-  { name:'Glacier Run', tagline:'The ice carries pace you cannot cancel', par:3, tee:[80,80], cup:[875,410],
-    walls:[[560,18,60,140,undefined,'mountain']], sands:[[820,300,90,60]], waters:[[520,330,170,120]], greens:[[875,410,72,55]], ice:[[300,160,400,160]], lava:[] },
-  { name:'The Forge', tagline:'Thread the cool corridor, or clear the melt in one brave carry', par:4, tee:[75,400], cup:[880,80],
-    walls:[[300,18,60,200,undefined,'mountain'],[620,240,60,222,undefined,'mountain'],[780,140,64,60,34,'trees']], sands:[[420,380,120,60]], waters:[], greens:[[880,80,65,55]], ice:[], lava:[[360,200,200,140]] },
-  { name:'Neon Carom', tagline:'One bright kiss turns the whole hole.', par:3, tee:[80,90], cup:[875,90],
-    walls:[[390,18,120,255,undefined,'mountain']], sands:[[755,205,105,60]], waters:[[540,335,190,105]], greens:[[875,90,34,26]], ice:[], lava:[], bumpers:[[470,393,34,470,350]],
-    routeLabels:[[110,340,'ONE-BANK BIRDIE','#ff5cce'],[115,260,'THREAD FOR PAR','#d8ff52']],
-    microGreen:{ name:'The Needle Green', tagline:'The world gets small. Read the break.', cup:[790,190], approachDistance:320, captureFriction:.82,
-      greens:[[480,240,425,205]], sands:[[835,115,70,155]], walls:[],
-      hills:[{center:[430,235],radius:108,strength:.018},{center:[625,270],radius:92,strength:.014}],
-      routeLabels:[[95,88,'READ THE BREAK','#62e9ff'],[730,345,'MISS HIGH','#ff5cce']] } },
-  { name:'Wormhole', tagline:'A rolling ball rides the rift across the lake. A flying one is on its own.', par:3, tee:[70,240], cup:[880,240],
-    walls:[[810,160,55,55,32,'trees']], sands:[[800,330,90,60]], waters:[[370,90,220,300]], greens:[[880,240,70,58]], ice:[], lava:[], portals:[[250,240],[700,330]] },
+  // 1 · Power club + ice rollout. Ease off and the runway feeds the cup; flat
+  // out lips out and slides all the way back. Miss the strip and you're bogged.
+  { name:'Runway', tagline:'Ease off and the lit strip carries you home. Flat out, the cup will spit you back.', par:3, tee:[80,240], cup:[660,240],
+    walls:[[830,350,80,80,34,'trees']], sands:[[260,128,440,68],[260,284,440,68]], waters:[[724,160,60,160]], greens:[[660,240,70,58]], ice:[[260,206,440,68]], lava:[],
+    routeLabels:[[110,120,'EASE OFF · ACE','#62e9ff'],[110,380,'SIDES · SAFE','#d8ff52']] },
+  // 2 · The canal. Loft it (easy, costs a stroke) or thread the footbridge
+  // with a full drive for a birdie look.
+  { name:'Splash Zone', tagline:'Loft the canal, or thread the footbridge with a rolling drive.', par:3, tee:[80,240], cup:[870,240],
+    walls:[], sands:[[520,80,60,110],[520,290,60,110]], waters:[[440,18,72,286],[440,368,72,94]], greens:[[870,240,66,56]], ice:[], lava:[],
+    routeLabels:[[130,400,'FOOTBRIDGE','#d8ff52'],[130,100,'CARRY IT','#62e9ff']] },
+  // 3 · Height. The hedge spans the course; three shots around it, or one
+  // Loft over the top. The Loft's rollout isn't previewed — that's the skill.
+  { name:'Over the Hedge', tagline:'Three shots around the hedge, or one brave Loft straight over it.', par:3, tee:[110,80], cup:[110,390],
+    walls:[[18,200,560,80,34,'trees']], sands:[[190,340,80,100]], waters:[[760,18,160,120]], greens:[[110,390,60,52]], ice:[], lava:[],
+    routeLabels:[[300,130,'THE LONG WAY','#d8ff52'],[300,440,'OVER THE HEDGE','#ff5cce']] },
+  // 4 · Banks. A mountain kills the straight line; four bumpers guard the
+  // green and two ponds catch anything that comes in hot.
+  { name:'The Cage', tagline:'Four posts, two ponds, one door.', par:3, tee:[80,240], cup:[820,240],
+    walls:[[420,180,60,120,undefined,'mountain']], sands:[], waters:[[700,18,242,80],[700,382,242,80]], greens:[[820,240,64,58]], ice:[], lava:[], bumpers:[[750,160,20],[750,320,20],[900,160,20],[900,320,20]],
+    routeLabels:[[110,120,'THREAD THE DOOR','#ff5cce']] },
+  // 5 · Ice. The sheet keeps every bit of pace: a rolled drive goes twice as
+  // far, a Loft that lands on it never stops. The trick ace banks off the
+  // bottom wall around the island.
+  { name:'Glacier', tagline:'Ice keeps every bit of pace. Bank the far wall — or slide into the drink.', par:3, tee:[80,80], cup:[820,420],
+    walls:[[440,190,70,80,undefined,'mountain']], sands:[[830,290,60,60]], waters:[[900,290,42,172],[780,18,162,90]], greens:[[820,420,66,40]], ice:[[220,130,520,220]], lava:[],
+    routeLabels:[[110,440,'ICE BANK','#62e9ff']] },
+  // 6 · Island green. No way around: lay up to the shore, then commit to the
+  // carry. Too long a layup finds water; too soft a Loft does too.
+  { name:'Island', tagline:'Everybody carries. Lay up to the shore, then commit.', par:3, tee:[80,240], cup:[800,240],
+    walls:[], sands:[], waters:[[520,90,190,300],[710,90,232,74],[710,316,232,74],[900,164,42,152]], greens:[[800,240,80,64]], ice:[], lava:[],
+    routeLabels:[[120,120,'LAY UP · THEN LOFT','#62e9ff']] },
+  // 7 · Rifts. Roll into A and B fires you at the flag. Miss the ring by a
+  // ball's width and the lake takes the stroke.
+  { name:'Wormhole', tagline:'Roll into the rift and it fires you at the flag. Miss it and the lake is waiting.', par:3, tee:[80,240], cup:[880,300],
+    walls:[], sands:[], waters:[[340,60,300,300]], greens:[[880,300,64,56]], ice:[], lava:[], portals:[[220,197],[620,395]],
+    routeLabels:[[110,420,'RIFT · ALL IN','#ff5cce'],[110,60,'THE LONG WAY','#d8ff52']] },
+  // 8 · Gravity. Rolling shots bend around the star; Loft rises above it.
   { name:'Gravity Bloom', tagline:'Skim the newborn star. Let gravity write the shot.', par:3, tee:[75,390], cup:[875,90],
     walls:[[310,18,60,175,undefined,'mountain'],[650,285,60,177,undefined,'mountain']], sands:[[755,155,105,68]], waters:[], greens:[[875,90,72,55]], ice:[], lava:[],
     wells:[{ center:[500,240], radius:160, core:30, pull:.012, spin:-.09, maxSpeed:14 }],
     routeLabels:[[105,340,'KISS THE STAR','#ff5cce'],[110,75,'MOONWALK','#62e9ff']] },
-  { name:'Meltwater', tagline:'The ice river ends in fire. Get off before the falls.', par:4, tee:[75,80], cup:[880,400],
-    walls:[[250,18,70,120,undefined,'mountain'],[790,300,60,60,34,'trees']], sands:[[430,300,160,70],[620,190,90,100]], waters:[[740,40,180,110]], greens:[[880,400,68,55]], ice:[[250,190,370,100]], lava:[[710,190,110,100]],
-    routeLabels:[[110,60,'ICE EXPRESS','#62e9ff'],[110,440,'DRY LINE','#d8ff52']] },
-  { name:'Triple Threat', tagline:'Pick a lane: patient sand, frozen jackpot, or the gamble over water', par:4, tee:[75,240], cup:[880,120],
-    walls:[[330,150,300,30,undefined,'mountain'],[330,300,300,30,undefined,'mountain']], sands:[[400,60,180,60],[550,190,90,100]], waters:[[400,350,220,90]], greens:[[880,120,72,55]], ice:[[330,190,220,100]], lava:[[640,190,90,100]], bumpers:[[775,245,18]],
-    routeLabels:[[130,80,'SAFE · +1','#62e9ff'],[140,190,'JACKPOT','#d8ff52'],[130,380,'GAMBLE','#ff5cce']] },
-  { name:'Supernova', tagline:'Everything you\'ve learned. One hole. Go supernova.', par:5, tee:[70,430], cup:[885,60],
-    walls:[[240,140,60,322,undefined,'mountain'],[540,18,60,300,undefined,'mountain'],[770,80,70,50,36,'trees']], sands:[[800,255,80,70]], waters:[[330,60,140,80]], greens:[[885,60,62,50]], ice:[[300,340,200,90]], lava:[[620,330,140,90]], bumpers:[[420,250,18],[60,300,16]], portals:[[150,120],[720,220]],
-    routeLabels:[[110,60,'RIFT HEIST','#ff5cce'],[130,300,'THE LONG BURN','#62e9ff']] },
+  // 9 · Finale. A canal off the tee, a mountain S-bend with an ice patch and a
+  // bumper, lava guarding the flag, and a rift heist up the left edge that
+  // lands you in a bunker beside the green — with water above the ring for
+  // anyone who overcooks it.
+  { name:'Supernova', tagline:'Everything you have learned. One hole. Go supernova.', par:5, tee:[70,430], cup:[885,60],
+    walls:[[400,18,60,250,undefined,'mountain'],[620,240,60,222,undefined,'mountain']], sands:[[790,270,120,120],[830,110,112,70]], waters:[[180,290,60,172],[60,18,150,60]], greens:[[885,60,58,48]], ice:[[470,300,150,100]], lava:[[700,18,60,150]], bumpers:[[560,140,22]], portals:[[130,110],[845,330]],
+    routeLabels:[[110,150,'RIFT HEIST','#ff5cce'],[260,400,'THE LONG BURN','#62e9ff']] },
 ];
 const PORTRAIT_COURSE = matchMedia('(max-width: 700px) and (orientation: portrait)').matches;
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -434,7 +455,7 @@ function loadHole(i) {
   $('par').textContent = h.par;
   $('strokes').textContent = 0;
   $('total').textContent = total;
-  if (started && i === HOLES.length - 1) toast('<b>Final hole.</b> Everything the Meridian taught you — all at once.');
+  if (started && i === HOLES.length - 1) toast('<b>Final hole.</b> Everything the Nine taught you — all at once.');
 }
 
 // ---- name entry / round lifecycle ----
@@ -1024,7 +1045,7 @@ function sink() {
   const diff = strokes - currentHole.par;
   if (strokes === 1) toast('<b>ACE!</b> One swing. One legend.');
   else if (diff <= -2) toast('<b>EAGLE!</b> Tore the sky off that one.');
-  else if (diff === -1) toast('<b>Birdie!</b> Meridian magic.');
+  else if (diff === -1) toast('<b>Birdie!</b> Pure nerve.');
   else if (diff === 0) toast('<b>Par.</b> Clean work. Keep moving.');
   if (diff < 0) {
     cupFlash = { x: cup.x, y: cup.y, start: performance.now() };
