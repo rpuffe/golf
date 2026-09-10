@@ -41,12 +41,12 @@ check-tools:
 validate-manifest:
 	@test -f $(MANIFEST) || { echo "$(MANIFEST) not found at repo root → see docs/contract.md"; exit 1; }
 	@for k in $$(yq 'keys | .[]' $(MANIFEST)); do \
-	  case " name port healthcheck cpu memory env storage " in \
+	  case " name port healthcheck cpu memory env secrets storage auth alerts email " in \
 	    *" $$k "*) : ;; \
 	    *) if [ "$$k" = "image" ]; then \
 	         echo "app-manifest.yaml has an 'image' field — CI supplies the image, never add one → see docs/contract.md"; \
 	       else \
-	         echo "app-manifest.yaml has unknown field '$$k' — only name, port, healthcheck, cpu, memory, env are allowed → see docs/contract.md"; \
+	         echo "app-manifest.yaml has unknown field '$$k' — only name, port, healthcheck, cpu, memory, env, secrets, storage, auth, alerts, email are allowed → see docs/contract.md"; \
 	       fi; \
 	       exit 1 ;; \
 	  esac; \
@@ -94,10 +94,17 @@ validate-manifest:
 	fi
 	@if [ "$$(yq '.env' $(MANIFEST))" != "null" ]; then \
 	  for k in $$(yq '.env | keys | .[]' $(MANIFEST)); do \
-	    if [ "$$k" = "STORAGE_BUCKET" ]; then \
-	      echo "env.STORAGE_BUCKET is reserved — the platform injects it when storage: s3 is set, don't define it yourself → see docs/contract.md"; \
-	      exit 1; \
-	    fi; \
+	    case "$$k" in \
+	      STORAGE_BUCKET) \
+	        echo "env.STORAGE_BUCKET is reserved — the platform injects it when storage: s3 is set, don't define it yourself → see docs/contract.md"; \
+	        exit 1 ;; \
+	      COGNITO_USER_POOL_ID|COGNITO_CLIENT_ID|COGNITO_DOMAIN|COGNITO_ISSUER) \
+	        echo "env.$$k is reserved — the platform injects it when auth: cognito is set, don't define it yourself → see docs/contract.md"; \
+	        exit 1 ;; \
+	      MAIL_FROM|MAIL_REGION) \
+	        echo "env.$$k is reserved — the platform injects it when email.from is set, don't define it yourself → see docs/contract.md"; \
+	        exit 1 ;; \
+	    esac; \
 	    t=$$(yq ".env.$$k | tag" $(MANIFEST)); \
 	    if [ "$$t" != "!!str" ]; then \
 	      echo "env.$$k must be a string value (found $$t) → see docs/contract.md"; \
@@ -105,12 +112,106 @@ validate-manifest:
 	    fi; \
 	  done; \
 	fi
+	@if [ "$$(yq '.secrets' $(MANIFEST))" != "null" ]; then \
+	  if [ "$$(yq '.secrets | tag' $(MANIFEST))" != "!!seq" ]; then \
+	    echo "secrets must be a list of environment variable names → see docs/contract.md"; exit 1; \
+	  fi; \
+	  count=$$(yq '.secrets | length' $(MANIFEST)); \
+	  if [ "$$count" -gt 20 ] 2>/dev/null; then \
+	    echo "secrets has $$count entries — at most 20 are supported → see docs/contract.md"; exit 1; \
+	  fi; \
+	  i=0; \
+	  while [ "$$i" -lt "$$count" ]; do \
+	    t=$$(yq ".secrets[$$i] | tag" $(MANIFEST)); \
+	    n=$$(yq ".secrets[$$i]" $(MANIFEST)); \
+	    if [ "$$t" != "!!str" ]; then \
+	      echo "secrets[$$i] must be a string name (found $$t) → see docs/contract.md"; exit 1; \
+	    fi; \
+	    echo "$$n" | grep -Eq '^[A-Z][A-Z0-9_]{0,63}$$' || { \
+	      echo "secrets[$$i] '$$n' is invalid — must match ^[A-Z][A-Z0-9_]{0,63}$$ → see docs/contract.md"; exit 1; \
+	    }; \
+	    case "$$n" in \
+	      STORAGE_BUCKET|COGNITO_USER_POOL_ID|COGNITO_CLIENT_ID|COGNITO_DOMAIN|COGNITO_ISSUER|MAIL_FROM|MAIL_REGION) \
+	        echo "secrets[$$i] '$$n' is reserved for platform injection → see docs/contract.md"; exit 1 ;; \
+	    esac; \
+	    if [ "$$(yq ".env | has(\"$$n\")" $(MANIFEST))" = "true" ]; then \
+	      echo "'$$n' cannot appear in both env and secrets → see docs/contract.md"; exit 1; \
+	    fi; \
+	    i=$$((i + 1)); \
+	  done; \
+	  dupes=$$(yq '.secrets[]' $(MANIFEST) | sort | uniq -d); \
+	  if [ -n "$$dupes" ]; then \
+	    echo "secrets entries must be unique — duplicate(s): $$dupes → see docs/contract.md"; exit 1; \
+	  fi; \
+	fi
 	@if [ "$$(yq '.storage' $(MANIFEST))" != "null" ]; then \
 	  storage=$$(yq '.storage' $(MANIFEST)); \
-	  if [ "$$storage" != "s3" ]; then \
-	    echo "storage '$$storage' is invalid — only 's3' is supported → see docs/contract.md"; \
+	  case "$$storage" in \
+	    s3|s3-retained) : ;; \
+	    *) echo "storage '$$storage' is invalid — only 's3' or 's3-retained' is supported → see docs/contract.md"; \
+	       exit 1 ;; \
+	  esac; \
+	fi
+	@if [ "$$(yq '.alerts' $(MANIFEST))" != "null" ]; then \
+	  count=$$(yq '.alerts | length' $(MANIFEST)); \
+	  if [ "$$count" -gt 10 ] 2>/dev/null; then \
+	    echo "alerts has $$count entries — at most 10 are supported → see docs/contract.md"; \
 	    exit 1; \
 	  fi; \
+	  i=0; \
+	  while [ "$$i" -lt "$$count" ]; do \
+	    for k in $$(yq ".alerts[$$i] | keys | .[]" $(MANIFEST)); do \
+	      case "$$k" in \
+	        name|pattern) : ;; \
+	        *) echo "alerts[$$i] has unknown key '$$k' — only name and pattern are allowed → see docs/contract.md"; exit 1 ;; \
+	      esac; \
+	    done; \
+	    n=$$(yq ".alerts[$$i].name" $(MANIFEST)); \
+	    p=$$(yq ".alerts[$$i].pattern" $(MANIFEST)); \
+	    echo "$$n" | grep -Eq '^[a-z][a-z0-9-]{0,31}$$' || { \
+	      echo "alerts[$$i].name '$$n' is invalid — must match ^[a-z][a-z0-9-]{0,31}$$ → see docs/contract.md"; \
+	      exit 1; \
+	    }; \
+	    if [ "$$p" = "null" ] || [ -z "$$p" ]; then \
+	      echo "alerts[$$i].pattern is missing or empty — must be a CloudWatch Logs filter pattern → see docs/contract.md"; \
+	      exit 1; \
+	    fi; \
+	    i=$$((i + 1)); \
+	  done; \
+	  dupes=$$(yq '.alerts[].name' $(MANIFEST) | sort | uniq -d); \
+	  if [ -n "$$dupes" ]; then \
+	    echo "alerts[].name values must be unique — duplicate(s): $$dupes → see docs/contract.md"; \
+	    exit 1; \
+	  fi; \
+	fi
+	@if [ "$$(yq '.auth' $(MANIFEST))" != "null" ]; then \
+	  auth=$$(yq '.auth' $(MANIFEST)); \
+	  if [ "$$auth" != "cognito" ]; then \
+	    echo "auth '$$auth' is invalid — only 'cognito' is supported → see docs/contract.md"; \
+	    exit 1; \
+	  fi; \
+	fi
+	@if [ "$$(yq '.email' $(MANIFEST))" != "null" ]; then \
+	  if [ "$$(yq '.email | tag' $(MANIFEST))" != "!!map" ]; then \
+	    echo "email must be a mapping with a 'from' address → see docs/contract.md"; exit 1; \
+	  fi; \
+	  for k in $$(yq '.email | keys | .[]' $(MANIFEST)); do \
+	    case "$$k" in \
+	      from) : ;; \
+	      *) echo "email has unknown key '$$k' — only 'from' is allowed → see docs/contract.md"; exit 1 ;; \
+	    esac; \
+	  done; \
+	  from=$$(yq '.email.from' $(MANIFEST)); \
+	  if [ "$$from" = "null" ]; then \
+	    echo "email is missing required key 'from' — the address prod sends as → see docs/contract.md"; exit 1; \
+	  fi; \
+	  if [ "$$(yq '.email.from | tag' $(MANIFEST))" != "!!str" ]; then \
+	    echo "email.from must be a string address → see docs/contract.md"; exit 1; \
+	  fi; \
+	  echo "$$from" | grep -Eq '^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$$' || { \
+	    echo "email.from '$$from' is invalid — must be a bare lowercase address with no display name, e.g. billing@example.com → see docs/contract.md"; \
+	    exit 1; \
+	  }; \
 	fi
 	@echo "==> manifest OK"
 
