@@ -57,6 +57,12 @@ func main() {
 			http.Error(w, "storage error", http.StatusBadGateway)
 			return
 		}
+		// Emitted only on a successfully stored score, which is the one
+		// signal that means a human actually finished a round -- page loads,
+		// asset fetches and bot traffic never reach here. The manifest's
+		// "round-played" alert matches this exact prefix, so keep the two in
+		// step if this line is ever reworded.
+		log.Printf("round complete: strokes=%d", e.Strokes)
 		writeLeaderboards(w, r, store)
 	})
 

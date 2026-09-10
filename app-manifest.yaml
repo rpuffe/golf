@@ -16,3 +16,13 @@ env:                 # non-secret config only — NO secrets, tokens, or credent
   LOG_LEVEL: info    # here; v1 has no secret support (see docs/contract.md)
 storage: s3          # private per-env S3 bucket; name arrives via STORAGE_BUCKET
                      # (see docs/contract.md). App falls back to in-memory when unset.
+alerts:              # log-pattern alerts -> metric filter + alarm -> platform alert email
+  - name: round-played
+    # Matches the line main.go emits after a score is successfully stored.
+    # Not an error signature: this one is deliberately a "someone used it"
+    # notification. The alarm fires on any match in a 5-minute window and
+    # only re-notifies after a quiet window, so a busy afternoon is a
+    # handful of emails, not one per player. Applies to golf and golf-dev
+    # alike — the manifest is per-app, not per-environment, so a test round
+    # against golf-dev will also send mail.
+    pattern: '"round complete:"'
