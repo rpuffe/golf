@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	_ "embed"
 )
@@ -41,10 +43,7 @@ func main() {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
-		in.Name = strings.TrimSpace(in.Name)
-		if len(in.Name) > 20 {
-			in.Name = in.Name[:20]
-		}
+		in.Name = cleanName(in.Name)
 		if in.Name == "" || in.Strokes <= 0 || in.Strokes > 9999 {
 			http.Error(w, "invalid name or score", http.StatusBadRequest)
 			return
@@ -87,7 +86,7 @@ func main() {
 	log.Printf("golf listening on %s", addr)
 	srv := &http.Server{
 		Addr:              addr,
-		Handler:           mux,
+		Handler:           securityHeaders(mux),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	log.Fatal(srv.ListenAndServe())
@@ -110,6 +109,37 @@ func writeLeaderboards(w http.ResponseWriter, r *http.Request, store Store) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{"allTime": allTime, "today": today})
+}
+
+// cleanName trims a player name, drops control characters, and caps it at 20
+// characters (runes, so a multi-byte name is never cut mid-character).
+func cleanName(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == utf8.RuneError {
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.TrimSpace(s)
+	if r := []rune(s); len(r) > 20 {
+		s = strings.TrimSpace(string(r[:20]))
+	}
+	return s
+}
+
+// securityHeaders sets conservative browser hardening on every response. The
+// page is one self-contained file (inline script + style, no third-party
+// assets), so the CSP only needs to allow inline code and same-origin fetches.
+func securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'")
+		h.Set("X-Content-Type-Options", "nosniff")
+		h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		h.Set("X-Frame-Options", "DENY")
+		h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func getenv(k, def string) string {

@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 )
@@ -112,11 +111,9 @@ func (h *Hub) serveHole(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
-	in.Name = strings.TrimSpace(in.Name)
-	if len(in.Name) > 20 {
-		in.Name = in.Name[:20]
-	}
-	if in.Name == "" || in.Hole <= 0 || in.Strokes <= 0 {
+	in.Name = cleanName(in.Name)
+	// Bounds keep the unauthenticated feed from relaying nonsense to everyone.
+	if in.Name == "" || in.Hole <= 0 || in.Hole > 18 || in.Strokes <= 0 || in.Strokes > 99 || len(in.ID) > 64 {
 		http.Error(w, "invalid event", http.StatusBadRequest)
 		return
 	}

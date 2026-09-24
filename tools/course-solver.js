@@ -1,78 +1,51 @@
 // Course solver: paste this whole file into the browser console on a running
-// game (after entering a name), then run e.g. __sim.solve(0) for hole 1.
-// It drives the real step() physics over a grid of club x angle x power from
-// the tee, then again from the landing cells nearest the cup, and reports:
-//   level1.aces  - hole-in-one samples per club (window size; 0 = no ace)
-//   level1.pen   - samples that found water/lava per club
-//   birdies      - two-shot hole-outs: where the first shot stopped, how it
-//                  was hit [club, angle deg, power], and how many second
-//                  shots hole out from there (window size)
-// __sim.trace(hole, x, y, club, angleDeg, power) replays one shot.
-// __sim.setHoles([...]) swaps the live course to try a draft layout.
+// game, then run e.g. __solve(1) for hole 2 (zero-based index).
+// It drives the real stepBall() physics over a grid of club x angle x power
+// from the tee (at several start ticks, so moving parts are sampled at
+// different timings), then again from the stopped cells nearest the cup, and
+// reports:
+//   aces         - hole-in-one samples per club [Power, Loft, Precision]
+//   pen          - samples that found water/lava per club
+//   birdieCells  - landing cells from which some second shot holes out
+//   aceLines     - sample ace shots as [club, angleDeg, power, startTick]
+// Options: { angStep:3, powers:[...], t0s:[0, 60], keep:20 }
 
-window.__sim = (function(){
-  let penalty=0, sunk=false, patched=false;
-  const orig = {};
-  function patch(){
-    if (patched) return; patched=true;
-    orig.sink=sink; orig.haz=hazardPenalty; orig.toast=toast; orig.queue=queueMicroGreen;
-    sink = () => { sunk=true; ball.moving=false; ball.vx=ball.vy=0; };
-    hazardPenalty = (k) => { penalty += (k==='lava'?2:1); ball.moving=false; ball.vx=ball.vy=0; ball.z=0; ball.x=lastShotPos.x; ball.y=lastShotPos.y; };
-    toast = () => {};
-    queueMicroGreen = () => {};
+window.__solve = function (i, opts = {}) {
+  const angStep = opts.angStep || 3, powers = opts.powers || [.25,.35,.45,.55,.65,.75,.85,.95,1];
+  const t0s = opts.t0s || [0, 60], keep = opts.keep || 20;
+  holeIdx = i; loadHole(i); banner = null;
+  const quiet = recorderFx({ contacts:0, banks:[], landed:false, portal:null });
+  const savedStar = starTaken; starTaken = true;   // stars never change a shot
+  function shot(x, y, c, a, p, t0) {
+    const b = { x, y, z:0, vx:0, vy:0, vz:0 };
+    launch(b, Math.cos(a), Math.sin(a), p, CLUBS[c]);
+    let st = 'moving';
+    for (let n = 0; n < 3000 && st === 'moving'; n++) st = stepBall(b, t0 + n, quiet);
+    return { x:b.x, y:b.y, st };
   }
-  function unpatch(){ if(!patched) return; patched=false; sink=orig.sink; hazardPenalty=orig.haz; toast=orig.toast; queueMicroGreen=orig.queue; }
-  function shot(x,y,c,angle,power){
-    penalty=0; sunk=false;
-    const club=CLUBS[c];
-    ball={x,y,vx:Math.cos(angle)*club.speed*power,vy:Math.sin(angle)*club.speed*power,z:0,vz:club.loft*power,moving:true,
-      groundFriction:club.friction,lipOutShown:false,lastBumperIdx:-1,bumperToasted:true,wellInside:false,wellVisited:true,wellExitToasted:true,wellCoreHit:true,gravityTrail:[]};
-    lastShotPos={x,y}; portalCooldown=0;
-    let n=0; while(ball.moving && n<6000){ step(); n++; }
-    return {x:ball.x,y:ball.y,sunk,penalty,frames:n};
-  }
-  function expand(pos, angStep, powers){
-    const out=[];
-    for(let c=0;c<3;c++) for(let a=0;a<360;a+=angStep) for(const p of powers){
-      const r=shot(pos.x,pos.y,c,a*Math.PI/180,p);
-      out.push({c,a,p,x:r.x,y:r.y,sunk:r.sunk,pen:r.penalty});
-    }
+  function expand(x, y) {
+    const out = [];
+    for (const t0 of t0s) for (let c = 0; c < 3; c++) for (let a = 0; a < 360; a += angStep) for (const p of powers)
+      out.push({ c, a, p, t0, ...shot(x, y, c, a * Math.PI / 180, p, t0) });
     return out;
   }
-  function summarize(list){
-    const s={aces:[0,0,0],pen:[0,0,0],n:list.length};
-    for(const r of list){ if(r.sunk&&!r.pen) s.aces[r.c]++; if(r.pen) s.pen[r.c]++; }
-    return s;
+  const [tx, ty] = HOLES[i].tee, l1 = expand(tx, ty);
+  const aces = [0,0,0], pen = [0,0,0];
+  for (const r of l1) { if (r.st === 'sunk') aces[r.c]++; if (r.st === 'water' || r.st === 'lava') pen[r.c]++; }
+  const cells = new Map();
+  for (const r of l1) {
+    if (r.st !== 'stopped') continue;
+    const k = Math.floor(r.x / 40) + ',' + Math.floor(r.y / 40);
+    if (!cells.has(k)) cells.set(k, r);
   }
-  function cluster(list, cell){
-    const m=new Map();
-    for(const r of list){ if(r.pen||r.sunk) continue; const k=Math.floor(r.x/cell)+','+Math.floor(r.y/cell); if(!m.has(k)) m.set(k,{x:r.x,y:r.y,n:0,via:r}); m.get(k).n++; }
-    return [...m.values()];
+  const near = [...cells.values()].sort((a, b) => Math.hypot(a.x - cup.x, a.y - cup.y) - Math.hypot(b.x - cup.x, b.y - cup.y)).slice(0, keep);
+  const birdies = [];
+  for (const c of near) {
+    const ok = expand(c.x, c.y).filter(r => r.st === 'sunk').length;
+    if (ok) birdies.push({ from:[c.x | 0, c.y | 0], via:[c.c, c.a, c.p], holeouts:ok });
   }
-  function solve(i, opts={}){
-    const angStep=opts.angStep||3, powers=opts.powers||[.2,.3,.4,.5,.6,.7,.8,.9,.95,1], keep=opts.keep||24, cell=opts.cell||36;
-    holeIdx=i; loadHole(i); patch();
-    const t0=performance.now();
-    const tee={x:HOLES[i].tee[0],y:HOLES[i].tee[1]};
-    const l1=expand(tee,angStep,powers);
-    const s1=summarize(l1);
-    const aceLines=l1.filter(r=>r.sunk&&!r.pen).slice(0,12);
-    // candidate second positions: closest to cup, diverse cells
-    const cells=cluster(l1,cell).map(c=>({...c,d:Math.hypot(c.x-cup.x,c.y-cup.y)})).sort((a,b)=>a.d-b.d);
-    const picked=[]; for(const c of cells){ if(picked.length>=keep) break; picked.push(c); }
-    const birdies=[]; let reach=0;
-    for(const c of picked){
-      const l2=expand({x:c.x,y:c.y},angStep,powers);
-      const ok=l2.filter(r=>r.sunk&&!r.pen);
-      if(ok.length){ birdies.push({from:[Math.round(c.x),Math.round(c.y)],firstShot:c.via,holeouts:ok.length,cells:c.n,sample:ok[0]}); }
-      reach++;
-    }
-    unpatch(); loadHole(i);
-    return {hole:HOLES[i].name, par:HOLES[i].par, ms:Math.round(performance.now()-t0), level1:s1, aceLines, cellsTried:reach, birdieRoutes:birdies.length, birdies:birdies.slice(0,10)};
-  }
-  // trace one shot for inspection
-  function trace(i,x,y,c,angleDeg,power){ holeIdx=i; loadHole(i); patch(); const r=shot(x,y,c,angleDeg*Math.PI/180,power); unpatch(); loadHole(i); return r; }
-  function setHoles(arr){ HOLES.length=0; HOLES.push(...arr); }
-  return {solve,trace,shot,setHoles,patch,unpatch};
-})();
+  starTaken = savedStar; loadHole(i); banner = null;
+  return { hole:HOLES[i].name, aces, pen, reachableCells:cells.size, birdieCells:birdies.length, birdies:birdies.slice(0, 5),
+    aceLines:l1.filter(r => r.st === 'sunk').slice(0, 6).map(r => [r.c, r.a, r.p, r.t0]) };
+};
 'solver loaded';

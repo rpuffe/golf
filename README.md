@@ -1,9 +1,11 @@
-# ⛳ Mini Golf
+# ⛳ Golden Hour Golf
 
-A tiny browser mini-golf game with a live leaderboard and real-time social
-notifications, deployed on [flightdeck](./CLAUDE.md).
+A browser mini-golf game played at sunset, with a live leaderboard and
+real-time social notifications, deployed on [flightdeck](./CLAUDE.md).
 
-Play nine hand-designed holes, drag-to-putt, and race for the fewest strokes.
+Play nine hand-designed holes with three clubs (Power, Loft, Precision). The
+course has windmills, sliding blocks, springs, rifts and a hidden star on
+every hole. Race for the fewest strokes.
 Scores persist to S3, and while you play you get a toast whenever another
 player currently online finishes a hole.
 
@@ -31,16 +33,18 @@ Go server (main.go)
 
 ### The game (`index.html`)
 
-Pure canvas, no assets. The whole thing is one file embedded into the binary
-at build time (`//go:embed index.html`).
+Pure canvas, no assets: sounds are synthesized with WebAudio, and
+everything is drawn in code. The whole thing is one file embedded into the
+binary at build time (`//go:embed index.html`).
 
 - **Course**: nine holes defined as data (`BASE_HOLES` — tee, cup, greens,
-  trees, mountains, sand, water, and special terrain). See the repeatable visual and physics rules in
-  [the course-design guide](docs/course-design.md).
-- **Physics**: drag back from the ball to aim (slingshot), choose a club, and
+  trees, mountains, sand, water, and moving parts). See the visual and
+  physics rules in [the course-design guide](course-design.md).
+- **Physics**: drag back anywhere to aim (slingshot), choose a club, and
   release to hit. Lofted shots can clear trees and ground hazards; mountains
-  are permanent barriers. Grounded balls roll with friction and reflect from
-  obstacle rectangles, sub-stepped so fast shots cannot tunnel through them.
+  and windmills are permanent barriers. Physics runs at a fixed 60 Hz,
+  sub-stepped so fast shots cannot tunnel. The aim preview runs the same
+  physics, so it always matches the real shot.
 - **Flow**: enter a name → play 9 holes → a round-complete card shows your
   score vs par and the **Today** and **All-time** leaderboards.
 
@@ -86,7 +90,7 @@ heartbeat keeps the stream under the ALB's 60s idle timeout.
 | `GET /healthz`       | —                                 | `200 ok` (never touches S3)      |
 | `POST /api/score`    | `{ name, strokes }`               | `{ allTime, today }` leaderboards |
 | `GET /api/leaderboard` | —                               | `{ allTime, today }`             |
-| `POST /api/hole`     | `{ id, name, hole, strokes }`     | `204` (broadcasts to others)     |
+| `POST /api/hole`     | `{ id, name, hole, strokes }`     | `204` (broadcasts to others; hole 1–18, strokes 1–99) |
 | `GET /api/events`    | — (SSE)                           | `event: holeout` stream          |
 
 Leaderboard rows are `{ name, strokes, date }`, best-per-player, ascending, top 10.
@@ -108,10 +112,11 @@ restart. Set `PORT` to override the listen port (default `8080`).
 | File                 | What it is                                             |
 | -------------------- | ------------------------------------------------------ |
 | `index.html`         | the entire game (canvas + UI), embedded into the binary |
-| `main.go`            | HTTP server, routes, score validation                  |
+| `main.go`            | HTTP server, routes, score validation, security headers |
 | `store.go`           | `Store` interface + S3 and in-memory implementations   |
 | `hub.go`             | SSE hub for the live social feed                        |
-| `docs/course-design.md` | obstacle language and future hole-authoring guide    |
+| `course-design.md`   | obstacle language and hole-authoring guide (kept out of `docs/`, which `make upgrade` owns) |
+| `tools/course-solver.js` | brute-force playability checker for hole data      |
 | `Dockerfile`         | multi-stage Go build → distroless static image         |
 | `app-manifest.yaml`  | flightdeck service config (name, port, `storage: s3`)  |
 

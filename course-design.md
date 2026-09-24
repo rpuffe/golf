@@ -14,8 +14,13 @@ their physics before the player takes a shot.
 | Water | Airborne shots pass over it; landing or rolling into it adds one stroke and resets the ball to its previous lie | Forced carries and high-risk shortcuts |
 | Lava | Airborne shots pass over it; landing or rolling into it adds two strokes and resets the ball | Severe punishment around the most rewarding lines |
 | Ice | Grounded balls retain almost all their speed; airborne shots are unaffected | Overshoot danger, long banks, and braking puzzles |
-| Neon bumper | Reflects grounded/low shots and returns slightly more speed; a high Loft clears it | Bank-shot shortcuts, chip routes, and pinball set pieces |
+| Candy bumper | Reflects grounded/low shots and returns slightly more speed; a high Loft clears it | Bank-shot shortcuts, chip routes, and pinball set pieces |
 | Paired rifts | Grounded balls teleport between the two rings while keeping their direction and speed; airborne shots pass over | Finale set pieces and impossible-looking routes |
+| Windmill | Rotating sails with infinite height; a sail bats the ball in its own direction of travel. A ball can never come to rest under the sails | Timing gates. Nothing flies over it |
+| Sliding block | Moves back and forth on a visible track; 30 px tall, so a Loft clears it. A block that runs into a resting ball shoves it | Traffic to time or to chip over |
+| Boost arrows | Accelerate a rolling ball along the arrows, up to a cap | Turbo lanes that extend Power's reach |
+| Spring | A rolling ball that crosses it is launched into the air, higher the faster it arrives | A third route over water for ground clubs |
+| Star | One per hole. Collected by any ball passing low enough; never affects the score | Rewards for the risky or scenic line |
 
 Do not draw a permanent barrier as a tree. Players should be able to rely on
 the visual rule: **trees can be chipped over; mountains cannot**. The plain
@@ -23,7 +28,7 @@ dark walls around the edge of the canvas are only the course boundary.
 
 ## Hole data
 
-Holes live in `BASE_HOLES` in `index.html` and are authored in the landscape
+Holes live in `HOLES` in `index.html` and are authored in the landscape
 `960 × 480` coordinate space. Portrait mode rotates the same data.
 
 ```js
@@ -43,8 +48,17 @@ Holes live in `BASE_HOLES` in `index.html` and are authored in the landscape
   lava: [[500, 300, 120, 90]],
   bumpers: [[360, 180, 22]],
   portals: [[250, 240], [710, 120]],
+  springs: [[300, 150, 20]],                     // [cx, cy, r]
+  boosts: [[214, 262, 96, 40, 0]],               // [x, y, w, h, angleDeg]
+  sliders: [{ rect: [270, 40, 40, 120], travel: [0, 280], period: 150, phase: 0 }],
+  windmills: [{ center: [470, 240], len: 60, hub: 13, blades: 4, speed: .028, phase: .4 }],
+  star: [480, 74],
+  signs: [[110, 120, 'EASE OFF · ACE']],
 }
 ```
+
+Portrait phones see the same landscape world rotated by the render
+transform, so hole data and physics never change with orientation.
 
 Obstacle arrays use `[x, y, width, height, clearanceHeight, type]`:
 
@@ -81,33 +95,37 @@ Aim for one memorable decision per hole. A hole is not finished until both its
 safe and high-risk/high-reward routes are visually readable and practically
 playable.
 
-## Two physics facts that shape every hole
+## Physics facts that shape every hole
 
 - **A clear straight line is an ace.** A rolling ball only lips out above
-  7 px/frame; on turf that means any shot that would stop within roughly
-  250 px past the cup drops in. So the short line on every hole must be
-  narrow (a gap, a bank, a rift, a hazard to skim) or blocked outright, or
-  the hole is a free ace.
-- **The aim preview shows landing and rollout for Power and Precision, but
-  not the rollout of a Loft.** Loft is the club that still needs feel, which
-  is why the hedge hole's only ace is a Loft.
+  7 px/frame, so any shot that would stop within roughly 250 px past the cup
+  drops in. The short line on every hole must be narrow (a gap, a bank, a
+  rift, timing, a hazard to skim) or blocked outright.
+- **What each club's preview shows is part of its identity.** Power's
+  preview stops at its first contact. Loft's stops at touchdown, so its
+  rollout needs feel. Precision shows the full path, including banks, rifts
+  and the timing of moving parts, but its range is only about 200 px.
+- **Physics runs at a fixed 60 Hz.** It no longer depends on the display's
+  refresh rate, and moving obstacles are functions of the physics tick, so
+  the preview and the real shot always agree.
 
-## The Neon Nine
+## Golden Hour course
 
-| # | Hole | Par | Lesson | Short line | Patient line |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Runway | 3 | Power + ice rollout | ease off down the ice strip: ace; flat out lips out and slides back | play the sides around the sand |
-| 2 | Splash Zone | 3 | carrying water | full drive through the footbridge, then hole out | Loft the canal, approach, putt |
-| 3 | Over the Hedge | 3 | height | one Loft over the hedge (rollout unpreviewed) | three shots around the end |
-| 4 | The Cage | 3 | banks | drive past the mountain, thread the posts | lay up in a corridor, tap through the door |
-| 5 | Glacier | 3 | ice | razor-thin bank off the bottom wall around the island | drive onto the ice, then approach |
-| 6 | Island | 3 | commitment | layup to the shore, Loft onto the island, hole the Loft | same, but putt |
-| 7 | Wormhole | 3 | rifts | roll into the rift, exit fires at the flag; a miss finds the lake | around the lake along the bottom |
-| 8 | Gravity Bloom | 3 | gravity | skim the star so it bends the roll to the green | Loft above the well |
-| 9 | Supernova | 5 | everything | rift heist up the left edge into the greenside bunker | canal, S-bend, ice, around the lava |
+| # | Hole | Par | Signature |
+| --- | --- | --- | --- |
+| 1 | Runway | 3 | ease off down the ice strip for an ace; the sides are safe |
+| 2 | The Old Mill | 3 | time a shot through the windmill; the turbo lane feeds the lower gap |
+| 3 | Over the Hedge | 3 | one brave Loft over the hedge, or three shots around |
+| 4 | Springboard | 3 | Loft the canal, thread the footbridge, or roll onto the spring and fly (star over the canal) |
+| 5 | The Cage | 3 | four candy bumpers around the green, ponds either side |
+| 6 | Rush Hour | 3 | three sliding blocks: pick a gap or Loft the traffic |
+| 7 | Glacier | 3 | a thin ice bank around the island |
+| 8 | Gravity Bloom | 3 | skim the star so gravity bends the roll |
+| 9 | Supernova | 5 | rift heist, S-bend, ice, lava |
 
-Hole data is verified with a brute-force solver that runs the game's own
-`step()` over a grid of club × angle × power from the tee and again from the
-best landing cells, and reports ace windows, penalty counts, and two-shot
-hole-outs. Re-run it (`tools/course-solver.js`, pasted into the browser console) after
-moving anything.
+Verify hole data with `tools/course-solver.js`: paste it into the browser
+console on a running game and call `__solve(i)`. It runs the game's own
+`stepBall()` over a grid of club × angle × power (at several start ticks, so
+moving parts are sampled at different timings) from the tee, and again from the
+stopped cells nearest the cup. It reports ace counts, penalties, and two-shot
+hole-outs. Re-run it after moving anything.

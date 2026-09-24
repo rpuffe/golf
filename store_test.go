@@ -31,3 +31,17 @@ func TestAggregateIncludesDateOfLatestBestScore(t *testing.T) {
 		t.Fatalf("unexpected Grace date: %+v", got[1])
 	}
 }
+
+func TestCleanName(t *testing.T) {
+	cases := map[string]string{
+		"  Ada  ":   "Ada",
+		"a\x00b\nc": "abc",
+		"ÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅ": "ÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅÅ",
+		"\x01\x02": "",
+	}
+	for in, want := range cases {
+		if got := cleanName(in); got != want {
+			t.Errorf("cleanName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
