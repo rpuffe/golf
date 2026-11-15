@@ -2,9 +2,12 @@
 // default first-person view looks down the fairway.
 //
 // Ellipses are [cx, cz, rx, rz]. Hills are [x, z, radius, height].
-// Each hole spotlights one feature (see design/). Holes 5-7 came from the
-// round-6 council (design/council-round6.md): a windmill that only turns
-// while a ball flies, a graveyard with a jumpscare, and moon gravity.
+// Each hole spotlights one feature (see design/). The windmill, the graveyard
+// and moon gravity came from the round-6 council (design/council-round6.md);
+// the bowling green, crazy golf and the finale from round 7
+// (design/council-round7.md).
+
+import { mulberry32 } from './trees.js';
 
 export const HOLES = [
   {
@@ -73,6 +76,26 @@ export const HOLES = [
     wind: 6.5,
   },
   {
+    name: 'The Bowling Green',
+    par: 4, seed: 115,
+    spotlight: 'bowling',
+    tee: [0, 0], pin: [0, -276],
+    path: [[0, -6], [0, -200], [0, -276]],
+    fairwayWidth: 16, banking: 0.1,
+    bounds: [-50, -304, 50, 14],
+    greenSize: [14, 12], greenTilt: [0.01, -0.012],
+    hills: [[-38, -90, 26, 3], [38, -120, 26, 3], [0, -296, 22, 1.0]],
+    bunkers: [[-10.5, -140, 2.2, 26], [10.5, -140, 2.2, 26],   // the gutters
+      [-9, -286, 4, 3], [9, -264, 3.5, 4]],
+    ponds: [],
+    trees: { density: 0.8 },
+    // ten geese racked like pins where a pure drive stops; the 5-pin is the Toulouse kingpin
+    bowling: { at: [0, -132], gap: 1.15, row: 1.0, rows: 4, kingpin: 4, gutters: [0, 1] },
+    geese: [{ area: [-14, -250, 6], radius: 14 }, { area: [14, -228, 6], radius: 14 }],   // lane attendants
+    wind: 2,
+    hint: 'Ten geese. One ball. Bowl.',
+  },
+  {
     name: 'The Windmill of Spite',
     par: 4, seed: 67,
     spotlight: 'windmill',
@@ -109,26 +132,58 @@ export const HOLES = [
     hint: 'Shh. Old Tom is resting.',
   },
   {
-    name: 'Moonshot',
-    par: 4, seed: 97,
-    spotlight: 'moon',
-    tee: [0, 0], pin: [20, -330],
-    path: [[0, -6], [-6, -190], [20, -330]],
+    name: 'Crazy Golf',
+    par: 2, seed: 131,
+    spotlight: 'mini',
+    tee: [0, 0], pin: [2.2, -16],
+    path: [[0, 0], [0, -8], [2.2, -16]],
+    fairwayWidth: 40, roll: 0, banking: 0, teeLift: 0,
+    bounds: [-30, -40, 30, 12],
+    greenSize: [8, 13], greenCenter: [1, -8], greenTilt: [0, 0], greenBumps: 0,
+    hills: [], bunkers: [], ponds: [],
+    trees: { density: 0.5 },
+    // a felt lane between rails; one of three obstacle decks is drawn per round (resolveHole)
+    mini: {
+      w: 2.8, rail: 0.09, railH: 0.22, oobPad: 0.6, decks: [
+        { deck: 'The Turnstile', windmill: { axis: 'y', at: [0.7, -11.6], hubH: 0.14, len: 1.25, blades: 3, period: 2.8, step: 1.3, bladeR: 0.11, tower: 0.12, towerH: 0.5, face: 0 } },
+        { deck: 'Pinball', bumpers: [[0.5, -4, 0.28], [-0.6, -6, 0.28], [0.9, -7, 0.28], [0.0, -13.5, 0.28], [2.4, -13.0, 0.28]] },
+        { deck: 'The Camel', ridges: [[-1.6, -5, 1.6, -5, 0.9, 0.25], [-0.8, -12.4, 3.6, -11.2, 0.9, 0.32]] },
+      ],
+    },
+    geese: [{ area: [0.3, -5, 1.2], radius: 4 }],
+    wind: 0,
+    hint: 'Crazy golf. Putter only, in spirit.',
+  },
+  {
+    name: 'The Last Moonshot',
+    par: 5, seed: 97,
+    spotlight: 'moon', finale: true,
+    tee: [0, 0], pin: [24, -420],
+    path: [[0, -6], [-10, -200], [24, -420]],
     fairwayWidth: 30,
-    bounds: [-70, -360, 80, 14],
+    bounds: [-75, -452, 85, 14],
     greenSize: [16, 13], greenTilt: [0.008, 0.01], greenBumps: 0.2,
-    hills: [[20, -330, 34, 9], [-40, -110, 30, 4], [55, -230, 26, 4]],   // the green sits on a 9 m mesa
-    bunkers: [[4, -312, 4, 3], [38, -322, 3.5, 4], [-20, -200, 6, 4]],
-    ponds: [[-2, -255, 40, 16]],
+    hills: [[0, 6, 26, 12], [24, -420, 34, 9], [-36, -300, 24, 3], [62, -250, 26, 4]],   // a 12 m launch pad, a 9 m mesa
+    bunkers: [[6, -404, 4, 3], [44, -412, 3.5, 4], [-26, -292, 6, 4]],
+    ponds: [[-6, -168, 34, 13], [8, -372, 30, 9]],   // the crater lake, the moat
     trees: { density: 0.6 },
     airGravity: 0.5,
-    bossAura: { at: [14, -300], r: 22, core: 3, pull: 3.5, swirl: 5.0, top: 18, fade: 12, ground: 0.3 },   // the Honk Hole
-    geese: [{ area: [14, -300, 2], radius: 16, boss: true }, { area: [0, -300, 8], radius: 14 }, { area: [30, -300, 8], radius: 14 },
-      { area: [-8, -180, 12], radius: 14, breed: 'canada' }, { area: [16, -150, 12], radius: 14 }],
+    // the Honk Hole: stronger every stroke from the third (x1.3, x1.6 ... capped at x2.2)
+    bossAura: { at: [16, -385], r: 24, core: 3, pull: 3.5, swirl: 5.0, top: 18, fade: 12, ground: 0.3, grow: 0.3, growMax: 2.2 },
+    geese: [{ area: [16, -385, 2], radius: 16, boss: true }, { area: [2, -390, 8], radius: 14 }, { area: [32, -392, 8], radius: 14 },
+      { area: [-14, -210, 12], radius: 14, breed: 'canada' }, { area: [10, -240, 12], radius: 14 }, { area: [-30, -300, 10], radius: 14 }],
     goslings: 3,
     wind: 4,
-    hint: 'Moon gravity. Everything floats.',
+    hint: 'Last hole. The Honk Hole grows.',
   },
 ];
 
 export const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
+
+// Crazy golf draws one obstacle deck per round from the round seed: a pure
+// function, so everyone in a room (and Old Tom) plays the same layout.
+export function resolveHole(h, seed) {
+  const d = h.mini?.decks; if (!d) return h;
+  const k = Math.floor(mulberry32(((seed ?? 0) ^ 0x51ed27) >>> 0)() * d.length);
+  return { ...h, ...d[k], deckIdx: k };
+}

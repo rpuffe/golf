@@ -62,6 +62,12 @@ const L = {
     ['A short flight to the sand.', 'Special delivery: one {ball}, to the bunker.', 'IT FLEW AWAY WITH IT! IT FLEW AWAY WITH {ball}!']],
   tugSwallow: [['The goose has... eaten {ball}. Goodbye, {ball}.', 'It SWALLOWED {ball}! Is that allowed? It is not allowed!', 'IT ATE {ball}! IT ATE {ball} WHOLE! SOMEBODY CALL A VET!']],
   tugGooseHoled: [['The goose has holed it. For you. Unbelievable.', 'THE GOOSE PUNTED IT IN! The goose should turn pro!', 'THE GOOSE HOLED IT! SIGN THE GOOSE! SIGN THE GOOSE!']],
+  // round 7: the Bowling Green, crazy golf, and the finale
+  strike: [['A strike. Ten geese, all down.', 'STRIKE! All ten! The geese are furious!', 'STRIKE! TEN GEESE! I HAVE NEVER BEEN SO PROUD!']],
+  gutter: [['Into the gutter. Unlucky.', 'Gutter ball! In golf! That is a first.', 'GUTTER BALL! WRONG SPORT! WRONG SPORT ENTIRELY!']],
+  crazy: [['Off the woodwork. Classic crazy golf.', 'It is a pinball machine in there!', 'IT HIT EVERYTHING! THIS IS NOT GOLF, IT IS AN ARCADE!']],
+  bossAngry: [['The Honk Hole is getting stronger.', 'The whirlpool is growing! Hurry, {name}!', 'IT IS GROWING! THE HONK HOLE IS HUNGRY!']],
+  finale: [['And that is the round. What a day.', 'That is the round! Fetch me a lie-down!', 'THE ROUND IS OVER! I HAVE NO VOICE LEFT! GOODNIGHT!']],
   windmill: [['Oh, the windmill has taken an interest.', 'SWATTED by the windmill! It only moves when you swing!', 'THE WINDMILL! THE WINDMILL HATES {name}! IT WAITED FOR THIS!'],
     ['Off the sails. Mini golf rules apply.', 'The windmill sends it back. Spiteful thing.', 'IT HIT THE WINDMILL! WHO PUT A WINDMILL ON A GOLF COURSE!']],
   tomb: [['Off a headstone. Respectfully.', 'Clattered a gravestone. Sorry, whoever you were.', 'IT HIT A GRAVE! DO NOT WAKE THEM! DO NOT WAKE ANYONE!']],
@@ -117,7 +123,7 @@ let clipsFailed = false;
 fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+const PRIO = { strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
 let lastPrio = 0, lastAt = 0, pending = null;
 let voice = null, enabled = true, captionEl = null, captionTimer = 0;
 export const commentator = { hysteria: 0, lastLine: '', lastClass: '', history: [] };

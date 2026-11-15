@@ -63,7 +63,7 @@ const CELL = 10;
 export function prepColliders(list) {
   const cells = new Map();
   for (const c of list) {
-    const r = (c.r ?? 0) + 0.5;
+    const r = (c.br ?? c.r ?? 0) + 0.5;   // br: a wall's half-length (x,z is its midpoint)
     const i0 = Math.floor((c.x - r) / CELL), i1 = Math.floor((c.x + r) / CELL);
     const j0 = Math.floor((c.z - r) / CELL), j1 = Math.floor((c.z + r) / CELL);
     for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
@@ -79,6 +79,8 @@ const EMPTY = [];
 // world: { course, wind:{x,z}, cup:{x,z}, colliders: prepColliders(...) | [...], ghost:(frame)=>{x,y,z}|null, trait }
 // collider kinds: {kind:'sphere', x,y,z,r, e, tag} (hard) · {kind:'canopy', x,y,z,r, tag} (soft)
 //                 {kind:'cyl', x,z,r,y0,y1, e, tag}
+//                 {kind:'wall', x1,z1,x2,z2, r, y0,y1, e, tag, x,z,br} (a vertical capsule: crazy-golf rails)
+//                 sphere + plow: true (bowling pins: the ball ploughs through, losing a quarter of its speed)
 export function simulate(world, start, L) {
   const { course } = world;
   const trait = world.trait ?? NO_TRAIT;
@@ -103,17 +105,20 @@ export function simulate(world, start, L) {
   const extra = world.dynamic ?? EMPTY;   // few, unbucketed (the geese, rival balls)
   const noTrees = !!world.noTrees;          // Ghost Ball power-up: through trees, tombstones and the windmill
   const ag = (course.hole?.airGravity ?? 1) * (world.airGravity ?? 1);   // moon gravity, in the air only
-  // Hole 5's windmill: blades sweep the plane z = pz, turning only while a ball
+  // The windmill: blades sweep the plane z = pz, turning only while a ball
   // flies. The angle is a pure function of the stroke number and sim time, so
   // the player, the preview, rivals and Old Tom all see the same blades.
   const wm = course.hole?.windmill;
-  const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + wm.face, len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: world.wmPhase ?? (world.strokeNo ?? 1) * wm.step } : null;
+  // axis 'y' is crazy golf's turnstile: the same rotor laid flat, sweeping the felt.
+  const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + (wm.face ?? 0), len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: world.wmPhase ?? (world.strokeNo ?? 1) * wm.step, flat: wm.axis === 'y', br: wm.bladeR ?? 0.8 } : null;
   let swatted = false;
-  // Hole 7's boss goose bends space: the Honk Hole, a horizontal whirlpool
+  // The finale's boss goose bends space: the Honk Hole, a horizontal whirlpool
   // around its throne (pulls in, swirls anticlockwise). Deterministic, so the
   // carry preview, rivals and Old Tom all see the same bend.
   const ba = !world.noAura && course.hole?.bossAura;
   const baY = ba ? course.h(ba.at[0], ba.at[1]) : 0;
+  // the finale's Honk Hole grows: x1 for strokes 1-2, then +grow per stroke, capped
+  const ak = ba ? auraGrowth(ba, world.strokeNo) : 1;
   let auraTold = false;
   const aura = (x, y, z, out) => {
     const dx = ba.at[0] - x, dz = ba.at[1] - z, r = Math.hypot(dx, dz);
@@ -122,7 +127,7 @@ export function simulate(world, start, L) {
     const hk = Math.max(0, Math.min(1, (ba.top + ba.fade - (y - baY)) / ba.fade));
     const c = Math.max(0, Math.min(1, (r - 0.5) / (ba.core - 0.5))), ck = c * c * (3 - 2 * c);
     const f = (1 - r / ba.r) * ck * hk;
-    out.x = f * (ba.pull * ux + ba.swirl * -uz); out.z = f * (ba.pull * uz + ba.swirl * ux); out.f = f;
+    out.x = f * ak * (ba.pull * ux + ba.swirl * -uz); out.z = f * ak * (ba.pull * uz + ba.swirl * ux); out.f = f;
     return out;
   };
   const A = { x: 0, z: 0, f: 0 };
@@ -160,6 +165,8 @@ export function simulate(world, start, L) {
         if (m > 0) { const k = Math.min(m * ba.ground, 0.8 * (SURF[s] ?? SURF.rough).roll) / m; ax += A.x * k; az += A.z * k; }
         if (!auraTold && A.f > 0.15) { auraTold = true; ev('aura', { speed: A.f }); }
       }
+      // Banana Ball on a crazy-golf putt: constant curl along the felt (+ curls right)
+      if (L.curl) { const sp = Math.hypot(vx, vz); ax += L.curl * sp * -vz; az += L.curl * sp * vx; }
       vx += ax * DT; vy += ay * DT; vz += az * DT;
       // keep velocity in the tangent plane
       const vn = vx * n.x + vy * n.y + vz * n.z;
@@ -184,12 +191,18 @@ export function simulate(world, start, L) {
     const bucket = grid.cells.get(Math.floor(x / CELL) * 100003 + Math.floor(z / CELL)) ?? EMPTY;
     for (let ci = 0, cn = bucket.length + extra.length; ci < cn; ci++) {
       const c = ci < bucket.length ? bucket[ci] : extra[ci - bucket.length];
-      if (noTrees && (c.tag === 'tree' || c.tag === 'tomb' || c.tag === 'windmill')) continue;
-      if (c.push && knocked.has(c)) continue;
+      if (noTrees && (c.tag === 'tree' || c.tag === 'tomb' || c.tag === 'windmill' || c.tag === 'bumper')) continue;   // never 'rail'
+      if ((c.push || c.plow) && knocked.has(c)) continue;
       if (c.kind === 'sphere') {
         const dx = x - c.x, dy = y - c.y, dz = z - c.z, rr = c.r + R;
         const d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < rr * rr) {
+          if (c.plow) {   // a bowling pin: a heavy ball through a light pin
+            knocked.add(c);
+            ev('hit', { tag: c.tag, speed: Math.hypot(vx, vy, vz) });
+            vx *= 0.75; vy *= 0.75; vz *= 0.75;
+            continue;
+          }
           const d = Math.sqrt(d2) || 1e-6, nx = dx / d, ny = dy / d, nz = dz / d;
           const vn = vx * nx + vy * ny + vz * nz;
           if (vn < 0 && c.push) {
@@ -222,6 +235,22 @@ export function simulate(world, start, L) {
           }
           x = c.x + nx * rr; z = c.z + nz * rr;
         }
+      } else if (c.kind === 'wall') {
+        if (y < c.y0 || y > c.y1 + R) continue;
+        const sx = c.x2 - c.x1, sz = c.z2 - c.z1, l2 = sx * sx + sz * sz;
+        const t = l2 ? Math.max(0, Math.min(1, ((x - c.x1) * sx + (z - c.z1) * sz) / l2)) : 0;
+        const px = c.x1 + sx * t, pz = c.z1 + sz * t;
+        const dx = x - px, dz = z - pz, rr = c.r + R, d2 = dx * dx + dz * dz;
+        if (d2 < rr * rr) {
+          const d = Math.sqrt(d2) || 1e-6, nx = dx / d, nz = dz / d;
+          const vn = vx * nx + vz * nz;
+          if (vn < 0) {
+            const e = c.e ?? 0.7;
+            vx -= (1 + e) * vn * nx; vz -= (1 + e) * vn * nz;
+            ev('hit', { tag: c.tag, speed: -vn });
+          }
+          x = px + nx * rr; z = pz + nz * rr;
+        }
       } else if (c.kind === 'canopy') {
         const dx = x - c.x, dy = (y - c.y) * 1.25, dz = z - c.z;
         const inside = dx * dx + dy * dy + dz * dz < c.r * c.r;
@@ -233,13 +262,32 @@ export function simulate(world, start, L) {
         } else inCanopy.delete(c);
       }
     }
-    if (wmD && !noTrees && Math.abs(z - wmD.pz) < 1.0 && (x - wmD.hx) ** 2 + (y - wmD.hy) ** 2 < (wmD.len + 1) ** 2) {
-      const th = wmD.th0 + wmD.w * step * DT, rr = 0.8 + R;
+    const wmNear = wmD && !noTrees && (wmD.flat
+      ? Math.abs(y - wmD.hy) < 0.6 && (x - wmD.hx) ** 2 + (z - wmD.pz) ** 2 < (wmD.len + 1) ** 2
+      : Math.abs(z - wmD.pz) < 1.0 && (x - wmD.hx) ** 2 + (y - wmD.hy) ** 2 < (wmD.len + 1) ** 2);
+    if (wmNear) {
+      const th = wmD.th0 + wmD.w * step * DT, rr = wmD.br + R;
       blades:
       for (let b = 0; b < wmD.n; b++) {
         const a = th + b * 2 * Math.PI / wmD.n, ca = Math.cos(a), sa = Math.sin(a);
         for (let k = 1; k <= 5; k++) {
-          const rho = wmD.len * k / 5, sx = wmD.hx + ca * rho, sy = wmD.hy + sa * rho;
+          const rho = wmD.len * k / 5;
+          if (wmD.flat) {
+            // the turnstile: arms sweep the XZ plane at hub height; resolve in 2D
+            const sx = wmD.hx + ca * rho, sz = wmD.pz + sa * rho;
+            const ex = x - sx, ez = z - sz, d2 = ex * ex + ez * ez;
+            if (d2 >= rr * rr) continue;
+            const d = Math.sqrt(d2) || 1e-6, nx = ex / d, nz = ez / d;
+            const bvx = -wmD.w * rho * sa, bvz = wmD.w * rho * ca;
+            const vn = (vx - bvx) * nx + (vz - bvz) * nz;
+            if (vn < 0) {
+              vx -= 1.7 * vn * nx; vz -= 1.7 * vn * nz;
+              if (!swatted) { swatted = true; ev('hit', { tag: 'windmill', speed: -vn }); }
+            }
+            x = sx + nx * rr; z = sz + nz * rr;
+            break blades;
+          }
+          const sx = wmD.hx + ca * rho, sy = wmD.hy + sa * rho;
           const ex = x - sx, ey = y - sy, ez = z - wmD.pz, d2 = ex * ex + ey * ey + ez * ez;
           if (d2 >= rr * rr) continue;
           const d = Math.sqrt(d2) || 1e-6, nx = ex / d, ny = ey / d, nz = ez / d;
@@ -380,6 +428,9 @@ export function puttPower(metres) {
   const [pa, da] = T[T.length - 2], [pb, db] = T[T.length - 1];
   return Math.min(1.15, pb + (pb - pa) * (metres - db) / ((db - da) || 1));
 }
+
+// The finale's Honk Hole strength multiplier for a stroke (matches simulate()).
+export function auraGrowth(ba, strokeNo = 1) { return Math.min(ba.growMax ?? 1, 1 + (ba.grow ?? 0) * Math.max(0, (strokeNo ?? 1) - 2)); }
 
 // Windmill rotor angle for stroke `strokeNo` at `t` seconds into the shot (matches simulate()).
 export function windmillAngle(wm, strokeNo, t) { return strokeNo * wm.step + (2 * Math.PI / wm.period) * t; }

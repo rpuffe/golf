@@ -21,8 +21,8 @@ import (
 //go:embed web
 var webFiles embed.FS
 
-// minRoundStrokes is one stroke per hole on the 7-hole 3D course.
-const minRoundStrokes = 7
+// minRoundStrokes is one stroke per hole on the 9-hole 3D course.
+const minRoundStrokes = 9
 
 func main() {
 	port := getenv("PORT", "8080")

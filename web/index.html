@@ -56,6 +56,9 @@
   body.flying #wheel { opacity: 0; }
   #powerChip { position: absolute; left: 14px; top: 104px; padding: 6px 12px; border-radius: 12px; background: rgba(32,20,54,.7); font-size: 13px; max-width: 260px; }
   #powerChip b { color: var(--sun); }
+  #powerChip { pointer-events: auto; transition: font-size .3s, padding .3s; }
+  #powerChip.mini { font-size: 0; padding: 4px 8px; }
+  #powerChip.mini .e { font-size: 20px; }
   #between { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(440px, 94vw); padding: 14px 16px; pointer-events: auto; text-align: center; }
   #betweenHead { font-size: 22px; font-weight: 900; }
   #betweenHead small { display: block; font-size: 13px; color: var(--muted); font-weight: 700; }
@@ -164,6 +167,7 @@
   .toast { padding: 6px 12px; border-radius: 10px; background: rgba(20,12,36,.8); font-size: 13px; opacity: 0; transform: translateY(-6px); transition: all .3s; }
   .toast.show { opacity: 1; transform: none; }
   #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  body.inflight #crosshair { opacity: 0; }   /* nothing to aim at while the ball is moving */
   #crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.7); box-shadow: 0 0 0 1px #0006; }
 
   /* ---------- scope ---------- */
@@ -230,6 +234,10 @@
   table.sc { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
   table.sc th, table.sc td { padding: 5px 4px; border-bottom: 1px solid #e8d5b5; }
   table.sc th { color: #7a6a90; font-size: 11px; text-transform: uppercase; }
+  /* solo card: one compact row per line (hole, par, you, Old Tom) */
+  table.sc.wide { table-layout: fixed; font-size: 13px; text-align: center; }
+  table.sc.wide th, table.sc.wide td { padding: 4px 0; }
+  table.sc.wide th:first-child, table.sc.wide td:first-child { width: 3.2em; text-align: left; }
   td.under { color: #13955a; font-weight: 900; } td.over { color: #d0453a; font-weight: 900; }
   .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin-top: 10px; }
   .boards h4 { font-size: 12px; text-transform: uppercase; color: #7a6a90; }

@@ -68,7 +68,9 @@ export function buildCourse(hole) {
   const seed = hole.seed ?? 7;
   const pin = hole.pin, tee = hole.tee;
   const fwW = hole.fairwayWidth ?? 22;
-  const green = [pin[0], pin[1], hole.greenSize?.[0] ?? 13, hole.greenSize?.[1] ?? 11];
+  // greenCenter: crazy golf's lane sits in the flat middle of an oversized green
+  const green = [...(hole.greenCenter ?? pin), hole.greenSize?.[0] ?? 13, hole.greenSize?.[1] ?? 11];
+  const mini = hole.mini;
   const greenTilt = hole.greenTilt ?? [0, 0]; // metres of rise per metre (x, z)
   const B = hole.bounds; // [minX, minZ, maxX, maxZ]
 
@@ -103,7 +105,7 @@ export function buildCourse(hole) {
       h = h + (plane - h) * w;
     }
     const td = Math.hypot(x - tee[0], z - tee[1]);
-    if (td < 7) h = h + (teeBase + 0.25 - h) * smooth(Math.min(1, (7 - td) / 3));
+    if (td < 7 && !mini) h = h + (teeBase + (hole.teeLift ?? 0.25) - h) * smooth(Math.min(1, (7 - td) / 3));
     for (const b of hole.bunkers ?? []) {
       const e = ell(x, z, b);
       if (e < 1.3) h -= 0.9 * smooth(Math.min(1, (1.3 - e) / 0.8));
@@ -124,6 +126,9 @@ export function buildCourse(hole) {
 
   function surface(x, z) {
     if (x < B[0] || x > B[2] || z < B[1] || z > B[3]) return 'oob';
+    // crazy golf: off the felt lane (past the rails, with a pad so a ball hugging
+    // a rail never reads as out on the 0.5 m surface grid) is out of bounds
+    if (mini && ell(x, z, [green[0], green[1], green[2] * 1.45, green[3] * 1.45]) < 1 && distToPath(x, z, hole.path)[0] > mini.w / 2 + (mini.oobPad ?? 0.6)) return 'oob';
     // water is wherever the drawn water plane covers the ground (the plane spans 1.6x the pond)
     for (const p of ponds) if (ell(x, z, p.e) < 1.6 && height(x, z) < p.level + 0.05) return 'water';
     for (const b of hole.bunkers ?? []) if (ell(x, z, b) < 1) return 'sand';
@@ -175,6 +180,6 @@ export function buildCourse(hole) {
     return out;
   }
 
-  return { hole, height, surface, h, surf, normal, ponds, waterLevelAt, green, fairwayDist, bounds: B };
+  return { hole, height, surface, h, surf, normal, ponds, waterLevelAt, green, fairwayDist, bounds: B, distToPath: (x, z) => distToPath(x, z, hole.path)[0] };
 }
 

@@ -59,7 +59,7 @@ export function treeColliders(trees, course) {
   return cs;
 }
 
-// --------------------------------------------------------------- hole 6 tombstones
+// --------------------------------------------------------------- the graveyard tombstones
 export function placeTombs(course, holeDef) {
   const T = holeDef.tombs; if (!T) return [];
   const rng = mulberry32((holeDef.seed ?? 1) * 31337);
@@ -83,5 +83,49 @@ export function extraColliders(course, holeDef) {
   const wm = holeDef.windmill;
   if (wm) { const h = course.h(wm.at[0], wm.at[1]); cs.push({ kind: 'cyl', x: wm.at[0], z: wm.at[1], r: wm.tower, y0: h - 1, y1: h + wm.towerH, e: 0.4, tag: 'windmill' }); }
   for (const t of placeTombs(course, holeDef)) cs.push({ kind: 'cyl', x: t.x, z: t.z, r: 0.38, y0: t.y - 1, y1: t.y + 1.2, e: 0.5, tag: 'tomb' });
+  if (holeDef.mini) cs.push(...miniColliders(course, holeDef));
+  return cs;
+}
+
+// ---------------------------------------------------------------- crazy golf
+// The rails as segments in XZ: each side of the lane offset by half its width
+// plus the rail, outer corners closed, and end caps behind the tee and past
+// the cup. Shared by the colliders and the meshes so they always agree.
+export function miniRails(holeDef) {
+  const M = holeDef.mini, P = holeDef.path, off = M.w / 2 + M.rail;
+  const segs = [];
+  const dirs = [];
+  for (let i = 0; i < P.length - 1; i++) {
+    const dx = P[i + 1][0] - P[i][0], dz = P[i + 1][1] - P[i][1], l = Math.hypot(dx, dz) || 1;
+    dirs.push([dx / l, dz / l]);
+  }
+  for (const side of [-1, 1]) {
+    let prev = null;
+    for (let i = 0; i < P.length - 1; i++) {
+      const [ux, uz] = dirs[i], nx = -uz * side, nz = ux * side;
+      const a = [P[i][0] + nx * off, P[i][1] + nz * off], b = [P[i + 1][0] + nx * off, P[i + 1][1] + nz * off];
+      if (i === 0) { a[0] -= ux * 0.6; a[1] -= uz * 0.6; }
+      if (i === P.length - 2) { b[0] += ux * 0.8; b[1] += uz * 0.8; }
+      if (prev) segs.push([prev[0], prev[1], a[0], a[1]]);   // close the corner
+      segs.push([a[0], a[1], b[0], b[1]]);
+      prev = b;
+    }
+  }
+  // end caps
+  const [u0x, u0z] = dirs[0], [u1x, u1z] = dirs.at(-1);
+  const t0 = [P[0][0] - u0x * 0.6, P[0][1] - u0z * 0.6], t1 = [P.at(-1)[0] + u1x * 0.8, P.at(-1)[1] + u1z * 0.8];
+  segs.push([t0[0] + u0z * off, t0[1] - u0x * off, t0[0] - u0z * off, t0[1] + u0x * off]);
+  segs.push([t1[0] + u1z * off, t1[1] - u1x * off, t1[0] - u1z * off, t1[1] + u1x * off]);
+  return segs;
+}
+function miniColliders(course, holeDef) {
+  const M = holeDef.mini, cs = [];
+  for (const [x1, z1, x2, z2] of miniRails(holeDef)) {
+    // the rail's top follows the highest felt along it (the Camel's humps)
+    let top = -Infinity, bot = Infinity;
+    for (let k = 0; k <= 8; k++) { const h = course.h(x1 + (x2 - x1) * k / 8, z1 + (z2 - z1) * k / 8); top = Math.max(top, h); bot = Math.min(bot, h); }
+    cs.push({ kind: 'wall', x1, z1, x2, z2, x: (x1 + x2) / 2, z: (z1 + z2) / 2, br: Math.hypot(x2 - x1, z2 - z1) / 2, r: M.rail, y0: bot - 0.2, y1: top + M.railH, e: 0.7, tag: 'rail' });
+  }
+  for (const [x, z, r] of holeDef.bumpers ?? []) { const h = course.h(x, z); cs.push({ kind: 'cyl', x, z, r, y0: h - 0.5, y1: h + 0.5, e: 1.3, tag: 'bumper' }); }
   return cs;
 }

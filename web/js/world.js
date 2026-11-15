@@ -4,7 +4,7 @@
 import * as THREE from 'three';
 import { buildTerrainMesh, buildWater, buildGreenMesh } from './terrain.js';
 import { fbm } from './course.js';
-import { mulberry32, placeTrees, treeColliders } from './trees.js';
+import { mulberry32, placeTrees, treeColliders, miniRails } from './trees.js';
 export { mulberry32, placeTrees, treeColliders };
 import { R, CUP_R } from './physics.js';
 
@@ -30,9 +30,13 @@ export const LIGHTING = [
   { elev: 13, az: -20, top: 0x3b4f98, mid: 0xb39ac4, horizon: 0xffbe85, sun: 0xffcf8a, fog: 0xe6b48c, sunI: 2.7, hemi: 0.9 },
   { elev: 11, az: 10,  top: 0x34428e, mid: 0xc48fb0, horizon: 0xffae76, sun: 0xffbf7e, fog: 0xe0a88c, sunI: 2.8, hemi: 1.15 },
   { elev: 7,  az: 25,  top: 0x2c2a6e, mid: 0xb8709a, horizon: 0xff9a5e, sun: 0xffab62, fog: 0xd59482, sunI: 2.7, hemi: 1.25 },
+  // [4] the Bowling Green: the last of the sun, warm, long shadows
+  { elev: 5,  az: 30,  top: 0x26235f, mid: 0x9b5f92, horizon: 0xff8650, sun: 0xff9a56, fog: 0xc07f7d, sunI: 2.4, hemi: 1.22 },
   { elev: 3,  az: 35,  top: 0x1e1c58, mid: 0x7d4f8a, horizon: 0xff7440, sun: 0xff8a4a, fog: 0xa86a78, sunI: 2.0, hemi: 1.2 },
   // night: the sun disc doubles as the moon
   { elev: 12, az: -12, top: 0x060a1e, mid: 0x15203f, horizon: 0x34446a, sun: 0xb4ccff, fog: 0x18213a, sunI: 0.6, hemi: 0.75, night: true, fogNear: 35, fogFar: 240 },
+  // [7] crazy golf: neon night, short fog, a bright hemi so the felt reads
+  { elev: 18, az: -25, top: 0x0b0824, mid: 0x251a4f, horizon: 0x5a3a7e, sun: 0xd8c8ff, fog: 0x1c1838, sunI: 0.8, hemi: 1.05, night: true, fogNear: 60, fogFar: 420 },
   { elev: 30, az: 8,   top: 0x04061a, mid: 0x0f1a3e, horizon: 0x283866, sun: 0xe2eaff, fog: 0x121a30, sunI: 0.9, hemi: 0.85, night: true, fogNear: 160, fogFar: 1100 },
 ];
 
@@ -457,6 +461,89 @@ export function buildWindmill(course, wm) {
     const cloth = new THREE.Mesh(new THREE.PlaneGeometry(wm.len * 0.78, 1.5), sail); cloth.position.set(wm.len * 0.56, 0.85, 0.05);
     spar.castShadow = cloth.castShadow = true;
     arm.add(spar, cloth); rotor.add(arm);
+  }
+  g.add(rotor);
+  g.userData.rotor = rotor;
+  return g;
+}
+
+// ------------------------------------------------------------- crazy golf (hole 8)
+// White timber rails with red caps along the felt, red-and-white bumpers, a
+// sign, and string lights (emissive bulbs only: no point lights, so phones
+// stay fast). Every prop is under 0.6 m so the cup reads from anywhere.
+export function buildCrazyGolf(course, h) {
+  const g = new THREE.Group(), M = h.mini;
+  const timber = new THREE.MeshStandardMaterial({ color: 0xf4efe4, roughness: 0.8 });
+  const cap = new THREE.MeshStandardMaterial({ color: 0xd6362e, roughness: 0.6 });
+  for (const [x1, z1, x2, z2] of miniRails(h)) {
+    const len = Math.hypot(x2 - x1, z2 - z1), mx = (x1 + x2) / 2, mz = (z1 + z2) / 2, yaw = Math.atan2(x2 - x1, z2 - z1);
+    let top = -Infinity, bot = Infinity;
+    for (let k = 0; k <= 8; k++) { const y = course.h(x1 + (x2 - x1) * k / 8, z1 + (z2 - z1) * k / 8); top = Math.max(top, y); bot = Math.min(bot, y); }
+    const hgt = top + M.railH - (bot - 0.05);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(M.rail * 2, hgt, len + M.rail * 2), timber);
+    rail.position.set(mx, bot - 0.05 + hgt / 2, mz); rail.rotation.y = yaw; rail.castShadow = rail.receiveShadow = true;
+    const c = new THREE.Mesh(new THREE.BoxGeometry(M.rail * 2.4, 0.04, len + M.rail * 2.4), cap);
+    c.position.set(mx, bot - 0.05 + hgt + 0.02, mz); c.rotation.y = yaw;
+    g.add(rail, c);
+  }
+  const red = new THREE.MeshStandardMaterial({ color: 0xe8413a, roughness: 0.4, emissive: 0x401010 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4, emissive: 0x303030 });
+  for (const [x, z, r] of h.bumpers ?? []) {
+    const y = course.h(x, z);
+    for (let k = 0; k < 3; k++) {
+      const band = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.1, 20), k % 2 ? white : red);
+      band.position.set(x, y + 0.05 + k * 0.1, z); band.castShadow = true; g.add(band);
+    }
+    const top = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 14, 10), new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xffc030, emissiveIntensity: 0.8 }));
+    top.position.set(x, y + 0.32, z); g.add(top);
+  }
+  // string lights on posts down both sides of the lane
+  const bulbCols = [0xff5a7a, 0xffd34a, 0x5ad1ff, 0x8aff7a];
+  const bulbGeo = new THREE.SphereGeometry(0.06, 8, 6), postMat = new THREE.MeshStandardMaterial({ color: 0x3a3030 });
+  const P = h.path, off = M.w / 2 + 1.4;
+  const posts = [];
+  for (const side of [-1, 1]) for (let i = 0; i < P.length - 1; i++) {
+    const dx = P[i + 1][0] - P[i][0], dz = P[i + 1][1] - P[i][1], l = Math.hypot(dx, dz);
+    for (let t = 0; t <= (i === P.length - 2 ? 1 : 0.99); t += 0.5) posts.push([P[i][0] + dx * t - dz / l * off * side, P[i][1] + dz * t + dx / l * off * side, side]);
+  }
+  for (const [x, z] of posts) { const p = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.4, 6), postMat); p.position.set(x, course.h(x, z) + 1.2, z); g.add(p); }
+  for (const side of [-1, 1]) {
+    const ps = posts.filter(p => p[2] === side);
+    for (let i = 0; i < ps.length - 1; i++) {
+      const [ax, az] = ps[i], [bx, bz] = ps[i + 1], ay = course.h(ax, az) + 2.35, by = course.h(bx, bz) + 2.35;
+      for (let k = 0; k < 8; k++) {
+        const t = (k + 0.5) / 8, sag = Math.sin(t * Math.PI) * 0.35;
+        const b = new THREE.Mesh(bulbGeo, new THREE.MeshBasicMaterial({ color: bulbCols[(i * 8 + k) % 4] }));
+        b.position.set(ax + (bx - ax) * t, ay + (by - ay) * t - sag, az + (bz - az) * t); g.add(b);
+      }
+    }
+  }
+  const sign = buildLabel(h.deck ? `CRAZY GOLF · ${h.deck.replace(/^The /, '').toUpperCase()}` : 'CRAZY GOLF', '#ffe066', 'rgba(60,20,90,0.85)');
+  sign.position.set(h.tee[0] - 3.2, course.h(h.tee[0] - 3.2, h.tee[1] - 1) + 2.0, h.tee[1] - 1); sign.scale.set(3.2, 0.8, 1);
+  g.add(sign);
+  return g;
+}
+// The turnstile: a post and three striped arms sweeping the felt. The rotor
+// turns with rotation.y = -angle, matching the flat windmill in physics.
+export function buildTurnstile(course, wm) {
+  const g = new THREE.Group();
+  const y = course.h(wm.at[0], wm.at[1]);
+  g.position.set(wm.at[0], y, wm.at[1]);
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(wm.tower, wm.tower * 1.2, wm.towerH, 12), new THREE.MeshStandardMaterial({ color: 0xffe066, roughness: 0.5 }));
+  post.position.y = wm.towerH / 2; post.castShadow = true;
+  const knob = new THREE.Mesh(new THREE.SphereGeometry(wm.tower * 1.4, 12, 10), new THREE.MeshStandardMaterial({ color: 0xe8413a, emissive: 0x501010 }));
+  knob.position.y = wm.towerH;
+  g.add(post, knob);
+  const rotor = new THREE.Group(); rotor.position.y = wm.hubH;
+  const red = new THREE.MeshStandardMaterial({ color: 0xe8413a, roughness: 0.5 }), white = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  for (let b = 0; b < wm.blades; b++) {
+    const arm = new THREE.Group(); arm.rotation.y = -b * 2 * Math.PI / wm.blades;
+    for (let k = 0; k < 5; k++) {
+      const seg = new THREE.Mesh(new THREE.CylinderGeometry(wm.bladeR * 0.8, wm.bladeR * 0.8, wm.len / 5, 10), k % 2 ? white : red);
+      seg.rotation.z = Math.PI / 2; seg.position.x = wm.len * (k + 0.5) / 5; seg.castShadow = true;
+      arm.add(seg);
+    }
+    rotor.add(arm);
   }
   g.add(rotor);
   g.userData.rotor = rotor;

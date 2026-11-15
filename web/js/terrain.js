@@ -114,6 +114,7 @@ export function buildGreenMesh(course) {
     const g = x.createRadialGradient(px, pz, r0, px, pz, r1); g.addColorStop(0, 'rgba(84,140,58,1)'); g.addColorStop(1, 'rgba(84,140,58,0)');
     x.fillStyle = g; x.beginPath(); x.arc(px, pz, r1, 0, Math.PI * 2); x.fill();
   }
+  if (course.hole.mini) { paintMini(x, course, toPx, ell); return finishGreen(geo, c); }
   ell(1.38, '#548c3a');                               // the collar / fringe
   ell(1.0, '#7cc84f');                                // the putting surface
   // diagonal mowing stripes, clipped to the green
@@ -122,15 +123,57 @@ export function buildGreenMesh(course) {
   const stripe = 2.6 / (2 * rx * R) * S;
   for (let s = -S; s < S; s += stripe * 2) { x.fillStyle = 'rgba(255,255,200,0.22)'; x.fillRect(s, -S, stripe, S * 2); x.fillStyle = 'rgba(0,50,0,0.10)'; x.fillRect(s + stripe, -S, stripe, S * 2); }
   x.restore();
+  // greenside bunkers: the terrain is cut out under the green overlay, so paint the
+  // sand here too (playtest: bunkers by the green looked like grass)
+  const [ox, oz] = toPx(0, 0), [ux] = toPx(1, 0), [, uz] = toPx(0, 1);
+  for (const bk of course.hole.bunkers ?? []) {
+    x.save(); x.setTransform((ux - ox) * bk[2], 0, 0, (uz - oz) * bk[3], ox + (ux - ox) * bk[0], oz + (uz - oz) * bk[1]);
+    const g = x.createRadialGradient(0, 0, 0.0, 0, 0, 1.12);
+    g.addColorStop(0, '#e9cf92'); g.addColorStop(0.86, '#e2c486'); g.addColorStop(0.9, '#b89a5c'); g.addColorStop(1, 'rgba(84,140,58,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(0, 0, 1.12, 0, Math.PI * 2); x.fill();
+    x.restore();
+  }
   // a crisp edge line and a bright ring of fresh turf round the cup
   { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, S / (2 * R), S / (2 * R), 0, 0, Math.PI * 2); x.strokeStyle = 'rgba(255,245,200,0.6)'; x.lineWidth = 4; x.stroke(); }
   { const [px, pz] = toPx(pin[0], pin[1]), r = 0.9 / (2 * rx * R) * S, g = x.createRadialGradient(px, pz, 0, px, pz, r); g.addColorStop(0, 'rgba(160,230,110,0.55)'); g.addColorStop(1, 'rgba(160,230,110,0)'); x.fillStyle = g; x.beginPath(); x.arc(px, pz, r, 0, Math.PI * 2); x.fill(); }
   // fine grain so it reads as grass, not paint
   for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,220' : '20,60,10'},0.05)`; x.fillRect(Math.random() * S, Math.random() * S, 2, 2); }
+  return finishGreen(geo, c);
+}
+function finishGreen(geo, c) {
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  tex.flipY = false;   // canvas rows run with +z, as the UVs do (crazy golf's lane is not symmetric)
   // no depth offset: it must never draw over the cup
   const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.82, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true; mesh.renderOrder = 1;
   return mesh;
+}
+// Crazy golf: a paved patio with a bright felt lane along the hole's path.
+function paintMini(x, course, toPx, ell) {
+  const h = course.hole, M = h.mini, S = x.canvas.width;
+  { const [px, pz] = toPx(course.green[0], course.green[1]), r0 = 1.38 / 1.6 * (S / 2), r1 = S / 2;
+    const g = x.createRadialGradient(px, pz, r0, px, pz, r1); g.addColorStop(0, 'rgba(138,131,120,1)'); g.addColorStop(1, 'rgba(138,131,120,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(px, pz, r1, 0, Math.PI * 2); x.fill(); }
+  ell(1.38, '#8a8378');
+  // flagstone joints
+  x.strokeStyle = 'rgba(60,55,50,0.35)'; x.lineWidth = 2;
+  for (let i = 0; i < S; i += 46) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, S); x.stroke(); x.beginPath(); x.moveTo(0, i); x.lineTo(S, i); x.stroke(); }
+  // the lane, drawn in world units (the canvas is anisotropic: x and z scale differently)
+  const [ox, oz] = toPx(0, 0), [ux] = toPx(1, 0), [, uz] = toPx(0, 1);
+  x.save(); x.setTransform(ux - ox, 0, 0, uz - oz, ox, oz);
+  const lane = (w, col) => {
+    x.beginPath(); x.moveTo(h.path[0][0], h.path[0][1]);
+    for (const [px, pz] of h.path.slice(1)) x.lineTo(px, pz);
+    x.lineWidth = w; x.lineCap = 'square'; x.lineJoin = 'round'; x.strokeStyle = col; x.stroke();
+  };
+  lane(M.w + 0.5, '#5b5148');                         // a shadowed kerb under the rails
+  lane(M.w, '#2fae5a');                               // the felt
+  lane(M.w * 0.92, '#33b862');
+  // a tee mat and a bright ring round the cup
+  x.fillStyle = '#e8e2d0'; x.fillRect(h.tee[0] - 0.45, h.tee[1] - 0.25, 0.9, 0.5);
+  x.fillStyle = '#2a8e4a'; x.fillRect(h.tee[0] - 0.38, h.tee[1] - 0.18, 0.76, 0.36);
+  x.beginPath(); x.arc(h.pin[0], h.pin[1], 0.55, 0, Math.PI * 2); x.fillStyle = 'rgba(160,240,140,0.35)'; x.fill();
+  x.restore();
+  for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,240' : '20,30,20'},0.05)`; x.fillRect(Math.random() * S, Math.random() * S, 2, 2); }
 }

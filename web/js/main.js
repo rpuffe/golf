@@ -4,12 +4,12 @@
 
 import * as THREE from 'three';
 import { buildCourse } from './course.js';
-import { simulate, launch, frameAt, prepColliders, puttPower, windmillAngle, CLUBS, CLUB_ORDER, R, CUP_R, FPS } from './physics.js';
+import { simulate, launch, frameAt, prepColliders, puttPower, windmillAngle, auraGrowth, CLUBS, CLUB_ORDER, R, CUP_R, FPS } from './physics.js';
 import { extraColliders, placeTombs } from './trees.js';
 import { GOLFERS, buildGolfer, animateGolfer, golferAddress, buildGolferPortrait, GOLFER_IMPACT } from './golfers.js';
 import { buildGooseBreed, buildMonsterGoose, animateMonsterGoose, buildBossCrown, animateBossCrown, MONSTER_GRAB_PICK, MONSTER_THROW_RELEASE } from './geese.js';
 import { buildOldTom, animateOldTom, buildScareFace, animateScareFace, oldTomAddress, setOldTomOpacity, SWING_IMPACT } from './characters.js';
-import { HOLES, TOTAL_PAR } from './holes.js';
+import { HOLES, TOTAL_PAR, resolveHole } from './holes.js';
 import { planHole } from './oldtom.js';
 import * as W from './world.js';
 import * as AUDIO from './audio.js';
@@ -102,6 +102,8 @@ ballGlow.renderOrder = 5; scene.add(ballGlow);
 const shooMesh = W.buildBall(0xc8c0b0); shooMesh.visible = false; scene.add(shooMesh);
 const GHOST_R = 0.12;  // the ghost's "soul" ball is a little bigger than yours, and solid
 const ghostMesh = W.buildBall(0x7ff6ff, true); ghostMesh.scale.setScalar(GHOST_R / R); scene.add(ghostMesh);
+ghostMesh.material.opacity = 0.8;
+const ghostTag = W.buildLabel('👻 Old Tom', '#bff9ff', 'rgba(10,40,60,0.6)'); ghostTag.visible = false; scene.add(ghostTag);
 const rod = W.buildRod(); rod.visible = false; scene.add(rod);
 const pinLabel = W.buildLabel('⛳ PIN', '#fff', 'rgba(220,40,60,0.8)'); scene.add(pinLabel);
 const club = W.buildClub(); scene.add(club);
@@ -260,6 +262,10 @@ const puttRead = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10).rotateX
 puttRead.renderOrder = 5; puttRead.visible = false; puttRead.frustumCulled = false; scene.add(puttRead);
 const cupMark = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.24, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 }));
 cupMark.renderOrder = 6; cupMark.visible = false; scene.add(cupMark);
+// while you pull back: where the putt will stop, coloured by the result (no text: it reads at a glance)
+const puttEnd = new THREE.Mesh(new THREE.RingGeometry(0.09, 0.15, 28).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 }));
+puttEnd.renderOrder = 6; puttEnd.visible = false; scene.add(puttEnd);
+const READ_COL = { short: 0xffe08a, in: 0x5fe08a, long: 0xff6f61 };
 const _rm = new THREE.Matrix4(), _rq = new THREE.Quaternion(), _rs = new THREE.Vector3(), _rp = new THREE.Vector3();
 let puttReadKey = '';
 function updatePuttRead() {
@@ -274,35 +280,48 @@ function updatePuttRead() {
     cupMark.scale.setScalar(pulse * Math.max(1, camera.position.distanceTo(cupMark.position) * 0.06));
   }
   puttRead.visible = on;
-  if (!on) { puttReadKey = ''; return; }
+  if (!on) { puttReadKey = ''; puttEnd.visible = false; cupMark.material.color.set(0xffffff); return; }
   const p = swing.active ? (swing.phase === 'back' ? swing.back : swing.peak) : 0;
   const range = puttRange(), d = aimDir();
   const tgt = G.mode === 'goose' ? goose : G.cup;
   const metres = p > 0.02 ? p * range : Math.hypot(tgt.x - base.x, tgt.z - base.z) + 0.35;
-  const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${metres.toFixed(1)},${G.ballIdx}`;
+  const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${metres.toFixed(1)},${G.ballIdx},${G.powerUp?.shotLeft ?? 0},${G.holeDef?.windmill ? Math.round(wmPhase() * 4) : 0}`;
   if (key === puttReadKey) return;
   puttReadKey = key;
-  const tr = traitOf(bag());
+  const [tr, airGravity, noTrees] = modTrait();
   const L = launch('putter', puttPower(metres), d.x, d.z, 0, 1, tr);
-  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L);
+  miniPutt(L, shotMods(false, 'putter'), 'putter');
+  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase(), airGravity, noTrees }, base, L);
   const F = sim.frames, n = sim.n;
   // path length, then dots evenly spaced along its first two-thirds
   const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(F[i * 3] - F[i * 3 - 3], F[i * 3 + 2] - F[i * 3 - 1]));
-  const total = cum[n - 1] || 0.01, show = total * 0.66;
+  // at rest: a read of the first two-thirds of a dead-weight putt. While pulling:
+  // the whole roll to where it stops, so a full pull at a tap-in shows it running past
+  const pulling = p > 0.02;
+  const total = cum[n - 1] || 0.01, show = total * (pulling ? 1 : 0.66);
+  const ex = F[(n - 1) * 3], ez = F[(n - 1) * 3 + 2];
+  let verdict = 'short';
+  if (sim.result === 'holed') verdict = 'in';
+  else if ((ex - tgt.x) * d.x + (ez - tgt.z) * d.z > 0) verdict = Math.hypot(ex - tgt.x, ez - tgt.z) > 0.6 ? 'long' : 'in';
+  const col = pulling ? READ_COL[verdict] : READ_COL.short;
+  puttRead.material.color.setHex(col);
+  puttEnd.visible = pulling && sim.result !== 'holed';
+  if (puttEnd.visible) { puttEnd.position.set(ex, G.course.h(ex, ez) + 0.03, ez); puttEnd.material.color.setHex(col); puttEnd.scale.setScalar(Math.max(1, camera.position.distanceTo(puttEnd.position) * 0.08)); }
+  cupMark.material.color.setHex(pulling ? col : 0xffffff);
   let j = 0;
   for (let k = 0; k < READ_N; k++) {
     const want = 0.35 + (show - 0.35) * k / (READ_N - 1);
     while (j < n - 1 && cum[j] < want) j++;
     const x = F[j * 3], z = F[j * 3 + 2];
     const fade = 1 - k / READ_N;
-    _rm.compose(_rp.set(x, G.course.h(x, z) + 0.02, z), _rq.identity(), _rs.setScalar(want > show ? 0 : 0.03 + 0.025 * fade));
+    _rm.compose(_rp.set(x, G.course.h(x, z) + 0.02, z), _rq.identity(), _rs.setScalar(want > show ? 0 : 0.03 + 0.025 * (pulling ? 0.6 : fade)));
     puttRead.setMatrixAt(k, _rm);
   }
   puttRead.instanceMatrix.needsUpdate = true;
 }
 const trailMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
 const oldTrailMat = new THREE.LineBasicMaterial({ color: 0xfff4d0, transparent: true, opacity: 0.28, depthWrite: false });
-const ghostTrailMat = new THREE.LineBasicMaterial({ color: 0x7ff6ff, transparent: true, opacity: 0.5, depthWrite: false });
+const ghostTrailMat = new THREE.LineBasicMaterial({ color: 0x7ff6ff, transparent: true, opacity: 0.85, depthWrite: false });
 function makeTrail(mat, n = 4000) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(n * 3), 3));
@@ -352,12 +371,16 @@ function updateParticles(dt) {
 const CONFETTI = [0xff6f61, 0xffc84a, 0x4fd39a, 0x5fd3ff, 0xff7aa8, 0xffffff];
 
 // ============================================================ HUD helpers
+// On a phone the screen is small: tips, toasts and the power-up chip get out of
+// the way after a couple of seconds (playtest: "lots of boxes"). Controls stay.
+const narrow = () => matchMedia('(max-width: 760px)').matches;
 const hud = {
   banner(html, ms = 1600) {
     const b = $('banner'); b.innerHTML = html; b.classList.add('show');
     clearTimeout(hud._bt); hud._bt = setTimeout(() => b.classList.remove('show'), ms);
   },
   hint(html, ms = 0) {
+    if (html && narrow()) ms = ms ? Math.min(ms, 4500) : 4500;
     $('hint').innerHTML = html || '';
     clearTimeout(hud._ht); if (html && ms) hud._ht = setTimeout(() => { if ($('hint').innerHTML === html) $('hint').innerHTML = ''; }, ms);
   },
@@ -365,7 +388,7 @@ const hud = {
   toast(html) {
     const el = document.createElement('div'); el.className = 'toast'; el.innerHTML = html;
     $('toasts').appendChild(el); requestAnimationFrame(() => el.classList.add('show'));
-    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, 4500);
+    setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 400); }, narrow() ? 2800 : 4500);
   },
 };
 function renderClubs() {
@@ -404,8 +427,20 @@ function updateHUD() {
 
 // ============================================================ round + holes
 let tomCache = [];   // Old Tom's planned strokes per hole
+// The round seed picks crazy golf's obstacle deck. Rooms derive it from the
+// room seed and round number, so everyone (and Old Tom) plays the same layout.
+let roundSeed = (Math.random() * 4294967296) >>> 0, roundsStarted = 0;
+const tomSalt = (Math.random() * 4294967296) >>> 0;   // Old Tom has good days and bad: a new one each visit
+const holeAt = i => resolveHole(HOLES[i], roundSeed);
+function setRoundSeed() {
+  const next = G.room ? (G.room.seed ^ Math.imul(G.room.round || 1, 2654435761)) >>> 0 : roundsStarted ? (Math.random() * 4294967296) >>> 0 : roundSeed;
+  roundsStarted++;
+  if (next === roundSeed) return;
+  roundSeed = next;
+  HOLES.forEach((h, i) => { if (h.mini) tomCache[i] = null; });   // Tom replans the deck he'll face
+}
 let pbGhost = null;  // { total, name, holes: [[{sx,sy,sz,f:[...],holed,pen}]] }
-// a saved best round only counts if it was played on this course (7 holes since round 6)
+// a saved best round only counts if it was played on this course (9 holes since round 7)
 function loadPB() { try { pbGhost = JSON.parse(store.get('ghg3d_pb') || 'null'); } catch { pbGhost = null; } if (pbGhost && pbGhost.holes?.length !== HOLES.length) pbGhost = null; }
 loadPB();
 const graveyard = () => { try { return JSON.parse(store.get('ghg3d_graveyard') || '[]'); } catch { return []; } };
@@ -426,6 +461,7 @@ function newBag() {
 }
 
 function startRound(startHole = 0) {
+  setRoundSeed();
   const rng = G.room ? W.mulberry32(G.room.seed) : Math.random;
   G.holeScores = []; G.ghostScores = []; G.roundRec = []; G.bag = newBag(); G.ballIdx = 0;
   G.rangeBall = { ...RANGE_BALL, alive: true };
@@ -440,7 +476,7 @@ function startRound(startHole = 0) {
   G.ghostSource = G.room ? 'room' : pbGhost && pbGhost.total <= tomTotal ? 'pb' : 'oldtom';
   if (G.room) resetRivalsForRound();
   renderBag();
-  G.powerUp = null; G.scareDone = false; G.usedGimme = false; G.sasqRound = 0; G.lastLoss = null;
+  G.powerUp = null; G.scareDone = false; G.usedGimme = false; G.sasqRound = 0; G.lastLoss = null; G.leaderTaxed = false;
   drawWheelOrder();
   loadHole(startHole);
   for (let k = 0; k < startHole; k++) G.holeScores[k] = HOLES[k].par + 1;   // a late arrival pays a late fee
@@ -470,7 +506,7 @@ function resetTransient() {
 function loadHole(i) {
   resetTransient();
   G.holeIdx = i;
-  const h = HOLES[i];
+  const h = holeAt(i);
   G.holeDef = h;
   if (G.holeGroup) disposeGroup(G.holeGroup);
   for (const t of G.trails) { t.geometry.dispose(); scene.remove(t); }
@@ -609,7 +645,7 @@ function autoClub() {
 // The putter's full stroke scales to the putt: a 2 m tap and a 15 m lag both
 // use the whole pull-back, so short putts aren't a 30-pixel twitch. Tiers
 // (not a continuous scale) so the feel is learnable: "this is a 6 m putt".
-const PUTT_TIERS = [3, 6, 10, 15, 21];
+const PUTT_TIERS = [2, 3, 6, 10, 15, 21];   // the smallest keeps a full pull honest on a tap-in
 function puttRange() {
   const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball;
   const tgt = G.mode === 'goose' ? goose : G.cup;
@@ -620,10 +656,12 @@ function puttRange() {
 // ============================================================ ghost (rival)
 function ensureTom(i) {
   if (i >= HOLES.length || tomCache[i]) return tomCache[i];
-  const h = HOLES[i];
-  const course = i === G.holeIdx ? G.course : buildCourse(h);
-  const cols = i === G.holeIdx ? G.colliders : prepColliders([...W.treeColliders(W.placeTrees(course, h), course), ...extraColliders(course, h)]);
-  tomCache[i] = planHole(course, h, { x: h.pin[0], z: h.pin[1] }, cols);
+  const h = holeAt(i);
+  const here = i === G.holeIdx && G.holeDef?.deckIdx === h.deckIdx && !!G.course;
+  const course = here ? G.course : buildCourse(h);
+  const cols = here ? G.colliders : prepColliders([...W.treeColliders(W.placeTrees(course, h), course), ...extraColliders(course, h)]);
+  // crazy golf's lane is 2.8 m wide: Tom tees up just beside you, not 1.3 m off
+  tomCache[i] = planHole(course, h, { x: h.pin[0], z: h.pin[1] }, cols, h.mini ? { x: -0.6, z: 0.3 } : undefined, tomSalt);
   return tomCache[i];
 }
 function decodeFrames(f) {
@@ -649,7 +687,7 @@ function setupGhost() {
     return;
   }
   let strokes;
-  if (G.ghostSource === 'pb' && pbGhost?.holes?.[G.holeIdx]) strokes = decodePB(pbGhost.holes[G.holeIdx]);
+  if (G.ghostSource === 'pb' && pbGhost?.holes?.[G.holeIdx] && (pbGhost.decks?.[G.holeIdx] ?? null) === (G.holeDef.deckIdx ?? null)) strokes = decodePB(pbGhost.holes[G.holeIdx]);
   else strokes = ensureTom(G.holeIdx).map(s => s.penaltyOnly ? { penaltyOnly: true, start: s.start } : { start: s.start, shot: s.shot });
   const first = strokes[0]?.start ?? { x: G.ball.x - 1.3, z: G.ball.z };
   G.ghost = { override: null, strokes, played: 0, rest: { x: first.x, y: G.course.h(first.x, first.z) + R, z: first.z }, holed: false, playing: null };
@@ -755,13 +793,16 @@ function spawnGeese() {
     Object.assign(g, {
       state: 'graze', x: cx + Math.cos(a) * dd, z: cz + Math.sin(a) * dd, target: null, t: 0, timer: 1 + rng() * 2, carry: false, frozen: false,
       home: { x: cx, z: cz, r }, radius: d?.radius ?? 0, yaw: rng() * 6, fly: 0,
-      boss: !!d?.boss, stare: !!d?.stare, gosling, parent: gosling ? geese[0] : null, slot: k - defs.length, escT: 0,
+      boss: !!d?.boss, stare: !!d?.stare, gosling, parent: gosling ? geese[0] : null, slot: k - defs.length, escT: 0, ceremony: null, climb: 0,
     });
     if (gosling) { g.x = cx + 1 + g.slot * 0.6; g.z = cz + 1; }
     if (!validLand(g.x, g.z)) { g.x = cx; g.z = cz; }
     g.mesh.scale.setScalar(1.15 * (g.boss ? 1.8 : gosling ? 0.45 : 1));
     g.mesh.userData.carry.clear();
     g.mesh.userData.alert.visible = false;
+    if (!g.boss && g.crown) {   // last round's boss is an ordinary goose again (a restart after the finale)
+      g.crown.crown.parent?.remove(g.crown.crown); g.crown.aura.parent?.remove(g.crown.aura); g.crown = null;
+    }
     if (g.boss && !g.crown) {
       // the boss wears a crown and stands in its own purple aura
       g.crown = buildBossCrown();
@@ -839,7 +880,7 @@ function updateGoose(g, dt) {
     let dy = want - g.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
     g.yaw += clamp(dy, -3 * dt, 3 * dt);
   } else if (g.state === 'graze' && g.stare && !G.scareDone && G.mode === 'address' && dist2(G.ball, G.cup) < 60) {
-    // hole 6: they know something you don't. Frozen, staring at the cup.
+    // the graveyard: they know something you don't. Frozen, staring at the cup.
     g.yaw = Math.atan2(G.cup.x - g.x, G.cup.z - g.z);
   } else if (g.state === 'graze' && goose?.boss && goose.carry && g !== goose && !g.stare && dist2(g, goose) < 40) {
     // the Goose Parliament escorts its boss in a V
@@ -890,7 +931,12 @@ function updateGoose(g, dt) {
   } else if (g.state === 'tug') {
     // planted, leaning back, head thrashing (driven by the tug state)
   } else if (g.state === 'fly') {
-    if (moveTo(g.target.x, g.target.z, 16)) landGooseFlight(g);
+    if (g.ceremony) {   // a V over the mesa, in front of the camera, then off toward the moon
+      const c = g.ceremony, t = c.passed ? c.to : c.via;
+      if (!c.passed && Math.hypot(t.x - g.x, t.z - g.z) < 3) c.passed = true;
+      g.climb = (g.climb ?? 0) + dt * 3.6; moveTo(t.x, t.z, 24);
+    }
+    else if (moveTo(g.target.x, g.target.z, 16)) landGooseFlight(g);
     speed = 0;
   } else if (g.state === 'flee') {
     g.t -= dt;
@@ -899,7 +945,8 @@ function updateGoose(g, dt) {
   }
   // animate
   const gy = G.course.h(g.x, g.z);
-  const flyLift = g.state === 'fly' ? 2.2 + Math.sin(g.phase * 3) * 0.3 : 0;
+  if (g.ceremony && g.state !== 'fly' && (g.ceremony.delay -= dt) <= 0) { g.state = 'fly'; g.climb = 0; sfx.honk(1); }
+  const flyLift = g.state === 'fly' ? 2.2 + Math.sin(g.phase * 3) * 0.3 + (g.climb ?? 0) : 0;
   g.fly = flyLift;
   g.mesh.position.set(g.x, gy + flyLift, g.z);
   g.mesh.rotation.y = g.yaw;
@@ -1139,13 +1186,13 @@ function endTug(won) {
     G.stats.tugWins = (G.stats.tugWins ?? 0) + 1;
     if (g.puppetOf) sendEmote('teethx', g.puppetOf, `${myHole()}:tug`, { state: true });
     moment(22, `Won a tug-of-war with a goose on hole ${G.holeIdx + 1}`);
-    sfx.catchBall(); hud.banner('🪿 YOINK!<small>your ball, back where it was</small>', 1800);
+    sfx.catchBall(); hud.banner('🪿 YOINK!<small>your ball, back where it was</small>', GOOSE_BEAT_MS);
     setTimeout(() => ballFlourish('saved'), 900);
     say('tugWin', vars(), { bump: -10 });
     g.state = 'flee'; g.t = 3;
     const a = Math.random() * Math.PI * 2; g.target = { x: g.x + Math.cos(a) * 25, z: g.z + Math.sin(a) * 25 };
     if (!validLand(g.target.x, g.target.z)) g.target = { x: g.home.x, z: g.home.z };
-    placeBall(G.gooseLie.x, G.gooseLie.z, 1.0);
+    placeBall(G.gooseLie.x, G.gooseLie.z, 2.0);
     return;
   }
   G.stats.tugLosses = (G.stats.tugLosses ?? 0) + 1;
@@ -1269,7 +1316,7 @@ function updateRelay(dt) {
 // Brood: the goose sits on your ball, adores it, and leaves you an egg.
 function gooseBrood(g) {
   say('tugBrood', vars(), { bump: 12 });
-  hud.banner('🥚 BROODED<small>your ball is an egg now</small>', 1800);
+  hud.banner('🥚 BROODED<small>your ball is an egg now</small>', GOOSE_BEAT_MS);
   G.mode = 'gooseCam'; $('bulletLbl').textContent = '🥚 BROODING';
   G.brood = { g, t: 0 };
   sfx.honk(1);
@@ -1320,7 +1367,7 @@ function updateAdoptee(dt) {
 function goosePond(g) {
   const p = nearPond(g);
   say('tugPond', vars(), { bump: 14 });
-  hud.banner('🎣 HAMMER THROW<small>free fish, no penalty</small>', 1700);
+  hud.banner('🎣 HAMMER THROW<small>free fish, no penalty</small>', GOOSE_BEAT_MS);
   G.mode = 'gooseCam'; $('bulletLbl').textContent = '🎣 HAMMER THROW';
   const [cx, cz, rx, rz] = p.e;
   const vx = g.x - cx, vz = g.z - cz, L = Math.hypot(vx, vz) || 1, k = 0.5 * Math.min(rx, rz);
@@ -1346,7 +1393,9 @@ function updateHammer(dt) {
   }
 }
 
-function placeBall(x, z, hold = 1.6) {
+// a goose outcome stays up long enough to read (playtest: "goes by too fast"); a tap skips it
+const GOOSE_BEAT_MS = 3000;
+function placeBall(x, z, hold = 2.8) {
   G.ball = { x, z, y: G.course.h(x, z) + R };
   ballMesh.visible = true;
   roomSendProgress();
@@ -1377,7 +1426,7 @@ function skipLinger() { if (G.mode === 'linger' && G.linger) G.linger.t = G.ling
 function goosePunt(g) {
   endGooseCam();
   say('tugPunt', vars(), { bump: 16 });
-  hud.banner('🪿 PUNTED!', 1200);
+  hud.banner('🪿 PUNTED!', GOOSE_BEAT_MS);
   sfx.gooseBonk();
   g.state = 'graze'; g.timer = 2;
   // a spiteful kick: always away from the pin (losing to a goose should never gain you ground)
@@ -1396,7 +1445,7 @@ function goosePunt(g) {
 // Loss 2: the goose flies off and drops your ball in the nearest bunker.
 function gooseBunker(g) {
   say('tugBunker', vars(), { bump: 12 });
-  hud.banner('🪿 AIRLIFTED<small>to the nearest bunker</small>', 1600);
+  hud.banner('🪿 AIRLIFTED<small>to the nearest bunker</small>', GOOSE_BEAT_MS);
   const bs = G.holeDef.bunkers ?? [];
   let best = null;
   // the nearest bunker that doesn't bring you closer to the pin, within a short flight
@@ -1445,7 +1494,7 @@ function gooseSwallow(g) {
   const b = bag();
   sfx.gooseBonk(); setTimeout(() => sfx.bell(), 500);
   if (b.range) {
-    hud.banner('🪿 GULP…<small>…and spat out. Nobody wants the range ball.</small>', 2200);
+    hud.banner('🪿 GULP…<small>…and spat out. Nobody wants the range ball.</small>', GOOSE_BEAT_MS);
     say('junk', vars(), { bump: 6 });
   } else {
     ballFarewell({ x: g.x, z: g.z, y: G.course.h(g.x, g.z) + 0.6 }, true);
@@ -1455,13 +1504,13 @@ function gooseSwallow(g) {
     gy.push({ name: b.name, trait: 'Eaten by a goose', hole: G.holeIdx + 1, date: new Date().toISOString().slice(0, 10) });
     store.set('ghg3d_graveyard', JSON.stringify(gy.slice(-200)));
     say('tugSwallow', vars(), { bump: 22 });
-    hud.banner(`🪿 GULP.<small>${esc(b.name)} has been eaten. R.I.P.</small>`, 2600);
+    hud.banner(`🪿 GULP.<small>${esc(b.name)} has been eaten. R.I.P.</small>`, GOOSE_BEAT_MS);
     G.ballIdx = nextAliveIdx();
     renderBag();
     const nb = bag();
     setTimeout(() => { sfx.newBall(); hud.toast(`Hi, I'm <b>${esc(nb.name)}</b>. Be gentle.`); G.ballTagT = 4; G.ballTagFull = true; }, 2600);
   }
-  placeBall(g.x + Math.sin(g.yaw) * 0.6, g.z + Math.cos(g.yaw) * 0.6, 2.2);
+  placeBall(g.x + Math.sin(g.yaw) * 0.6, g.z + Math.cos(g.yaw) * 0.6, 2.8);
 }
 
 // ============================================================ swing input
@@ -1558,17 +1607,18 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
   // putter: the pull-back is metres of flat-green roll (full pull = the tier's range)
   const eff = clubId === 'putter' ? puttPower(power * puttRange()) : power;
   const L = launch(clubId, eff, d.x, d.z, drift, tempo, trait);
-  if (mods.banana) L.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[clubId].curve;   // odd holes hook left, even holes slice right
+  if (!miniPutt(L, mods, clubId) && mods.banana) L.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[clubId].curve;   // odd holes hook left, even holes slice right
   G.ghostShot = !!mods.noTrees;
   const start = { ...(shoo ? G.gooseLie : G.ball) };
   const strokeNo = G.strokes + 1;
   const world = {
     course: G.course, cup: G.cup, wind: G.wind, trait, colliders: G.colliders,
-    dynamic: [...gooseCollider(), ...rivalColliders(start), ...(shoo ? [] : galleryColliders(start))],
+    dynamic: [...gooseCollider(), ...rivalColliders(start), ...(shoo ? [] : galleryColliders(start)), ...(shoo ? [] : pinColliders())],
     ghost: shoo ? null : ghostColliderFor(strokeNo, start), ghostR: GHOST_R,
     cupR: mods.cupR, airGravity: mods.airGravity, noTrees: mods.noTrees, strokeNo, noAura: auraOff(), wmPhase: wmPhase(),
   };
   if (!shoo) for (const g of liveGeese()) { g.frozen = g.state === 'graze'; g.approach = false; }
+  if (!shoo && PINS.def) PINS.before = pinsUp();
   const sim = simulate(world, start, L);
   G.stats.swings++;
   const fan = shoo ? null : fanVerdict(world, start, L, sim);
@@ -1689,6 +1739,24 @@ function fireEvent(e, shot) {
         G.stats.ghostHits++; say('rivalHit', { ...vars(), rival: r.name }, { bump: 6 }); hud.banner(`💥 HIT ${esc(r.name.toUpperCase())}'S BALL`, 1100);
         break;
       }
+      if (e.tag?.startsWith('pin:')) {
+        if (shoo) break;
+        const f = frameAt(shot.sim, e.frame);
+        topple(+e.tag.slice(4), e.speed, f.vx, f.vz);
+        if (!shot.saidPins) { shot.saidPins = true; G.shake = Math.max(G.shake, 0.12); }
+        break;
+      }
+      if (e.tag === 'rail' || e.tag === 'bumper') {
+        (e.tag === 'bumper' ? (sfx.boing ?? sfx.knock) : sfx.knock)(Math.min(1, 0.3 + e.speed / 4));
+        if (e.tag === 'bumper') burst(e.x, e.y + 0.2, e.z, 14, 0xffe066, { speed: 2, up: 1.5, life: 0.6, grav: 3 });
+        if (!shoo && (shot.crazyHits = (shot.crazyHits ?? 0) + 1) >= 3 && !shot.saidCrazy) { shot.saidCrazy = true; say('crazy', vars(), { bump: 6 }); }
+        break;
+      }
+      if (e.tag === 'windmill' && G.holeDef.mini) {
+        sfx.swat ? sfx.swat() : sfx.knock(1); burst(e.x, e.y + 0.1, e.z, 14, 0xffffff, { speed: 2, up: 1 });
+        if (!shoo && !shot.saidCrazy) { shot.saidCrazy = true; say('crazy', vars(), { bump: 8 }); hud.banner('SWATTED', 1000); }
+        break;
+      }
       if (e.tag === 'tree' && !shoo) G.treeHitAt = { x: e.x, z: e.z };
       if (e.tag === 'windmill') { sfx.swat ? sfx.swat() : sfx.tree(); burst(e.x, e.y, e.z, 20, 0xfff6e0, { speed: 3, up: 2 }); if (!shoo && !shot.saidTree) { shot.saidTree = true; say('windmill', vars(), { bump: 10 }); hud.banner('SWATTED', 1100); G.stats.swatted = (G.stats.swatted ?? 0) + 1; } }
       else if (e.tag === 'tomb') { sfx.tree(); burst(e.x, e.y, e.z, 12, 0x9a9a92, { speed: 2, up: 2 }); if (!shoo && !shot.saidTree) { shot.saidTree = true; say('tomb', vars(), { bump: 6 }); } }
@@ -1790,18 +1858,18 @@ function endShot() {
     liveTrail.geometry.setDrawRange(0, 0);
     if (s.sim.result === 'holed') {
       G.ball = { x: G.cup.x, z: G.cup.z, y: end.y };
-      say('tugGooseHoled', vars(), { bump: 20 }); hud.banner('🪿 THE GOOSE HOLED IT', 2400);
+      say('tugGooseHoled', vars(), { bump: 20 }); hud.banner('🪿 THE GOOSE HOLED IT', GOOSE_BEAT_MS);
       moment(60, `A goose punted ${bag().name} into the hole on hole ${G.holeIdx + 1}`);
       holeOut(s);
       return;
     }
     if (s.sim.result === 'water') { goFishing(end, s.start, { free: true }); return; }   // the goose did it: no penalty
     if (s.sim.result === 'oob') {
-      hud.banner('🪿 PUNTED OUT<small>dropped where the goose stood</small>', 1800);
+      hud.banner('🪿 PUNTED OUT<small>dropped where the goose stood</small>', GOOSE_BEAT_MS);
       G.ball = { x: s.start.x, z: s.start.z, y: G.course.h(s.start.x, s.start.z) + R };
     } else G.ball = { x: end.x, z: end.z, y: end.y };
     ballMesh.visible = true; ballMesh.position.set(G.ball.x, G.ball.y, G.ball.z);
-    linger(1.4, () => afterStroke(true));
+    linger(2.8, () => afterStroke(true));
     return;
   }
   // ghost finishes its stroke too
@@ -1820,6 +1888,7 @@ function endShot() {
   const sim = s.sim;
   const end = sim.end;
   if (G.eggBall) hatchEgg(end);
+  if (s.kind !== 'shoo' && PINS.def) PINS.check = true;
   if (sim.result === 'holed') {
     G.ball = { x: G.cup.x, z: G.cup.z, y: end.y };
     holeOut(s);
@@ -1854,6 +1923,7 @@ function endShot() {
     else if (surf === 'green' || surf === 'fringe') { say('green', vars(), { bump: -15 }); hud.banner(`ON THE GREEN<small>${dpin.toFixed(1)} m to the pin</small>`, 1400); }
     else if (surf === 'fairway') { say('fairway', vars(), { bump: -12 }); hud.banner(`FAIRWAY<small>${dpin.toFixed(0)} m to go</small>`, 1200); }
     else if (surf === 'rough') { say('rough', vars(), { bump: 9 }); hud.banner(`ROUGH<small>${dpin.toFixed(0)} m to go</small>`, 1200); }
+    else if (surf === 'sand' && inGutter(G.ball.x, G.ball.z)) { say('gutter', vars(), { bump: 12 }); hud.banner(`🎳 GUTTER BALL<small>${dpin.toFixed(0)} m to go</small>`, 1400); }
     else if (surf === 'sand') { say('sand', vars(), { bump: 11 }); hud.banner(`BUNKER<small>${dpin.toFixed(0)} m to go</small>`, 1200); }
   } else if (dpin < 1.0) hud.banner(`${dpin.toFixed(1)} m`, 800);
   // drive length stat
@@ -2228,7 +2298,35 @@ function holeOut(s, afterScare) {
   G.race.round += n - G.ghost.strokes.length;
   broadcastHole(G.holeIdx + 1, n);
   G.celebrate = 2.7;
+  if (G.holeDef.finale) crownCeremony();
   updateHUD();
+}
+// The round's last putt: fireworks over the mesa, and the Boss leads its
+// geese away across the moon. Under 4 s, and any input skips it.
+function crownCeremony() {
+  G.celebrate = 4.0;
+  const rm = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [px, pz] = G.holeDef.pin, py = G.course.h(px, pz);
+  const n = rm ? 2 : 6;
+  for (let k = 0; k < n; k++) setTimeout(() => {
+    if (G.mode !== 'holed') return;
+    const a = G.crown?.away ?? { x: 0, z: -1 }, side = (k % 3 - 1) * 9, fwd = 14 + (k % 2) * 10;
+    const x = px + a.x * fwd - a.z * side, z = pz + a.z * fwd + a.x * side, y = py + 12 + (k % 3) * 3;
+    burst(x, y, z, 130, CONFETTI[k % CONFETTI.length], { speed: 9, up: 1, life: 2.4, grav: 2.5, spread: 1 });
+    sfx.thump();
+  }, 250 + k * 420);
+  const sd = env.sunDir, away = Math.hypot(sd.x, sd.z) > 0.05 ? { x: sd.x / Math.hypot(sd.x, sd.z), z: sd.z / Math.hypot(sd.x, sd.z) } : { x: 0, z: -1 };
+  G.crown = { t: 0, away };
+  const flock = liveGeese().filter(g => !g.gosling && !g.carry && g.state !== 'tug' && Math.hypot(g.x - px, g.z - pz) < 80).sort((a, b) => (a.boss ? 1 : 0) - (b.boss ? 1 : 0));   // the crown leaves last
+  flock.forEach((g, k) => {
+    const side = (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 3;
+    const vx = px + away.x * (22 + Math.ceil(k / 2) * 2.5) - away.z * side * 0.35, vz = pz + away.z * (22 + Math.ceil(k / 2) * 2.5) + away.x * side * 0.35;
+    g.ceremony = { delay: 0.1 + k * 0.12, via: { x: vx, z: vz }, to: { x: vx + away.x * 900, z: vz + away.z * 900 } };
+    g.yaw = Math.atan2(away.x, away.z);
+  });
+  setTimeout(() => say('finale', vars(), { bump: -20 }), 600);
+  if (G.room) sendEmote('finale', '', String(G.holeIdx + 1));
+  else tomLater(G.race.round <= 0 ? 'behind' : 'ahead', 2600);
 }
 
 // ============================================================ hole flow
@@ -2278,11 +2376,35 @@ function endFlyover() {
   const first = !G.holeScores.some(Number.isInteger) || G.holeIdx === 0;
   G.ballTagFull = first; G.ballTagT = first ? 4 : 2.5;
   setTimeout(() => { if (G.mode === 'address' && !G.wheel && G.holeDef === h0) startWheel(); }, 300);
+  if (h0.deck) hud.toast(`Tonight: ${esc(h0.deck)}.`);
+  if (h0.finale) finaleStakes();
 }
+// The last hole raises the stakes: Old Tom's last wager when it's close, and
+// the Boss taxes a clear leader (once, never on a green, no stroke added).
+function finaleStakes() {
+  const n = G.holeIdx, mine = toParThru(G.holeScores, n);
+  let lead = -Infinity;
+  if (G.room) {
+    const others = [...rivals.values()].filter(r => r.online && r.prog);
+    if (others.length) lead = Math.min(...others.map(r => toParThru(r.prog.scores, Math.min(n, r.prog.scores?.length ?? 0)))) - mine;
+  } else if (G.ghost) {
+    const ghost = G.ghostScores.slice(0, n).reduce((a, v, i) => a + (Number.isInteger(v) ? v - HOLES[i].par : 0), 0);
+    lead = ghost - mine;
+    if (Math.abs(lead) <= 1 && tomTalks()) {
+      hud.toast(lead === 0 ? '⚖️ All square. Last hole.' : '⚖️ One in it. Last hole.');
+      setTimeout(() => { if (G.holeDef === HOLES_LAST() && G.mode !== 'end') tomSay('final'); }, 1800);
+    }
+  }
+  if (lead >= 2 && !G.leaderTaxed) {
+    G.leaderTaxed = true; G.sicPending = 'The Boss';
+    setTimeout(() => hud.toast('👑 The Boss taxes the leader.'), 2600);
+  }
+}
+const HOLES_LAST = () => G.holeIdx === HOLES.length - 1 ? G.holeDef : null;
 
 // ------------------------------------------------------------ power-up wheel
 // Every hole spins a wheel in the corner (council round 6; re-ruled so every
-// wedge matters on every one of the seven holes, see council-round6.md §10). It never blocks:
+// wedge matters on every one of the nine holes, see council-round6.md §10 and round 7). It never blocks:
 // the effect is live from the moment the hole loads, swinging just snaps the
 // wheel to its answer. Draws are seeded per player (and per room member), so
 // a reload can't re-roll and everyone sees 7 of the same 8 wedges a round.
@@ -2301,8 +2423,18 @@ function drawWheelOrder() {
   const seed = G.room ? (G.room.seed ^ fnv1a(G.room.me)) >>> 0 : (Math.random() * 4294967296) >>> 0;
   const rng = W.mulberry32(seed);
   const first = ['bucket', 'ghost', 'ring'][Math.floor(rng() * 3)];
-  const rest = shuffle(POWERUPS.map(p => p.id).filter(id => id !== first), rng).slice(0, 6);
-  G.wheelOrder = [first, ...rest];
+  const order = [first, ...shuffle(POWERUPS.map(p => p.id).filter(id => id !== first), rng)];   // all eight, once each
+  // crazy golf is all green, where geese never steal: no goose wedge there
+  const mi = HOLES.findIndex(h => h.mini), goosey = id => id === 'sic' || id === 'bait';
+  if (mi > 0 && mi < order.length && goosey(order[mi])) {
+    const j = order.findIndex((id, k) => k > 0 && k !== mi && !goosey(id));
+    [order[mi], order[j]] = [order[j], order[mi]];
+  }
+  while (order.length < HOLES.length) {   // the ninth: a repeat, never the wedge just drawn
+    const pool = POWERUPS.map(p => p.id).filter(id => id !== order.at(-1));
+    order.push(pool[Math.floor(rng() * pool.length)]);
+  }
+  G.wheelOrder = order;
 }
 function startWheel() {
   const id = G.wheelOrder?.[G.holeIdx] ?? POWERUPS[0].id;
@@ -2314,7 +2446,7 @@ function startWheel() {
     return `<span style="transform: rotate(${a}deg) translate(-50%, -40px) rotate(${-a}deg) translate(0, -50%)">${p.emoji}</span>`;
   }).join('');
   const centre = (pick + 0.5) * 360 / n + (Math.random() - 0.5) * (280 / n);
-  const back = G.holeDef.spotlight === 'scare';   // hole 6: the wheel spins backward. Ominous.
+  const back = G.holeDef.spotlight === 'scare';   // the graveyard: the wheel spins backward. Ominous.
   G.wheel = { t: -0.3, dur: 2.0, to: back ? -(360 * 3 + centre) : 360 * 3 + (360 - centre), pick, shown: false, end: 0, lastTick: 0 };
   $('wheelOut').innerHTML = '';
   $('wheel').classList.remove('hidden', 'chip');
@@ -2373,18 +2505,29 @@ function renderPowerChip() {
   const p = G.powerUp, el = $('powerChip');
   const live = p && p.landed && !G.wheel && (p.hole || p.shotLeft > 0) && !(p.lifeRing === 0);
   el.classList.toggle('hidden', !live);
-  if (live) el.innerHTML = `${p.emoji} <b>${esc(p.name)}</b> · ${esc(powerDesc(p))}`;
+  if (live) {
+    el.innerHTML = `<span class="e">${p.emoji}</span> <b>${esc(p.name)}</b> · ${esc(powerDesc(p))}`;
+    el.classList.remove('mini'); clearTimeout(renderPowerChip.t);
+    if (narrow()) renderPowerChip.t = setTimeout(() => el.classList.add('mini'), 2500);   // shrinks to its emoji; tap to read it again
+  }
 }
 // physics modifiers for the shot about to be hit. "Next shot" power-ups skip
 // putts and are spent by the next full swing.
 function shotMods(consume, clubId = G.club) {
   const p = G.powerUp; if (!p) return {};
   const m = { cupR: p.cupR, noTrees: p.noTrees };
-  if (p.shotLeft > 0 && clubId !== 'putter') {
+  if (p.shotLeft > 0 && (clubId !== 'putter' || G.holeDef?.mini)) {   // crazy golf is all putts: they count there
     Object.assign(m, p.shot);
     if (consume) { p.shotLeft = 0; setTimeout(renderPowerChip, 1500); }
   }
   return m;
+}
+// Crazy golf: Moon Boots and Pogo turn a putt into a hop, Banana adds curl on the felt.
+function miniPutt(L, mods, clubId) {
+  if (!G.holeDef?.mini || clubId !== 'putter') return false;
+  if (mods.airGravity || mods.bounce) { L.vy = 2.4; L.rolling = false; }
+  if (mods.banana) L.curl = (G.holeIdx % 2 ? 1 : -1) * 0.06;
+  return true;
 }
 function setCupVisual(r) {
   const k = r / CUP_R;
@@ -2854,7 +2997,7 @@ function updateRivalAvatar(r, p, dt) {
   }
 }
 
-// ------------------------------------------------------------ the Honk Hole (hole 7 boss)
+// ------------------------------------------------------------ the Honk Hole (the finale boss)
 function buildAura(course, ba) {
   const g = new THREE.Group();
   const [ax, az] = ba.at;
@@ -2882,15 +3025,19 @@ function buildAura(course, ba) {
   for (let i = 0; i < 24; i++) { const s = new THREE.Sprite(fmat); s.scale.setScalar(0.35); g.add(s); feathers.push({ s, r: 3 + Math.random() * (ba.r - 3), a: Math.random() * 6.3, y: 0.4 + Math.random() * 2.5 }); }
   const moon = new THREE.Mesh(new THREE.SphereGeometry(0.35, 14, 10), new THREE.MeshStandardMaterial({ color: 0xd8dce8, emissive: 0x6a6f80, roughness: 1 }));
   g.add(moon);
-  g.userData = { ba, tex, feathers, moon };
+  g.userData = { ba, tex, feathers, moon, disc, ring };
   return g;
 }
 function updateAura(dt) {
   const A = G.aura; if (!A) return;
-  const { ba, tex, feathers, moon } = A.userData;
-  tex.rotation += 0.5 * dt;
+  const { ba, tex, feathers, moon, disc, ring } = A.userData;
+  // the finale's Honk Hole grows from the third stroke: it spins faster and glows harder
+  const ak = auraGrowth(ba, G.strokes + 1);
+  tex.rotation += 0.5 * ak * dt;
+  disc.material.opacity = 0.14 * ak; ring.material.opacity = Math.min(0.75, 0.35 * ak);
+  if (ak > 1 && !G.auraGrowTold && G.mode === 'address' && !auraOff()) { G.auraGrowTold = true; hud.toast('🌀 The Honk Hole grows.'); say('bossAngry', vars(), { bump: 8 }); }
   for (const f of feathers) {
-    f.r -= 0.5 * dt; if (f.r < 1.2) { f.r = ba.r - 0.5; f.y = 0.4 + Math.random() * 2.5; }
+    f.r -= 0.5 * ak * dt; if (f.r < 1.2) { f.r = ba.r - 0.5; f.y = 0.4 + Math.random() * 2.5; }
     f.a += (5 / Math.sqrt(f.r)) / f.r * dt;
     const x = ba.at[0] + Math.cos(f.a) * f.r, z = ba.at[1] + Math.sin(f.a) * f.r;
     f.s.position.set(x, G.course.h(x, z) + f.y, z);
@@ -2928,8 +3075,10 @@ function maybeSasquack() {
   if (!sasquackReady() || G.powerUp?.noTrees) return false;
   const s = G.course.surf(G.ball.x, G.ball.z);
   if (s === 'green' || s === 'fringe') return false;
-  let tree = nearestTrunk(G.ball, 3.0);
-  if (!tree && G.treeHitAt && s === 'rough') { const t = nearestTrunk(G.treeHitAt, 6); if (t && Math.hypot(t.x - G.ball.x, t.z - G.ball.z) <= 9) tree = t; }
+  // generous on purpose (playtest: "I can't set it off"): resting among the trunks, or
+  // anywhere off the fairway after the ball touched a tree, wakes it
+  let tree = s !== 'fairway' && s !== 'tee' ? nearestTrunk(G.ball, 4.5) : null;
+  if (!tree && G.treeHitAt && s !== 'fairway' && s !== 'tee') { const t = nearestTrunk(G.treeHitAt, 7); if (t && Math.hypot(t.x - G.ball.x, t.z - G.ball.z) <= 12) tree = t; }
   if (!tree) return false;
   startSasquack(tree);
   return true;
@@ -3118,7 +3267,7 @@ function skipSasquack() { if (G.sasq && G.sasq.t > SQ.drop && G.sasq.t < SQ.thro
 function gooseStash(g) {
   const tree = nearTree(g);
   say('tugStash', vars(), { bump: 14 });
-  hud.banner('🌲 STASHED<small>something lives up there</small>', 1800);
+  hud.banner('🌲 STASHED<small>something lives up there</small>', GOOSE_BEAT_MS);
   g.state = 'fly'; g.carry = true; g.stash = tree;
   const held = W.buildBall(0xffffff); held.add(ballEyes.clone()); g.mesh.userData.carry.add(held);
   g.target = { x: tree.x, z: tree.z }; g.flyT = 0;
@@ -3127,16 +3276,19 @@ function gooseStash(g) {
 }
 
 // ============================================================ hole extras
-// Hole 5's windmill (turns only while a ball flies) and hole 6's graveyard.
+// The windmill and turnstile, crazy golf, the bowling pins, and the graveyard.
 function setupHoleExtras(h, group) {
-  G.windmill = null; G.aura = null; G.auraTold = false; G.auraTip = false;
+  G.windmill = null; G.aura = null; G.auraTold = false; G.auraTip = false; G.auraGrowTold = false; G.crown = null;
   if (h.bossAura) { G.aura = buildAura(G.course, h.bossAura); group.add(G.aura); }
   if (h.windmill) {
-    const m = W.buildWindmill(G.course, h.windmill);
+    const flat = h.windmill.axis === 'y';
+    const m = flat ? W.buildTurnstile(G.course, h.windmill) : W.buildWindmill(G.course, h.windmill);
     group.add(m);
-    G.windmill = { def: h.windmill, rotor: m.userData.rotor, angle: windmillAngle(h.windmill, 1, 0), creakT: 0 };
-    m.userData.rotor.rotation.z = G.windmill.angle;
+    G.windmill = { def: h.windmill, rotor: m.userData.rotor, angle: windmillAngle(h.windmill, 1, 0), creakT: 0, flat };
+    setRotor(G.windmill);
   }
+  if (h.mini) group.add(W.buildCrazyGolf(G.course, h));
+  rackPins(h);
   if (h.tombs) {
     // a few engraved stones, cloned (shared geometry and textures) across the plot
     const dead = graveyard().slice(-5).map(d => d.name);
@@ -3168,7 +3320,77 @@ function updateWindmill(dt) {
   // a friend's shot can start at another phase: swing the blades there quickly, not in one jump
   const d = Math.atan2(Math.sin(a - wm.angle - w * dt), Math.cos(a - wm.angle - w * dt));
   wm.angle = Math.abs(d) > 0.02 ? wm.angle + w * dt + d * (1 - Math.exp(-dt * 10)) : a;
-  wm.rotor.rotation.z = wm.angle;
+  setRotor(wm);
+}
+// the windmill turns in its face plane; crazy golf's turnstile lies flat (physics: +angle runs +x toward +z)
+function setRotor(wm) { if (wm.flat) wm.rotor.rotation.y = -wm.angle; else wm.rotor.rotation.z = wm.angle; }
+
+// ============================================================ the Bowling Green
+// Ten geese racked like pins where a pure drive stops. Each is a plough
+// sphere in your shot (a heavy ball through light pins: it keeps going); the
+// topple and the cascade are cosmetic. Everyone has their own rack.
+const PINS = { list: [], def: null, before: 0 };
+function rackPins(h) {
+  for (const p of PINS.list) scene.remove(p.mesh);
+  PINS.list = []; PINS.def = h.bowling ?? null; PINS.before = 0; PINS.done = false; PINS.pending = 0; PINS.check = false;
+  const b = h.bowling; if (!b) return;
+  let k = 0;
+  for (let r = 0; r < b.rows; r++) for (let i = 0; i <= r; i++, k++) {
+    const x = b.at[0] + (i - r / 2) * b.gap, z = b.at[1] - r * b.row, y = G.course.h(x, z);
+    const mesh = buildGooseBreed(k === b.kingpin ? 'toulouse' : 'embden');
+    mesh.position.set(x, y, z); mesh.rotation.order = 'YXZ'; mesh.rotation.y = (Math.random() - 0.5) * 0.3;   // facing the tee, give or take
+    scene.add(mesh);
+    PINS.list.push({ k, x, z, y, mesh, down: false, fall: 0, yaw: 0 });
+  }
+}
+const pinsUp = () => PINS.list.filter(p => !p.down).length;
+function pinColliders() {
+  return PINS.list.filter(p => !p.down).map(p => ({ kind: 'sphere', x: p.x, y: p.y + 0.42, z: p.z, r: 0.46, e: 0.35, plow: true, tag: 'pin:' + p.k }));
+}
+function topple(k, e, dx = 0, dz = -1) {
+  const p = PINS.list[k]; if (!p || p.down) return;
+  p.down = true; p.fall = 0.001; p.yaw = Math.atan2(dx, dz) + (Math.random() - 0.5) * 0.6;
+  sfx.honk(1.5); sfx.feathers?.();
+  burst(p.x, p.y + 0.7, p.z, 18, 0xffffff, { speed: 2.4, up: 2, life: 1.3, grav: 2 });
+  // the cascade: pins beside or behind it go too, while there's energy left
+  const e2 = e * 0.8;   // tuned in playtests: a centred hit at roll-out speed (~5 m/s) clears the rack
+  if (e2 <= 1.8) return;
+  for (const q of PINS.list) {
+    if (q.down || Math.hypot(q.x - p.x, q.z - p.z) > 1.3 || q.z > p.z + 0.1) continue;
+    PINS.pending++;
+    setTimeout(() => { PINS.pending--; topple(q.k, e2, q.x - p.x, q.z - p.z); }, 120);
+  }
+}
+function updatePins(dt) {
+  let falling = PINS.pending > 0;
+  for (const p of PINS.list) {
+    if (!p.fall || p.fall >= 1) continue;
+    falling = true;
+    p.fall = Math.min(1, p.fall + dt / 0.25);
+    p.mesh.rotation.y = p.yaw; p.mesh.rotation.x = 1.35 * p.fall * p.fall;   // the faceplant
+  }
+  // the verdict waits for the last pin to land (the cascade can outlast the roll)
+  if (PINS.check && !falling) { PINS.check = false; bowlingVerdict(); }
+}
+// After a shot: strike, spare, or into the gutter.
+function bowlingVerdict() {
+  if (!PINS.def || PINS.done) return false;
+  const up = pinsUp();
+  if (up === 0 && PINS.before > 0) {
+    PINS.done = true;
+    const strike = PINS.before === PINS.list.length;
+    hud.banner(strike ? '🎳 STRIKE!' : '🎳 SPARE', 1800);
+    for (let k = 0; k < 4; k++) setTimeout(() => burst(PINS.def.at[0], G.course.h(PINS.def.at[0], PINS.def.at[1]) + 1, PINS.def.at[1] - 1.5, 40, CONFETTI[k], { speed: 4, up: 6, life: 2, grav: 5 }), k * 90);
+    say('strike', vars(), { bump: strike ? -20 : -8 });
+    if (strike) moment(40, `Bowled a strike with ten geese on hole ${G.holeIdx + 1}`);
+    return true;
+  }
+  PINS.before = up;
+  return false;
+}
+function inGutter(x, z) {
+  const b = PINS.def; if (!b) return false;
+  return (b.gutters ?? []).some(i => { const e = G.holeDef.bunkers[i]; return e && ((x - e[0]) / e[2]) ** 2 + ((z - e[1]) / e[3]) ** 2 < 1; });
 }
 
 // ============================================================ Old Tom, in person
@@ -3223,7 +3445,7 @@ function updateOldTom(dt) {
   animateOldTom(tom, wt, state);
 }
 
-// ============================================================ hole 6: the scare
+// ============================================================ the graveyard: the scare
 // Holing out on Old Tom's Plot wakes him up. Once per round, never during a
 // shot, never costs a stroke. Skippable; a gentle version for reduced motion
 // or "Scares off". No strobing: one cyan vignette, that's all.
@@ -3392,6 +3614,7 @@ function onEmote(ev) {
   const dot = `<span style="color:${r.hex}">●</span> <b>${esc(r.name)}</b>`;
   if (ev.kind === 'scared') { hud.toast(`👻 Old Tom got ${esc(r.name)}.`); return; }
   if (ev.kind === 'sasquack') { hud.toast(`🦶 ${esc(r.name)} met the Sasquack.`); return; }
+  if (ev.kind === 'finale') { hud.toast(`🎆 ${esc(r.name)} has finished.`); return; }
   if (hole !== myHole()) return;
   if (ev.kind === 'react') {
     const kind = rest[0]; if (!REACTS[kind]) return;
@@ -3746,15 +3969,16 @@ function carryAt(p) {
 }
 const powerColor = p => p > 1 ? '#ff6f61' : p >= 0.8 ? '#ffc84a' : '#4fd39a';
 function updateCarryIndicator(dt) {
+  const inflight = !!G.shot;
+  if (inflight !== document.body.classList.contains('inflight')) document.body.classList.toggle('inflight', inflight);
   carry.calledT = Math.max(0, carry.calledT - dt);
   let pt = null, p = 0, frozen = false;
   if (swing.active && carry.samples) {
     p = swing.phase === 'back' ? swing.back : swing.peak;
     frozen = swing.phase !== 'back';
     if (p > 0.02) { pt = carryAt(p); carry.last = { pt, p }; }
-  } else if (G.shot?.kind === 'player' && carry.flight && carry.mark && (!carry.hideAt || G.time < carry.hideAt)) {
-    pt = carry.mark; p = carry.markP; frozen = true;
-  }
+  } else if (carry.calledT > 0 && carry.mark) { pt = carry.mark; p = carry.markP; frozen = true; }   // only to celebrate "called it"
+  // (playtest: the frozen carry mark left on the fairway in flight read as a crosshair; it goes at impact)
   // the theremin follows predicted carry (putts: their roll distance, scaled up so you can hear it)
   if (swing.active) {
     if (swing.phase === 'back') swingTone.set(carry.samples ? (pt ? Math.hypot(pt.x - G.ball.x, pt.z - G.ball.z) : 0) : swing.back * puttRange() * 6);
@@ -4163,7 +4387,7 @@ async function endRound() {
   if (!G.usedGimme && (!pbGhost || total < pbGhost.total)) {
     try {
       const holes = G.roundRec.map(hs => hs.map(r => r.pen ? r : { sx: r.sx, sy: r.sy, sz: r.sz, holed: r.holed, res: r.res, f: r.f }));
-      store.set('ghg3d_pb', JSON.stringify({ total, name: G.playerName, holes }));
+      store.set('ghg3d_pb', JSON.stringify({ total, name: G.playerName, holes, decks: HOLES.map((_, i) => holeAt(i).deckIdx ?? null) }));
       newGhost = true;
     } catch { /* storage full or unavailable */ }
   }
@@ -4182,7 +4406,24 @@ async function endRound() {
     [st.tugWins, st.tugWins, 'geese out-pulled'], [st.tugLosses, st.tugLosses, 'tugs lost to geese'], [st.bulletCams, st.bulletCams, 'bullet cams'], [st.called, st.called, 'called it'], [st.pure, st.pure, 'pure strikes'], [graveyard().length, graveyard().length, 'in the graveyard'],
   ].filter(t => t[0]).slice(0, 6);
   const moment = G.stats.moment ? `<div class="sub">⭐ Moment of the round: <b>${esc(G.stats.moment.text)}</b></div>` : '';
-  $('endBody').innerHTML = `
+  // Solo: the essentials only (playtest: "very wordy"). Rooms keep the full card.
+  if (!G.room) {
+    const fmt = d => d === 0 ? 'E' : d > 0 ? '+' + d : String(d);
+    const cell = (v, par) => `<td class="${v < par ? 'under' : v > par ? 'over' : ''}">${v ?? '–'}</td>`;
+    const line = G.stats.moment ? `<div class="sub">⭐ ${esc(G.stats.moment.text)}</div>` : '';
+    $('endBody').innerHTML = `
+    <div class="big">${total} <small style="font-size:24px">${fmt(diff)}</small></div>
+    <div class="sub"><b>${esc(beat)}</b></div>
+    <table class="sc wide">
+      <tr><th>Hole</th>${HOLES.map((_, i) => `<th>${i + 1}</th>`).join('')}<th>Tot</th></tr>
+      <tr><td>Par</td>${HOLES.map(h => `<td>${h.par}</td>`).join('')}<td>${TOTAL_PAR}</td></tr>
+      <tr><td>You</td>${HOLES.map((h, i) => cell(G.holeScores[i], h.par)).join('')}<td><b>${total}</b></td></tr>
+      <tr><td>👻</td>${HOLES.map((h, i) => `<td>${G.ghostScores[i] ?? '–'}</td>`).join('')}<td>${ghostTotal}</td></tr>
+    </table>
+    ${line}
+    <button class="go" id="again">Play again ⛳</button>
+    <button class="alt" id="share">Copy result</button> <span id="shareMsg"></span>`;
+  } else $('endBody').innerHTML = `
     <h2>${diff < 0 ? 'Under par!' : diff === 0 ? 'Level par' : 'Round complete'}</h2>
     <div class="big">${total}</div>
     <div class="sub">${diff === 0 ? 'E' : diff > 0 ? '+' + diff : diff} · ${esc(beat)}${ghostNote}</div>
@@ -4208,7 +4449,7 @@ async function endRound() {
   });
   let data = null;
   const complete = HOLES.every((_, i) => Number.isInteger(G.holeScores[i]) && G.holeScores[i] > 0) && G.roundRec.length === HOLES.length;
-  if (!complete) { renderBoard('bToday', null); renderBoard('bAll', null); return; }
+  if (!complete) { renderBoard('bToday', null); renderBoard('bAll', null); return; }   // (solo has no boards on the card: the 🏆 button has them)
   try {
     const r = await fetch('/api/score', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: G.playerName, strokes: total }) });
     if (r.ok) data = await r.json();
@@ -4300,6 +4541,15 @@ function frame() {
       updateAngler(dt);
       W.updateRod(rod, camera, lk, G.time, angler.tension, angler.progress);
       if (Math.random() < dt * 3) burst(lk.x, lk.y + 0.05, lk.z, 4, 0xdff4ff, { speed: 0.8, up: 1.2, life: 0.6 });
+    } else if (G.mode === 'holed' && G.crown) {
+      // the crown ceremony: pull back behind the cup and look up past the mesa,
+      // toward the moon, where the fireworks burst and the geese fly
+      G.celebrate -= dt; G.crown.t += dt;
+      const a = G.crown.away, cy = G.course.h(G.cup.x, G.cup.z);
+      const pos = new THREE.Vector3(G.cup.x - a.x * 16, cy + 5, G.cup.z - a.z * 16);
+      const look = new THREE.Vector3(G.cup.x + a.x * 30, cy + 9 + Math.min(1, G.crown.t / 3) * 6, G.cup.z + a.z * 30);
+      camera.position.lerp(pos, 1 - Math.exp(-dt * 1.6)); G.camLook.lerp(look, 1 - Math.exp(-dt * 2)); camera.lookAt(G.camLook);
+      if (G.celebrate <= 0) afterHole();
     } else if (G.mode === 'holed') {
       G.celebrate -= dt;
       const c = new THREE.Vector3(G.cup.x, G.course.h(G.cup.x, G.cup.z), G.cup.z);
@@ -4332,6 +4582,7 @@ function frame() {
     updateRelay(dt); updateBrood(dt); updateHammer(dt); updateAdoptee(dt);
     updateWindmill(dt);
     updateAura(dt);
+    updatePins(dt);
     updatePuppets(dt);
     updateFans(dt);
     applyKnockQ();
@@ -4367,12 +4618,12 @@ function frame() {
     // labels + glow
     updateRivals(dt);
     ghostMesh.visible = G.mode !== 'title' && !G.room && G.holeDef.spotlight !== 'scare';
-    // Old Tom's ghost ball shares your tee: right beside your own ball it reads as a
-    // second ball or a stray shadow, so it fades in only once the two are apart
-    { const gd = Math.hypot(ghostMesh.position.x - ballMesh.position.x, ghostMesh.position.z - ballMesh.position.z);
-      ghostMesh.material.opacity = 0.55 * clamp((gd - 2.5) / 6, 0, 1); if (gd < 2.5) ghostMesh.visible = false; }
-    const gHalo = ghostMesh.children[0];
-    if (gHalo) gHalo.material.opacity = clamp((camera.position.distanceTo(ghostMesh.position) - 3) / 10, 0.05, 0.35) * ghostMesh.material.opacity / 0.55;
+    // Old Tom's ghost ball is part of the show (playtest: "see the ghost more"):
+    // a bright soul ball, a halo that grows with distance, and his name above it
+    const gHalo = ghostMesh.children[0], gdist = camera.position.distanceTo(ghostMesh.position);
+    if (gHalo) { gHalo.material.opacity = clamp(0.3 + gdist / 60, 0.3, 0.7); gHalo.scale.setScalar(R * 4.5 * Math.max(1, gdist * 0.05)); }
+    ghostTag.visible = ghostMesh.visible && G.ghostSource === 'oldtom' && gdist > 5 && ['address', 'flight', 'walk', 'linger'].includes(G.mode);
+    if (ghostTag.visible) { const k = Math.max(0.6, gdist * 0.06); ghostTag.position.set(ghostMesh.position.x, ghostMesh.position.y + 0.35 + k * 0.35, ghostMesh.position.z); ghostTag.scale.set(k * 1.6, k * 0.4, 1); }
     const bd = camera.position.distanceTo(ballMesh.position);
     ballGlow.position.copy(ballMesh.position);
     ballGlow.scale.setScalar(Math.max(0.4, bd * 0.03));
@@ -4771,9 +5022,9 @@ window.golf = {
       club: G.club, yaw: G.yaw, wind: { ...G.wind }, puttRange: G.course ? puttRange() : null,
       hysteria: commentator.hysteria, tier: tier(), caption: commentator.lastLine, captionClass: commentator.lastClass, captions: commentator.history.length,
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
-      geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z })), tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
+      geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t },
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
@@ -4827,6 +5078,8 @@ window.golf = {
   },
   pvp: () => ({ shotKind: G.shot?.kind, shotT: G.shot ? +(G.shot.t / FPS).toFixed(2) : null, shotN: G.shot?.sim.n, fan: G.shot?.fan,  fans: [...fans.entries()].map(([id, f]) => ({ id, arrived: f.arrived })), puppets: [...puppets.values()].map(p => ({ hunt: !!p.hunt })), knockQ: !!G.knockQ, teethHole: !!G.teethHole }),
   jumpTo(i) { for (let k = 0; k < i; k++) G.holeScores[k] = HOLES[k].par; loadHole(i); },
+  useBall(i) { if (G.bag?.[i]?.alive) { G.ballIdx = i; renderBag(); } return G.bag?.[G.ballIdx]?.name; },
+  newRoundSeed() { roundsStarted = Math.max(1, roundsStarted); setRoundSeed(); return roundSeed; },
   scareNow() { G.scareDone = false; holeOut({ start: { ...G.ball }, wasBullet: false }); }, tug: () => ({ ...tug, last: undefined }),
   skip() {
     skipLinger();
@@ -4869,3 +5122,5 @@ connectLive();
 requestAnimationFrame(frame);
 // Old Tom plans holes 2-7 while the player reads the title card.
 HOLES.forEach((_, i) => { if (i) setTimeout(() => ensureTom(i), 600 + i * 300); });
+
+$('powerChip').addEventListener('click', () => { const el = $('powerChip'); el.classList.remove('mini'); clearTimeout(renderPowerChip.t); if (narrow()) renderPowerChip.t = setTimeout(() => el.classList.add('mini'), 2500); });

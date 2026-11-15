@@ -4,17 +4,19 @@ A first-person 3D golf game for the browser, played at sunset, with a live
 leaderboard and real-time social toasts. It is deployed on
 [flightdeck](./CLAUDE.md).
 
-Seven holes (par 27) are played from behind the ball in first person. One
+Nine holes (par 34) are played from behind the ball in first person. One
 gesture swings on every device: drag down, then flick up. On top of real
 golf, five odd features came out of a design council (see
 [design/council.md](design/council.md)), and a second council round added
-the rest (see [design/council-round6.md](design/council-round6.md)):
+more (see [design/council-round6.md](design/council-round6.md)), and a
+third took the course to nine holes (see
+[design/council-round7.md](design/council-round7.md)):
 
 | Feature | Borrowed from | What it does |
 | --- | --- | --- |
 | 🔭 **Sniper's Lie** | tactical shooters | Right-click to scope. The scope has a laser rangefinder, a wind ticker and breathing sway, and Shift holds your breath. Great shots trigger a slow-mo **bullet-cam** into the cup. |
 | 👻 **Ghost Strokes** | Trackmania / Braid | You race a ghost stroke for stroke: **Old Tom**, the club pro buried by the first tee (a translucent ghost golfer who mirrors your backswing), and later your own best round. The ghost ball is **solid**, so it can collide with your ball mid-air or **stymie** your putt. |
-| 🪿 **The Geese** | Untitled Goose Game | Every hole has geese (and goslings, and on hole 7 a boss). Stop your ball near one and it steals the ball. **Goose cam** follows it as it struts off to its own theme song, ball in beak. When the song ends it's a **tug-of-war**: shake the mouse or swipe like mad. Most people lose, and the goose then punts the ball, airlifts it to a bunker, or (rarely) eats it. No penalty strokes. |
+| 🪿 **The Geese** | Untitled Goose Game | Every hole has geese (and goslings, and on the last hole a boss). Stop your ball near one and it steals the ball. **Goose cam** follows it as it struts off to its own theme song, ball in beak. When the song ends it's a **tug-of-war**: shake the mouse or swipe like mad. Most people lose, and the goose then punts the ball, airlifts it to a bunker, or (rarely) eats it. No penalty strokes. |
 | 🎙 **Whisper-to-Hysteria Commentator** | golf TV / skate-game announcers | A hushed, captioned broadcast voice that comes unglued as things go wrong. Every line is voice-acted (ElevenLabs): whispered when calm, sarcastic or delighted when rattled, shouted when hysterical. |
 | 🎣 **Four Balls, One Life** | XCOM / roguelikes + Stardew fishing | You carry four named balls, each with a physics trait. Water starts a reel-in fight: snap the line and the ball dies, and its tombstone joins a persistent graveyard by the first tee. |
 
@@ -28,16 +30,30 @@ Also in the game:
   Ghost Ball, Life Ring, Moon Boots, Pogo Ball, Sic 'Em (Goose Taxi when
   solo), Banana Ball or Goose Bait. Every wedge matters on every hole, and it
   never blocks play.
-- **🌀 Holes 5–7.** The Windmill of Spite (its sails never stop; every shot
-  starts from where the blades are, and rooms share that phase), Old Tom's Plot (a foggy graveyard, and a jumpscare when you hole
-  out, with a gentle version for reduced motion or "Scares off"), and
-  Moonshot (low gravity, a mesa green, the Goose Parliament).
+- **⛳ The nine holes.**
+  1. The Welcome Committee (par 4): the goose meets your drive.
+  2. Gerald's Lake (par 3): carry the water, or fish for your ball.
+  3. Old Tom's Stymie (par 4): his ghost parks on your putting line.
+  4. Sunset Strip (par 5): wind, and the scope over a long carry.
+  5. The Bowling Green (par 4): ten geese racked like pins where a pure
+     drive stops, with gutter bunkers either side. Strike, spare, gutter ball.
+  6. The Windmill of Spite (par 4): its sails never stop; every shot starts
+     from where the blades are, and rooms share that phase.
+  7. Old Tom's Plot (par 3): a foggy graveyard, and a jumpscare when you hole
+     out (a gentle version for reduced motion or "Scares off").
+  8. Crazy Golf (par 2): a felt lane between rails. Each round draws one of
+     three layouts (The Turnstile, Pinball, The Camel), the same for everyone
+     in a room. Moon Boots and Pogo turn a putt into a hop; Banana curls it.
+  9. The Last Moonshot (par 5): a launch-pad tee, moon gravity, a moat round
+     a mesa green, and the Boss's Honk Hole, which grows stronger every stroke
+     from the third. A clear leader gets taxed by the Boss, and the round ends
+     with fireworks as the geese fly off across the moon.
 - **🦶 The Sasquack.** Leave your ball by a tree trunk and a 3 m goose-yeti
   drops out of the canopy, roars at a low hero camera (trees in the shot are
   hidden), pulls out a pine tree and chips you out.
 - **🪿 Smarter geese.** Three breeds, a curious goose that snatches your ball
   while you line up, a boss whose "Honk Hole" whirlpool bends every shot
-  near it on hole 7, and seven ways to lose a tug-of-war (punt, relay,
+  near it on the last hole, and seven ways to lose a tug-of-war (punt, relay,
   brood, hammer throw, tree stash, bunker, swallow).
 - **🎣 Fishing docks.** A splash sends your golfer to the pond's dock; the
   rescued ball is dropped on dry land.
@@ -62,11 +78,14 @@ Also in the game:
     it saves some shots and robs others.
 - **📏 Carry, in Geese.** While you pull back, a live ring shows where the
   ball will land, in metres and in one absurd unit per hole.
-- **⛳ Putting** scales the putter's stroke to the putt (3/6/10/15/21 m
-  tiers), shows the flat-green roll distance, and uses a generous cup. A
-  trail of dots reads the first two-thirds of the roll, break included (a
-  dead-weight putt at rest, the putt you're pulling while you pull), and the
-  cup wears a pulsing ring.
+- **⛳ Putting** scales the putter's stroke to the putt (2/3/6/10/15/21 m
+  tiers), shows the flat-green roll distance, and uses a generous cup. At
+  rest, gold dots read the first two-thirds of a dead-weight putt, break
+  included. While you pull back they run the whole roll to a stop ring,
+  coloured green (it drops), gold (short) or red (well past), and the cup's
+  pulsing ring takes the same colour.
+- **👻 Old Tom's ghost ball** races yours in solo rounds: a bright soul ball
+  with a halo and a name tag. He has good days and bad (about par +3).
 
 - **dev**: https://golf-dev.fd.robertpuffe.com (deploys on push to `main`)
 - **prod**: https://golf.fd.robertpuffe.com (promoted by tagging `v*`)
@@ -121,11 +140,11 @@ scripts.
 
 | File | What it is |
 | --- | --- |
-| `js/holes.js` | the seven holes as data (tee, pin, fairway path, hills, bunkers, ponds, geese, wind, plus the windmill, tombstones and moon gravity) |
+| `js/holes.js` | the nine holes as data (tee, pin, fairway path, hills, bunkers, ponds, geese, wind, plus the windmill, tombstones, bowling pins, crazy-golf decks and moon gravity) |
 | `js/course.js` | analytic terrain height and surface type, baked into 0.5 m grids for the physics |
 | `js/physics.js` | the deterministic ball sim (240 Hz step, drag, lift, sidespin, bounce/roll per surface, cup capture and lip-outs, trees, the goose, and the solid ghost) |
 | `js/oldtom.js` | Old Tom: a seeded brute-force planner that plays each hole in the sim to make the round-1 ghost |
-| `js/characters.js` | Old Tom's ghost-golfer model (idle, swing, gloat, scare) and the hole-6 scare face |
+| `js/characters.js` | Old Tom's ghost-golfer model (idle, swing, gloat, scare) and the hole-7 scare face |
 | `js/geese.js` | goose breeds (Embden, Toulouse, Canada), the Sasquack and the boss's crown |
 | `js/golfers.js` | the five player golfers: one shared rig and animator (idle, run, swing, cheer, sulk) plus title-card portraits |
 | `js/trees.js` | tree and tombstone placement, plus their colliders (shared with Old Tom's planner) |
@@ -146,9 +165,10 @@ used by the headless QA and fun-council playtests.
 
 Every finished round is written **append-only**, one object per round, so
 concurrent players never overwrite each other. The leaderboard shows each
-player's best (fewest) strokes. Rounds on the 7-hole course are stored under
-`scores-3d7/`. Older rounds stay untouched under `scores/` (the 2D course)
-and `scores-3d/` (the 4-hole course) but are no longer read. With no bucket (local dev, `make preflight`), scores go to an
+player's best (fewest) strokes. Rounds on the 9-hole course are stored under
+`scores-3d9/`. Older rounds stay untouched under `scores/` (the 2D course),
+`scores-3d/` (the 4-hole course) and `scores-3d7/` (the 7-hole course) but
+are no longer read. With no bucket (local dev, `make preflight`), scores go to an
 in-memory store. The healthcheck never touches S3.
 
 Your personal-best ghost and the graveyard live in the browser's
@@ -227,7 +247,7 @@ The key is read from `ELEVENLABS_API_KEY` in `.env` (gitignored) and never
 printed. The voices are set in `web/js/voice.js`: the commentator is
 Nathaniel (a British live football commentator from the ElevenLabs voice
 library), and Old Tom is Sean (an old Scotsman), who speaks a few lines of
-his own in solo rounds and says "Fore." in the hole-6 scare. Lines that name
+his own in solo rounds and says "Fore." in the hole-7 scare. Lines that name
 a ball also get a generic "the ball" clip, which plays when that ball's own
 clip is missing. `--prune` deletes clips no line uses any more. Player names can't be pre-recorded, so a spoken line says
 "the golfer" or "their rival" where its caption shows the name. Ball names

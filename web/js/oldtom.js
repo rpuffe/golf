@@ -5,6 +5,8 @@
 
 import { simulate, launch, prepColliders } from './physics.js';
 
+// Tom's human error: [power, line] as fractions / radians, putts and full swings
+export const ERR = { putt: [0.22, 0.04], full: [0.13, 0.08] };
 const PEN = { water: 400, oob: 400, sand: 14, rough: 7, green: -4, fringe: 0, fairway: 0, tee: 0 };
 
 function score(course, cup, shot, lie, mode) {
@@ -44,7 +46,11 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
   };
   if (putting) {
     // Putt: fine power search straight at the hole plus small break offsets.
-    for (const off of [0, -0.02, 0.02, -0.045, 0.045, -0.08, 0.08])
+    if (holeDef.mini) {
+      // crazy golf: a wide fan so he finds the bank shots off the rails
+      for (const off of [0, -0.03, 0.03, -0.06, 0.06, -0.1, 0.1, -0.15, 0.15, -0.22, 0.22, -0.3, 0.3])
+        for (let p = 0.04; p <= 1.15; p += 0.03) tryShot('putter', p, base + off);
+    } else for (const off of [0, -0.02, 0.02, -0.045, 0.045, -0.08, 0.08])
       for (let p = 0.04; p <= 1.0; p += 0.02) tryShot('putter', p, base + off);
   } else {
     const clubs = dist > 125 ? ['driver', 'iron'] : dist > 70 ? ['iron', 'wedge', 'driver'] : ['wedge', 'iron'];
@@ -72,7 +78,8 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
   const putt = best.club === 'putter';
   const e1 = rng() * 2 - 1, e2 = rng() * 2 - 1;
   const sharp = mode === 'stymie' ? 0.3 : 1;                 // he means it on hole 3
-  const ep = e1 * (putt ? 0.15 : 0.11) * sharp, ea = e2 * (putt ? 0.022 : 0.07) * sharp;
+  // tuned so he shoots a few over par (playtest: "make the ghost easier to beat")
+  const ep = e1 * (putt ? ERR.putt[0] : ERR.full[0]) * sharp, ea = e2 * (putt ? ERR.putt[1] : ERR.full[1]) * sharp;
   const L = launch(best.club, best.power * (1 + ep), Math.cos(best.ang + ea), Math.sin(best.ang + ea), 0, 1);
   const shot = simulate(world, lie, L);
   return { start: { x: lie.x, z: lie.z, y: course.h(lie.x, lie.z) + 0.07 }, L, shot, putt };
@@ -80,8 +87,9 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
 
 // Plan the whole hole. Returns an array of strokes; the last one is holed
 // unless Tom gave up (cap 8).
-export function planHole(course, holeDef, cup, colliders, teeOffset = { x: -1.3, z: 0 }) {
-  const rng = mulberry32((holeDef.seed ?? 1) * 7919);
+// `salt` varies his round (solo rounds pass the round seed) so he has good days and bad.
+export function planHole(course, holeDef, cup, colliders, teeOffset = { x: -1.3, z: 0 }, salt = 0) {
+  const rng = mulberry32(((holeDef.seed ?? 1) * 7919) ^ salt);
   // Tom played on a day with this hole's usual breeze (fixed, so his ghost is
   // the same for everyone even though your wind varies per round).
   const wa = (holeDef.seed ?? 1) * 1.7, ws = (holeDef.wind ?? 0) * 0.8;
