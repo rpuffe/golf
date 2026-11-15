@@ -497,6 +497,7 @@ type sendReq struct {
 	Res      string    `json:"res"`
 	Club     string    `json:"club"`
 	F        []int     `json:"f"`
+	Wm       int       `json:"wm"` // shot: windmill blade phase at launch, milliradians
 	Progress *Progress `json:"progress,omitempty"`
 	Kind     string    `json:"kind"` // emote: what happened, meaning is up to the client
 	To       string    `json:"to"`   // emote: target member id, empty for everyone
@@ -512,6 +513,7 @@ type shotEvent struct {
 	Res      string    `json:"res"`
 	Club     string    `json:"club"`
 	F        []int     `json:"f"`
+	Wm       int       `json:"wm"`
 	Progress *Progress `json:"progress,omitempty"`
 }
 
@@ -629,7 +631,7 @@ func (rs *Rooms) serveSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if in.Type == "shot" {
-			if in.Start == nil || in.Hole < 1 || in.Hole > 18 || in.Stroke < 1 || in.Stroke > 99 || !validRes[in.Res] || !validClub[in.Club] || len(in.F) < 3 || len(in.F) > maxShotInts || len(in.F)%3 != 0 {
+			if in.Start == nil || in.Hole < 1 || in.Hole > 18 || in.Stroke < 1 || in.Stroke > 99 || !validRes[in.Res] || !validClub[in.Club] || len(in.F) < 3 || len(in.F) > maxShotInts || len(in.F)%3 != 0 || in.Wm < 0 || in.Wm > 6284 {
 				http.Error(w, "bad shot", http.StatusBadRequest)
 				return
 			}
@@ -642,7 +644,7 @@ func (rs *Rooms) serveSend(w http.ResponseWriter, r *http.Request) {
 			m.Progress = *in.Progress
 		}
 		if in.Type == "shot" {
-			room.broadcastLocked("shot", shotEvent{From: m.ID, Round: in.Round, Hole: in.Hole, Stroke: in.Stroke, Start: *in.Start, Res: in.Res, Club: in.Club, F: in.F, Progress: in.Progress}, m.ID)
+			room.broadcastLocked("shot", shotEvent{From: m.ID, Round: in.Round, Hole: in.Hole, Stroke: in.Stroke, Start: *in.Start, Res: in.Res, Club: in.Club, F: in.F, Wm: in.Wm, Progress: in.Progress}, m.ID)
 		} else {
 			room.broadcastLocked("progress", progressEvent{From: m.ID, Round: in.Round, Progress: m.Progress}, m.ID)
 		}

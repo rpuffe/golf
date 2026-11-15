@@ -28,12 +28,13 @@ Also in the game:
   Ghost Ball, Life Ring, Moon Boots, Pogo Ball, Sic 'Em (Goose Taxi when
   solo), Banana Ball or Goose Bait. Every wedge matters on every hole, and it
   never blocks play.
-- **🌀 Holes 5–7.** The Windmill of Spite (its sails only turn while a ball
-  flies), Old Tom's Plot (a foggy graveyard, and a jumpscare when you hole
+- **🌀 Holes 5–7.** The Windmill of Spite (its sails never stop; every shot
+  starts from where the blades are, and rooms share that phase), Old Tom's Plot (a foggy graveyard, and a jumpscare when you hole
   out, with a gentle version for reduced motion or "Scares off"), and
   Moonshot (low gravity, a mesa green, the Goose Parliament).
 - **🦶 The Sasquack.** Leave your ball by a tree trunk and a 3 m goose-yeti
-  drops out of the canopy, pulls out a pine tree and chips you out.
+  drops out of the canopy, roars at a low hero camera (trees in the shot are
+  hidden), pulls out a pine tree and chips you out.
 - **🪿 Smarter geese.** Three breeds, a curious goose that snatches your ball
   while you line up, a boss whose "Honk Hole" whirlpool bends every shot
   near it on hole 7, and seven ways to lose a tug-of-war (punt, relay,
@@ -62,7 +63,10 @@ Also in the game:
 - **📏 Carry, in Geese.** While you pull back, a live ring shows where the
   ball will land, in metres and in one absurd unit per hole.
 - **⛳ Putting** scales the putter's stroke to the putt (3/6/10/15/21 m
-  tiers), shows the flat-green roll distance, and uses a generous cup.
+  tiers), shows the flat-green roll distance, and uses a generous cup. A
+  trail of dots reads the first two-thirds of the roll, break included (a
+  dead-weight putt at rest, the putt you're pulling while you pull), and the
+  cup wears a pulsing ring.
 
 - **dev**: https://golf-dev.fd.robertpuffe.com (deploys on push to `main`)
 - **prod**: https://golf.fd.robertpuffe.com (promoted by tagging `v*`)
@@ -74,7 +78,7 @@ Also in the game:
 | Aim / look | Drag sideways on the course (the first few pixels of a drag decide: sideways aims, down swings). A/D or the arrow keys also aim, and W/S look up and down. |
 | Swing | Drag down (power: watch the carry ring), then flick up fast (tempo). Flicking at an angle curves the ball. |
 | Cancel a swing | Slide onto the ✕ strip that appears beside the cursor, press Esc, or right-click. |
-| Putt | Same swing. The whole pull-back covers the putter's range for this putt (on the club button), and the white ring shows the flat-green roll. |
+| Putt | Same swing. The whole pull-back covers the putter's range for this putt (on the club button), the white ring shows the flat-green roll, and the gold dots read the break. |
 | Easy swing | Hold Space for power and release it, then tap Space as the accuracy needle crosses the centre |
 | Club | 1–4, Q/E or the scroll wheel |
 | Scope / steady | Hold right mouse or Z, and hold Shift to hold your breath |

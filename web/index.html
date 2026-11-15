@@ -267,7 +267,7 @@
     #windBox { min-width: 0; padding: 6px 8px; } #windArrow { font-size: 18px; }
     #iconBtns { position: fixed; right: 8px; top: 8px; flex-direction: row; }
     #iconBtns button { width: 34px; height: 34px; font-size: 15px; }
-    #bottom { bottom: 8px; padding: 0 8px; }
+    #bottom { bottom: calc(8px + env(safe-area-inset-bottom)); padding: 0 calc(8px + env(safe-area-inset-right)) 0 calc(8px + env(safe-area-inset-left)); }
     .club { min-width: 40px; padding: 5px 6px; } .club span, .club kbd { display: none; } .club b { font-size: 14px; }
     #caption { bottom: auto; top: 140px; font-size: 13px; max-width: 86vw; padding: 6px 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     #toasts { top: 92px; }
@@ -276,16 +276,18 @@
     #emoteFeed { right: 8px; top: 118px; }
     #between { top: 8px; padding: 10px 12px; }
     #reelBtn { padding: 26px; font-size: 22px; }
-    #ballChoose { left: 8px; bottom: 60px; } .bp small { display: none; }
+    /* the ball picker gets its own full-width row above the clubs; the swing pad sits above it */
+    #ballChoose { left: calc(8px + env(safe-area-inset-left)); right: auto; bottom: calc(58px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); gap: 3px; padding: 3px; } .bp small { display: none; }
+    .bc { padding: 3px 6px; font-size: 11px; max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bc i { font-size: 10px; }
     #reactBar { right: 8px; top: 40%; } #reactBar button { width: 36px; height: 36px; }
     #wheel { left: auto; right: 10px; bottom: auto; top: 300px; width: 84px; height: 84px; } #wheelOut { left: auto; right: 100%; margin: 0 10px 0 0; text-align: right; font-size: 12px; white-space: normal; width: 52vw; } #wheelOut b { font-size: 17px; }
     #emoteFeed { top: 230px; }
-    #hint { top: auto; bottom: 74px; left: 8px; transform: none; max-width: calc(100vw - 140px); font-size: 12px; }
+    #hint { top: auto; bottom: calc(112px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); transform: none; max-width: calc(100vw - 150px); font-size: 12px; padding: 6px 10px; }
     #power { right: auto; left: 14px; height: 160px; }
     #powerLbl { right: auto; left: 40px; } #powerLbl small { text-align: left; }
     #tempoChip { right: auto; left: 40px; top: calc(50% + 40px); }
-    #touchSwing { right: 10px; bottom: 74px; width: 100px; height: 140px; }
-    #touchScope { right: 120px; bottom: 156px; width: 54px; height: 54px; }
+    #touchSwing { right: calc(10px + env(safe-area-inset-right)); bottom: calc(112px + env(safe-area-inset-bottom)); width: 100px; height: 130px; }
+    #touchScope { right: calc(10px + env(safe-area-inset-right)); bottom: calc(252px + env(safe-area-inset-bottom)); width: 50px; height: 50px; }
     #banner { font-size: 32px; top: 34%; } #banner small { font-size: 14px; }
     #angler { top: auto; bottom: 74px; transform: translateX(-50%); }
   }

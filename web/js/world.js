@@ -133,6 +133,20 @@ export function buildTreeMeshes(trees) {
   for (const im of [trunks, rm, pm, cones]) { im.castShadow = true; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; g.add(im); }
   if (!rounds.length) { rm.count = 0; pm.count = 0; }
   if (!pines.length) cones.count = 0;
+  // hide(fn): shrink away the trees fn(t) picks (a camera move that must see
+  // past them), restore the rest. hide(null) brings everything back.
+  const saved = [trunks, rm, pm, cones].map(im => im.instanceMatrix.array.slice());
+  const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+  const slots = trees.map((t, i) => t.pine
+    ? [[0, i], [3, pines.indexOf(t) * 2], [3, pines.indexOf(t) * 2 + 1]]
+    : [[0, i], [1, rounds.indexOf(t)], [2, rounds.indexOf(t)]]);
+  g.userData.hide = fn => {
+    const ims = [trunks, rm, pm, cones];
+    ims.forEach((im, k) => im.instanceMatrix.array.set(saved[k]));
+    if (fn) trees.forEach((t, i) => { if (fn(t)) for (const [k, j] of slots[i]) ims[k].setMatrixAt(j, zero); });
+    for (const im of ims) { im.instanceMatrix.needsUpdate = true; im.computeBoundingSphere?.(); }
+  };
+  g.userData.trees = trees;
   return g;
 }
 
@@ -157,10 +171,11 @@ export function buildFlag(course, pin) {
   const g = new THREE.Group();
   const y = course.h(pin[0], pin[1]);
   g.position.set(pin[0], y, pin[1]);
-  const cup = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 32), new THREE.MeshBasicMaterial({ color: 0x0b0d08 }));
-  cup.rotation.x = -Math.PI / 2; cup.position.y = 0.012;
-  const rim = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.025, 32), new THREE.MeshBasicMaterial({ color: 0xf4f4ea }));
-  rim.rotation.x = -Math.PI / 2; rim.position.y = 0.013;
+  // the cup and rim always draw on top of the green overlay
+  const cup = new THREE.Mesh(new THREE.CircleGeometry(CUP_R, 32), new THREE.MeshBasicMaterial({ color: 0x0b0d08, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12 }));
+  cup.rotation.x = -Math.PI / 2; cup.position.y = 0.02; cup.renderOrder = 4;
+  const rim = new THREE.Mesh(new THREE.RingGeometry(CUP_R, CUP_R + 0.03, 32), new THREE.MeshBasicMaterial({ color: 0xf4f4ea, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -12 }));
+  rim.rotation.x = -Math.PI / 2; rim.position.y = 0.021; rim.renderOrder = 4;
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 2.6, 6), new THREE.MeshStandardMaterial({ color: 0xf2efe6 }));
   pole.position.y = 1.3; pole.castShadow = true;
   const clothGeo = new THREE.PlaneGeometry(0.9, 0.55, 10, 4); clothGeo.translate(0.45, 0, 0);

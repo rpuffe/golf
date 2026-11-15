@@ -251,6 +251,55 @@ puttRing.rotation.x = -Math.PI / 2; puttRing.visible = false; scene.add(puttRing
 const aimLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(Array.from({ length: 40 }, () => new THREE.Vector3())),
   new THREE.LineDashedMaterial({ color: 0xffffff, dashSize: 0.25, gapSize: 0.18, transparent: true, opacity: 0.8, depthWrite: false }));
 aimLine.renderOrder = 3; scene.add(aimLine);
+// Putting reads. A trail of dots shows how a putt at this weight would roll,
+// break and all, over its first two-thirds (the last bit is still yours to
+// judge). At rest it reads a dead-weight putt at the hole; while you pull back
+// it reads the putt you're about to hit. The cup gets a bright pulsing ring.
+const READ_N = 30;
+const puttRead = new THREE.InstancedMesh(new THREE.CircleGeometry(1, 10).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.95, depthWrite: false }), READ_N);
+puttRead.renderOrder = 5; puttRead.visible = false; puttRead.frustumCulled = false; scene.add(puttRead);
+const cupMark = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.24, 40).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -8, polygonOffsetUnits: -16 }));
+cupMark.renderOrder = 6; cupMark.visible = false; scene.add(cupMark);
+const _rm = new THREE.Matrix4(), _rq = new THREE.Quaternion(), _rs = new THREE.Vector3(), _rp = new THREE.Vector3();
+let puttReadKey = '';
+function updatePuttRead() {
+  const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball;
+  const on = G.club === 'putter' && (G.mode === 'address' || (G.mode === 'goose' && !G.shot)) && !G.walk && !!G.course;
+  // the cup ring: always on when you're near the green
+  const cd = G.course ? Math.hypot(G.cup.x - base.x, G.cup.z - base.z) : 1e9;
+  cupMark.visible = !!G.course && cd < 45 && !['title', 'flyover', 'between', 'end', 'scare'].includes(G.mode);
+  if (cupMark.visible) {
+    const pulse = 1 + 0.18 * Math.sin(performance.now() / 260);
+    cupMark.position.set(G.cup.x, G.course.h(G.cup.x, G.cup.z) + 0.025, G.cup.z);
+    cupMark.scale.setScalar(pulse * Math.max(1, camera.position.distanceTo(cupMark.position) * 0.06));
+  }
+  puttRead.visible = on;
+  if (!on) { puttReadKey = ''; return; }
+  const p = swing.active ? (swing.phase === 'back' ? swing.back : swing.peak) : 0;
+  const range = puttRange(), d = aimDir();
+  const tgt = G.mode === 'goose' ? goose : G.cup;
+  const metres = p > 0.02 ? p * range : Math.hypot(tgt.x - base.x, tgt.z - base.z) + 0.35;
+  const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${metres.toFixed(1)},${G.ballIdx}`;
+  if (key === puttReadKey) return;
+  puttReadKey = key;
+  const tr = traitOf(bag());
+  const L = launch('putter', puttPower(metres), d.x, d.z, 0, 1, tr);
+  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L);
+  const F = sim.frames, n = sim.n;
+  // path length, then dots evenly spaced along its first two-thirds
+  const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(F[i * 3] - F[i * 3 - 3], F[i * 3 + 2] - F[i * 3 - 1]));
+  const total = cum[n - 1] || 0.01, show = total * 0.66;
+  let j = 0;
+  for (let k = 0; k < READ_N; k++) {
+    const want = 0.35 + (show - 0.35) * k / (READ_N - 1);
+    while (j < n - 1 && cum[j] < want) j++;
+    const x = F[j * 3], z = F[j * 3 + 2];
+    const fade = 1 - k / READ_N;
+    _rm.compose(_rp.set(x, G.course.h(x, z) + 0.02, z), _rq.identity(), _rs.setScalar(want > show ? 0 : 0.03 + 0.025 * fade));
+    puttRead.setMatrixAt(k, _rm);
+  }
+  puttRead.instanceMatrix.needsUpdate = true;
+}
 const trailMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
 const oldTrailMat = new THREE.LineBasicMaterial({ color: 0xfff4d0, transparent: true, opacity: 0.28, depthWrite: false });
 const ghostTrailMat = new THREE.LineBasicMaterial({ color: 0x7ff6ff, transparent: true, opacity: 0.5, depthWrite: false });
@@ -433,7 +482,7 @@ function loadHole(i) {
   const g = new THREE.Group();
   g.add(W.buildTerrainMesh(course), W.buildGreenMesh(course), W.buildWater(course));
   const trees = W.placeTrees(course, h);
-  g.add(W.buildTreeMeshes(trees));
+  G.treeMesh = W.buildTreeMeshes(trees); g.add(G.treeMesh);
   G.colliders = prepColliders([...W.treeColliders(trees, course), ...extraColliders(course, h)]);
   G.flag = W.buildFlag(course, h.pin); g.add(G.flag);
   G.slope = W.buildSlopeArrows(course); G.slope.visible = false; g.add(G.slope);
@@ -1337,8 +1386,9 @@ function goosePunt(g) {
   const start = { x: g.x + Math.sin(g.yaw) * 0.5, z: g.z + Math.cos(g.yaw) * 0.5 };
   start.y = G.course.h(start.x, start.z) + R;
   const L = launch('wedge', 0.55 + Math.random() * 0.5, Math.cos(a), Math.sin(a), (Math.random() - 0.5) * 1.6, 1, tr);
-  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1 }, start, L);
-  G.shot = { sim, t: 0, kind: 'punt', ev: 0, L, start, bullet: null, clubId: 'wedge', landed: false, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false };
+  const wmP = wmPhase();
+  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, wmPhase: wmP }, start, L);
+  G.shot = { sim, t: 0, kind: 'punt', ev: 0, L, start, bullet: null, clubId: 'wedge', landed: false, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false, wmPhase: wmP };
   G.mode = 'flight';
   G.flightCam = { phase: 0, t: 0.3, pos: camera.position.clone(), look: G.camLook.clone() };
   ballMesh.visible = true;
@@ -1516,7 +1566,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
     course: G.course, cup: G.cup, wind: G.wind, trait, colliders: G.colliders,
     dynamic: [...gooseCollider(), ...rivalColliders(start), ...(shoo ? [] : galleryColliders(start))],
     ghost: shoo ? null : ghostColliderFor(strokeNo, start), ghostR: GHOST_R,
-    cupR: mods.cupR, airGravity: mods.airGravity, noTrees: mods.noTrees, strokeNo, noAura: auraOff(),
+    cupR: mods.cupR, airGravity: mods.airGravity, noTrees: mods.noTrees, strokeNo, noAura: auraOff(), wmPhase: wmPhase(),
   };
   if (!shoo) for (const g of liveGeese()) { g.frozen = g.state === 'graze'; g.approach = false; }
   const sim = simulate(world, start, L);
@@ -1539,7 +1589,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
     G.lastLie = { ...G.ball };
     G.strokes++;
     recordStroke(start, sim);
-    roomSendShot(start, sim, clubId);
+    roomSendShot(start, sim, clubId, world.wmPhase);
     G.hintsShown.swing = true; G.treeHitAt = null;
     G.lastShotAt = performance.now(); G.galleryFrom = new Set(); G.gallerySaid = false;
     hud.hint('');
@@ -1572,7 +1622,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
     if (len >= 0.5) bullet = { fStart, fEnd, speed: clamp(len / 1.7, 0.25, 0.45) };   // 1.7–4 s of slow-mo
   }
   ballMesh.material.transparent = G.ghostShot; ballMesh.material.opacity = G.ghostShot ? 0.5 : 1;
-  G.shot = { sim, t: 0, kind: shoo ? 'shoo' : 'player', ev: 0, L, start, bullet, clubId, landed: false, strokeNo, ball, wasBullet: false, called, fan };
+  G.shot = { sim, t: 0, kind: shoo ? 'shoo' : 'player', ev: 0, L, start, bullet, clubId, landed: false, strokeNo, ball, wasBullet: false, called, fan, wmPhase: world.wmPhase };
   G.mode = shoo ? 'goose' : 'flight';
   G.hitstop = 0.085;
   G.shake = L.pure ? 0.12 : 0.35; G.fovKick = L.pure ? 5 : 2;
@@ -2451,7 +2501,9 @@ const theirToPar = r => toParThru(r.prog?.scores, myHole() - 1);
 function knockSim(start, vx, vz) {
   const sp = Math.hypot(vx, vz); if (sp > 12) { vx *= 12 / sp; vz *= 12 / sp; }
   const s0 = { x: start.x, y: G.course.h(start.x, start.z) + R, z: start.z };
-  const sim = simulate({ course: G.course, cup: G.cup, wind: { x: 0, z: 0 }, colliders: G.colliders, strokeNo: 0, noAura: true }, s0, { vx, vy: 0, vz, side: 0, lift: 0, check: 0, rolling: true, club: 'putter' });
+  const wmP = wmPhase();
+  const sim = simulate({ course: G.course, cup: G.cup, wind: { x: 0, z: 0 }, colliders: G.colliders, strokeNo: 0, noAura: true, wmPhase: wmP }, s0, { vx, vy: 0, vz, side: 0, lift: 0, check: 0, rolling: true, club: 'putter' });
+  sim.wmPhase = wmP;
   // on the green it can't be sent miles: stop it 3 m further from the cup than it started
   const sf = G.course.surf(start.x, start.z);
   if ((sf === 'green' || sf === 'fringe') && sim.result !== 'holed') {
@@ -2488,7 +2540,7 @@ function applyKnockQ() {
   if (q.strokes !== G.strokes || Math.hypot(G.ball.x - q.x, G.ball.z - q.z) > 0.05 || !['address', 'walk'].includes(G.mode)) return;   // void: things moved on
   G.walk = null;
   const sim = knockSim({ x: q.x, z: q.z }, q.vx, q.vz);
-  G.shot = { sim, t: 0, kind: 'knock', ev: 0, L: { club: 'putter' }, start: { ...G.ball }, bullet: null, clubId: 'putter', landed: true, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false, from: q.from };
+  G.shot = { sim, t: 0, kind: 'knock', ev: 0, L: { club: 'putter' }, start: { ...G.ball }, bullet: null, clubId: 'putter', landed: true, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false, from: q.from, wmPhase: sim.wmPhase };
   G.mode = 'flight';
   G.flightCam = { phase: 0, t: 0.3, pos: camera.position.clone(), look: G.camLook.clone() };
   ballMesh.visible = true;
@@ -2912,27 +2964,79 @@ function startSasquack(tree, { fromTheft = false } = {}) {
   const ux = G.ball.x - tree.x, uz = G.ball.z - tree.z, L = Math.hypot(ux, uz) || 1;
   const camAt = new THREE.Vector3(tree.x + ux / L * 10, G.course.h(tree.x, tree.z) + 2.2, tree.z + uz / L * 10);
   camAt.y = Math.max(camAt.y, G.course.h(camAt.x, camAt.z) + 1.6);
-  G.sasq = { t: 0, tree, top, ux: ux / L, uz: uz / L, camAt, plan: planSasquack(), fired: {}, pine: null, mushroom: null, fromTheft };
+  const shot = sasqShot(tree, ux / L, uz / L, L, camAt);
+  G.sasq = { t: 0, tree, top, ux: ux / L, uz: uz / L, camAt, ...shot, plan: planSasquack(), fired: {}, pine: null, mushroom: null, fromTheft };
   $('bulletLbl').textContent = '🦶 SASQUACK CAM';
   $('letterbox').classList.add('show'); document.body.classList.add('bullet');
   setAmbience(0.4); sfx.growl?.();
   sendEmote('sasquack', '', String(G.holeIdx + 1));
   hud.hint('');
 }
+// Where it lands and where the camera stands for the reveal. It lands just past
+// your ball and clear of its own canopy (no leaves over its face), and the hero
+// camera is a low three-quarter angle chosen so no other tree is in the way;
+// any that still would be are hidden until the Sasquack is gone.
+function sasqShot(tree, ux, uz, L, camAt) {
+  const all = G.treeMesh?.userData.trees ?? [];
+  let own = null; for (const t of all) { const d = Math.hypot(t.x - tree.x, t.z - tree.z); if (!own || d < own.d) own = { t, d }; }
+  own = own?.t ?? null;
+  const clear = (own?.canopyR ?? 2.8) + 0.9;
+  const sd = Math.max(L + 1.0, clear);
+  const stand = { x: tree.x + ux * sd, z: tree.z + uz * sd };
+  const gy = G.course.h(stand.x, stand.z);
+  const segD = (t, a, b) => {   // tree trunk to the a->b segment, on the ground plane
+    const dx = b.x - a.x, dz = b.z - a.z, l2 = dx * dx + dz * dz || 1;
+    const k = clamp(((t.x - a.x) * dx + (t.z - a.z) * dz) / l2, 0, 1);
+    return Math.hypot(a.x + dx * k - t.x, a.z + dz * k - t.z);
+  };
+  const blocks = (t, a, b) => t !== own && segD(t, a, b) < t.canopyR * 0.95 + 0.5;
+  let hero = null;
+  for (const off of [0.75, -0.75, 1.05, -1.05, 0.4, -0.4, 1.4, -1.4]) {
+    const a = Math.atan2(ux, uz) + off, D = 6.2;
+    const p = { x: stand.x + Math.sin(a) * D, z: stand.z + Math.cos(a) * D };
+    const h = G.course.h(p.x, p.z);
+    let score = all.filter(t => blocks(t, p, stand)).length * 10 + Math.abs(off - 0.75) * 0.5;
+    if (G.course.surf(p.x, p.z) === 'water') score += 40;
+    if (h > gy + 1.5) score += 20;   // inside a hill
+    if (!hero || score < hero.score) hero = { score, a, p };
+  }
+  const heroAt = new THREE.Vector3(hero.p.x, 0, hero.p.z);
+  heroAt.y = Math.max(gy + 0.75, G.course.h(heroAt.x, heroAt.z) + 0.6);
+  const hidden = t => blocks(t, camAt, stand) || blocks(t, hero.p, stand) || blocks(t, camAt, tree) || segD(t, hero.p, hero.p) < t.canopyR + 0.6;
+  G.treeMesh?.userData.hide?.(hidden);
+  return { stand, heroAt, heroA: hero.a };
+}
+// the beats, in seconds: the camera holds on it a good while before it swings
+const SQ = { drop: 1.5, land: 1.85, roarEnd: 3.4, grabEnd: 3.8, pine: 3.8, tee: 4.0, throw: 5.4, swing: 5.5 };
 function sasqOnce(key, fn) { if (!G.sasq.fired[key]) { G.sasq.fired[key] = true; fn(); } }
 function updateSasquack(dt) {
   const S = G.sasq; if (!S) return;
   S.t += dt;
   const t = S.t, tr = S.tree, gy = G.course.h(tr.x, tr.z), wt = performance.now() / 1000;
+  if (t > SQ.swing + 6) { endSasquack(); linger(0.8, () => afterStroke(true)); return; }   // never stuck here
   const canopy = new THREE.Vector3(tr.x, S.top - 1.5, tr.z);
-  const stand = { x: tr.x + S.ux * 1.5, z: tr.z + S.uz * 1.5 };
-  const lookAt = t < 1.5 ? canopy : new THREE.Vector3(stand.x, G.course.h(stand.x, stand.z) + 1.8, stand.z);
-  camera.position.lerp(S.camAt, 1 - Math.exp(-dt * 3));
+  const stand = S.stand, sgy = G.course.h(stand.x, stand.z);
+  const chest = new THREE.Vector3(stand.x, sgy + 1.7, stand.z);
+  let camWant = S.camAt, lookAt = canopy, rate = 3;
+  if (t >= SQ.land) {
+    // the hero shot: a low swoop in, then a slow push and drift round it while it roars
+    const k = smooth(clamp((t - SQ.land) / (SQ.roarEnd - SQ.land), 0, 1));
+    const a = S.heroA + k * 0.22, D = lerp(7.2, 5.0, k);
+    camWant = new THREE.Vector3(stand.x + Math.sin(a) * D, Math.max(S.heroAt.y, sgy + lerp(0.55, 0.9, k)), stand.z + Math.cos(a) * D);
+    lookAt = chest.clone().setY(sgy + lerp(2.0, 1.6, k)); rate = t < SQ.land + 0.5 ? 4 : 2.5;
+    if (t >= SQ.roarEnd) {
+      // ease back out so you see it tee your ball up and swing
+      const k2 = smooth(clamp((t - SQ.roarEnd) / 0.8, 0, 1)), a2 = S.heroA + 0.22;
+      camWant = new THREE.Vector3(stand.x + Math.sin(a2) * lerp(5.0, 7.5, k2), sgy + lerp(0.9, 1.8, k2), stand.z + Math.cos(a2) * lerp(5.0, 7.5, k2));
+      lookAt = new THREE.Vector3((stand.x + G.ball.x) / 2, sgy + 1.2, (stand.z + G.ball.z) / 2);
+    }
+  } else if (t >= SQ.drop) lookAt = new THREE.Vector3(stand.x, S.top - 2, stand.z);
+  camera.position.lerp(camWant, 1 - Math.exp(-dt * rate));
   G.camLook.lerp(lookAt, 1 - Math.exp(-dt * 4)); camera.lookAt(G.camLook);
   for (const k of [0, 0.3, 0.6]) if (t >= k) sasqOnce('leaf' + k, () => { burst(canopy.x, canopy.y, canopy.z, 30, 0x4e8a30, { speed: 2, up: 1, life: 1.4, grav: 1.5 }); sfx.leaves(); });
   if (t >= 0.9 && t < 1.5) {
     sasqEyes.visible = !(t > 1.2 && t < 1.28);   // a blink
-    sasqEyes.position.set(canopy.x + S.ux * 1.2, canopy.y + 0.5, canopy.z + S.uz * 1.2);
+    sasqEyes.position.set(canopy.x + S.ux * 1.6, canopy.y + 0.3, canopy.z + S.uz * 1.6);
     sasqEyes.lookAt(camera.position);
     sasqOnce('eyes', () => { sfx.tick(); setTimeout(() => sfx.tick(), 150); });
   } else sasqEyes.visible = false;
@@ -2946,20 +3050,24 @@ function updateSasquack(dt) {
       hud.banner('🦶 THE SASQUACK<small>it lives in the trees</small>', 2200);
       say('sasquack', vars(), { bump: 25 });
     });
-    const fall = clamp((t - 1.5) / 0.35, 0, 1);
+    const fall = clamp((t - SQ.drop) / (SQ.land - SQ.drop), 0, 1);
     const y = G.course.h(stand.x, stand.z) + (1 - fall * fall) * (S.top - 3 - G.course.h(stand.x, stand.z));
     sasq.position.set(stand.x, y, stand.z);
-    sasq.rotation.y = Math.atan2(S.camAt.x - stand.x, S.camAt.z - stand.z) * 0.6 + Math.atan2(S.ux, S.uz) * 0.4;
+    { // it faces the hero camera
+      const fy = Math.atan2(S.heroAt.x - stand.x, S.heroAt.z - stand.z);
+      sasq.rotation.y = t < SQ.roarEnd ? fy : Math.atan2(G.ball.x - stand.x, G.ball.z - stand.z) * 0.5 + fy * 0.5;
+    }
     let state = { mode: 'idle' };
-    if (t < 1.85) state = { mode: 'idle' };
-    else if (t < 2.6) state = { mode: 'roar' };
-    else if (t < 3.0) state = { mode: 'grab', k: clamp((t - 2.6) / 0.4, 0, 1) };
-    else if (t < 4.4) state = { mode: 'idle' };
-    else if (t < 4.75) state = { mode: 'throw', k: clamp((t - 4.4) / 0.35, 0, 1) * MONSTER_THROW_RELEASE * 1.4 };
+    if (t < SQ.land) state = { mode: 'idle' };
+    else if (t < SQ.roarEnd) state = { mode: 'roar' };
+    else if (t < SQ.grabEnd) state = { mode: 'grab', k: clamp((t - SQ.roarEnd) / 0.4, 0, 1) };
+    else if (t < SQ.throw) state = { mode: 'idle' };
+    else if (t < SQ.throw + 0.35) state = { mode: 'throw', k: clamp((t - SQ.throw) / 0.35, 0, 1) * MONSTER_THROW_RELEASE * 1.4 };
     else state = { mode: 'dance' };
     animateMonsterGoose(sasq, wt, state);
-    if (t >= 2.6 + 0.4 * MONSTER_GRAB_PICK) sasqOnce('grab', () => { ballMesh.visible = false; const b = W.buildBall(0xffffff); b.add(ballEyes.clone()); sasq.userData.carry.add(b); });
-    if (t >= 3.0) sasqOnce('pine', () => {
+    if (t >= SQ.land + 0.9) sasqOnce('roar2', () => { sfx.roar?.(reduceMotion); if (!reduceMotion) G.shake = Math.max(G.shake, 0.3); });   // a second, bigger roar for the close-up
+    if (t >= SQ.roarEnd + 0.4 * MONSTER_GRAB_PICK) sasqOnce('grab', () => { ballMesh.visible = false; const b = W.buildBall(0xffffff); b.add(ballEyes.clone()); sasq.userData.carry.add(b); });
+    if (t >= SQ.pine) sasqOnce('pine', () => {
       // a whole pine tree, from behind its back
       const pine = new THREE.Group();
       const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.18, 3, 7), new THREE.MeshStandardMaterial({ color: 0x5a3d26 })); trunk.position.y = -1.2;
@@ -2968,7 +3076,7 @@ function updateSasquack(dt) {
       sasq.userData.handL.add(pine); S.pine = pine;
       sfx.tugPull?.(1); setTimeout(() => sfx.tick(), 200);
     });
-    if (t >= 3.2) sasqOnce('tee', () => {
+    if (t >= SQ.tee) sasqOnce('tee', () => {
       sasq.userData.carry.clear(); ballMesh.visible = true;
       const m = new THREE.Group();
       const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.18, 8), new THREE.MeshStandardMaterial({ color: 0xf2ead8 })); stem.position.y = 0.09;
@@ -2976,8 +3084,8 @@ function updateSasquack(dt) {
       m.add(stem, cap); m.position.set(G.ball.x, G.course.h(G.ball.x, G.ball.z), G.ball.z); G.holeGroup.add(m); S.mushroom = m;
       ballMesh.position.y += 0.22;
     });
-    if (S.pine && t < 4.4) S.pine.rotation.x = Math.sin(t * 6) * 0.3;   // waggle
-    if (t >= 4.5) sasqOnce('swing', () => {
+    if (S.pine && t < SQ.throw) S.pine.rotation.x = Math.sin(t * 6) * 0.3;   // waggle
+    if (t >= SQ.swing) sasqOnce('swing', () => {
       sfx.swat?.();
       if (!S.plan) {
         hud.banner('🦶 IT LEFT IT.', 1400);
@@ -2997,6 +3105,7 @@ function updateSasquack(dt) {
   }
 }
 function endSasquack(climbing = false) {
+  G.treeMesh?.userData.hide?.(null);   // the trees it hid come back
   $('letterbox').classList.remove('show'); document.body.classList.remove('bullet');
   setAmbience(1);
   if (G.sasq?.mushroom && G.sasq.mushroom.parent) G.sasq.mushroom.parent.remove(G.sasq.mushroom);
@@ -3004,7 +3113,7 @@ function endSasquack(climbing = false) {
   if (climbing && S) { burst(S.tree.x, S.top - 1.5, S.tree.z, 30, 0x4e8a30, { speed: 2, up: 1, life: 1.4, grav: 1.5 }); setTimeout(() => { sasq.visible = false; }, 600); }
   else sasq.visible = false;
 }
-function skipSasquack() { if (G.sasq && G.sasq.t > 1.5 && G.sasq.t < 4.4) G.sasq.t = 4.4; }
+function skipSasquack() { if (G.sasq && G.sasq.t > SQ.drop && G.sasq.t < SQ.throw) G.sasq.t = SQ.throw; }
 // a goose flies your ball up a tree... where something lives
 function gooseStash(g) {
   const tree = nearTree(g);
@@ -3042,23 +3151,24 @@ function setupHoleExtras(h, group) {
     }
   }
 }
+// The windmill never stops. Each shot starts from the blades' phase at that
+// instant (sent with the shot in a room), so the physics and the mesh agree.
+function wmPhase() { const wm = G.windmill; return wm ? ((wm.angle % TAU) + TAU) % TAU : undefined; }
+const TAU = Math.PI * 2;
 function updateWindmill(dt) {
   const wm = G.windmill; if (!wm) return;
+  const w = TAU / wm.def.period;
   let a = null;
-  if (G.shot) a = windmillAngle(wm.def, G.shot.strokeNo ?? G.strokes + 1, G.shot.t / FPS);
+  if (G.shot && G.shot.wmPhase !== undefined) a = G.shot.wmPhase + w * G.shot.t / FPS;
   else {
-    const rp = [...rivals.values()].find(r => r.playing && r.playing.stroke);
-    if (rp) a = windmillAngle(wm.def, rp.playing.stroke, rp.playing.t / FPS);
+    const rp = [...rivals.values()].find(r => r.playing && r.playing.stroke > 0 && r.playing.wm !== undefined);
+    if (rp) a = rp.playing.wm + w * rp.playing.t / FPS;
   }
-  if (a === null) {
-    // at rest: settle to where the next stroke's blades will start, with a creak
-    const want = windmillAngle(wm.def, G.strokes + 1, 0);
-    const d = want - wm.angle;
-    if (Math.abs(d) > 0.01) { a = wm.angle + d * (1 - Math.exp(-dt * 3)); if ((wm.creakT -= dt) <= 0 && Math.abs(d) > 0.2) { sfx.creak?.(0.5); wm.creakT = 1.2; } }
-    else a = want;
-  }
-  wm.angle = a;
-  wm.rotor.rotation.z = a;
+  if (a === null) a = wm.angle + w * dt;
+  // a friend's shot can start at another phase: swing the blades there quickly, not in one jump
+  const d = Math.atan2(Math.sin(a - wm.angle - w * dt), Math.cos(a - wm.angle - w * dt));
+  wm.angle = Math.abs(d) > 0.02 ? wm.angle + w * dt + d * (1 - Math.exp(-dt * 10)) : a;
+  wm.rotor.rotation.z = wm.angle;
 }
 
 // ============================================================ Old Tom, in person
@@ -3121,7 +3231,7 @@ const gentleScare = () => matchMedia('(prefers-reduced-motion: reduce)').matches
 function startScare(s) {
   G.scareDone = true;
   G.mode = 'scare';
-  G.scare = { t: 0, s, gentle: gentleScare(), fired: false, laughed: false, dissolved: false };
+  G.scare = { t: 0, s, gentle: gentleScare(), fired: false, laughed: false, dissolved: false, began: performance.now() };
   document.body.classList.add('scare');
   sfx.tick();
   setAmbience?.(0);
@@ -3189,20 +3299,42 @@ function updateScare(dt) {
   if (t >= SCARE.laugh) sasqOnceScare('laugh', () => { scareFace.visible = false; sfx.ghostLaugh?.(); tomSay('laugh', { force: true }); });
   if (t >= SCARE.end) endScare();
 }
-function sasqOnceScare(key, fn) { const sc = G.scare; sc.once ??= {}; if (!sc.once[key]) { sc.once[key] = true; fn(); } }
-function skipScare() { if (G.mode === 'scare' && G.scare.t0) G.scare.t0 -= Math.max(0, SCARE.end - G.scare.t) * 1000; }
+// every beat is cosmetic: a sound or a voice that fails (an iPhone audio hiccup)
+// must never stop the clock, or the scare never ends
+function sasqOnceScare(key, fn) { const sc = G.scare; sc.once ??= {}; if (!sc.once[key]) { sc.once[key] = true; try { fn(); } catch (e) { console.warn('scare beat', key, e); } } }
+function skipScare() {
+  if (G.mode !== 'scare' || !G.scare) return;
+  if (!G.scare.t0) G.scare.t0 = performance.now();
+  G.scare.t0 -= Math.max(0, SCARE.end - G.scare.t) * 1000;
+}
+// The frame loop runs the scare first, inside a guard: if anything throws, or it
+// somehow outlives its own length, it ends and play carries on to the next hole.
+function runScare(dt) {
+  const sc = G.scare;
+  try {
+    if (!sc) throw new Error('scare mode without a scare');
+    if (performance.now() - sc.began > (SCARE.end + 5) * 1000) throw new Error('scare overran');
+    updateScare(dt);
+  } catch (e) { console.warn('scare recovered:', e); endScare(); }
+}
 function endScare() {
   const sc = G.scare; G.scare = null;
-  tom.visible = false; setOldTomOpacity(tom, 1); scareFace.visible = false;
-  $('scareBlack').classList.remove('show'); $('scareFlash').classList.remove('blood');
-  if (sc.dim0) { env.sun.intensity = sc.dim0.sun; env.hemi.intensity = sc.dim0.hemi; scene.fog.far = sc.dim0.far; }
+  const safe = fn => { try { fn(); } catch (e) { console.warn('endScare', e); } };
+  safe(() => { tom.visible = false; setOldTomOpacity(tom, 1); scareFace.visible = false; });
+  safe(() => { $('scareBlack').classList.remove('show'); $('scareFlash').classList.remove('show', 'blood'); });
+  safe(() => { if (sc?.dim0) { env.sun.intensity = sc.dim0.sun; env.hemi.intensity = sc.dim0.hemi; scene.fog.far = sc.dim0.far; } });
   document.body.classList.remove('scare');
-  setAmbience?.(1);
-  burst(G.cup.x, G.course.h(G.cup.x, G.cup.z) + 0.3, G.cup.z, 80, 0x7ff6ff, { speed: 2, up: 3, life: 1.6, grav: 2 });
-  for (const g of liveGeese()) { g.state = 'flee'; g.t = 3.2; g.frozen = false; const a = Math.random() * 6.3; g.target = { x: g.x + Math.cos(a) * 30, z: g.z + Math.sin(a) * 30 }; }
+  G.shake = 0; G.fovKick = 0;
+  safe(() => setAmbience?.(1));
+  safe(() => burst(G.cup.x, G.course.h(G.cup.x, G.cup.z) + 0.3, G.cup.z, 80, 0x7ff6ff, { speed: 2, up: 3, life: 1.6, grav: 2 }));
+  safe(() => { for (const g of liveGeese()) { g.state = 'flee'; g.t = 3.2; g.frozen = false; const a = Math.random() * 6.3; g.target = { x: g.x + Math.cos(a) * 30, z: g.z + Math.sin(a) * 30 }; } });
   commentator.hysteria = 100;
-  holeOut(sc.s, true);
-  say('scared', vars(), {});
+  if (G.mode !== 'scare') return;   // already moved on
+  G.scareDone = true;
+  try { holeOut(sc?.s ?? { start: { ...G.ball }, wasBullet: false, gimme: true }, true); }
+  catch (e) { console.warn('holeOut after scare', e); G.mode = 'holed'; G.celebrate = 2.7; }   // the hole still ends
+  if (G.mode === 'scare') { G.mode = 'holed'; G.celebrate = 2.7; }
+  safe(() => say('scared', vars(), {}));
 }
 
 // ============================================================ room interactions
@@ -3458,10 +3590,12 @@ $('reactBar').addEventListener('click', e => { const b = e.target.closest('butto
 function addressCam() {
   const f = fwd(G.yaw);
   const putt = G.club === 'putter';
-  const back = (putt ? 1.75 : 2.35) * (camera.aspect < 1 ? 1.35 : 1), up = putt ? 1.2 : 1.5;
+  const portrait = camera.aspect < 1;
+  const back = (putt ? 1.75 : 2.35) * (portrait ? 1.5 : 1), up = (putt ? 1.2 : 1.5) * (portrait ? 1.15 : 1);
   const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball;
-  // a little to the side of the line, so your golfer stands left of frame (TV angle)
-  const side = avatar ? (putt ? 0.45 : 0.75) : 0;
+  // a little to the side of the line, so your golfer stands left of frame (TV angle);
+  // a phone in portrait is too narrow for that, so it frames golfer and ball centred
+  const side = avatar ? (putt ? 0.45 : 0.75) * (portrait ? -0.25 : 1) : 0;
   const pos = new THREE.Vector3(base.x - f.x * back - f.z * side, 0, base.z - f.z * back + f.x * side);
   pos.y = Math.max(base.y + up, G.course.h(pos.x, pos.z) + 1.1);
   const look = new THREE.Vector3(base.x + f.x * 20 - f.z * side, base.y + 20 * Math.tan(G.pitch) + (up - 0.2), base.z + f.z * 20 + f.x * side);
@@ -3521,6 +3655,7 @@ function updateFlightCam(dt) {
 // ============================================================ aim preview
 let lastPreview = '';
 function updatePreview() {
+  updatePuttRead();
   const show = (G.mode === 'address' || (G.mode === 'goose' && !G.shot)) && !G.walk && !swing.active;
   aimLine.visible = show;
   aimRing.visible = aimLabel.visible = show && G.club !== 'putter' && !!lastPreview;
@@ -3547,7 +3682,7 @@ function updatePreview() {
       const [tr, airGravity, noTrees] = modTrait();
       const L1 = launch(G.club, 1, d.x, d.z, 0, 1, tr);
       if (G.powerUp?.shotLeft && G.powerUp.shot?.banana && G.club !== 'putter') L1.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[G.club].curve;
-      const sim = simulate({ course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff() }, base, L1);
+      const sim = simulate({ course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L1);
       G.previewCarry = { x: sim.carry.x, z: sim.carry.z };
     }
   }
@@ -3646,6 +3781,22 @@ function updateCarryIndicator(dt) {
   carryLabel.material.opacity = carry.calledT > 0 ? 1 : frozen ? 0.6 : 1;
   scaleLabel(carryLabel, carryRing.position, 1.2 + dd * 0.05, 0.065);
 }
+// screen rectangle of a label sprite, in NDC units
+function labelRect(sp) {
+  const v = sp.position.clone().project(camera);
+  const d = Math.max(0.1, camera.position.distanceTo(sp.position)), k = d * Math.tan(camera.fov * Math.PI / 360);
+  return { x: v.x, y: v.y, hw: sp.scale.x / 2 / (k * camera.aspect), hh: sp.scale.y / 2 / k, k, front: v.z < 1 };
+}
+// when the pin tag and the carry label would overlap on screen (a narrow phone,
+// aiming at the flag), lift the pin tag clear above the carry label
+function unstackLabels(low, high) {
+  const a = labelRect(low), b = labelRect(high);
+  if (!a.front || !b.front) return;
+  const gap = 0.012;
+  if (Math.abs(a.x - b.x) > a.hw + b.hw + gap) return;
+  const need = (a.y + a.hh + gap) - (b.y - b.hh);
+  if (need > 0) high.position.y += need * b.k;
+}
 function scaleLabel(sprite, pos, lift, minScreen) {
   const d = camera.position.distanceTo(pos);
   const s = Math.max(0.5, d * minScreen * (G.scoped ? 0.2 : 1));
@@ -3730,7 +3881,7 @@ function updateClub(dt) {
     const p = swing.active ? (swing.phase === 'back' ? swing.back : swing.peak) : 0;
     $('powerFill').style.height = `${Math.min(1.15, p) / 1.15 * 100}%`;
     const putt = G.club === 'putter';
-    if (putt) $('powerLbl').textContent = `${(p * puttRange()).toFixed(1)} m`;
+    if (putt) { const b0 = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball; $('powerLbl').innerHTML = `${(p * puttRange()).toFixed(1)} m<small>hole ${dist2(b0, G.cup).toFixed(1)} m</small>`; }
     else {
       const pt = carry.samples && p > 0.02 ? carryAt(p) : null, m = pt ? Math.round(Math.hypot(pt.x - G.ball.x, pt.z - G.ball.z)) : 0;
       $('powerLbl').innerHTML = carry.samples ? `${m} m<small>${m >= 5 ? esc(unitText(m)) : `${Math.round(p * 100)}%`}</small>` : `${Math.round(p * 100)}%`;
@@ -4138,7 +4289,8 @@ function frame() {
     if (G.shot) updateShot(dt);
     if (G.ghostSolo && !G.shot) updateGhostSolo(dt);
     if (G.ghostGlide) updateGhostGlide(dt);
-    if (G.mode === 'flyover') updateFlyover(dt);
+    if (G.mode === 'scare') runScare(dt);
+    else if (G.mode === 'flyover') updateFlyover(dt);
     else if (G.mode === 'walk' && G.walk) updateWalk(dt);
     else if (G.shot && G.flightCam) updateFlightCam(dt);
     else if (G.mode === 'angler') {
@@ -4157,8 +4309,6 @@ function frame() {
       updateLinger(dt);
     } else if (G.mode === 'sasquack' && G.sasq) {
       updateSasquack(dt);
-    } else if (G.mode === 'scare') {
-      updateScare(dt);
     } else if (G.mode === 'between') {
       updateBetween(dt);
     } else if ((G.mode === 'gooseCam' || G.mode === 'tug') && G.gooseCam) {
@@ -4209,15 +4359,20 @@ function frame() {
       if (pinLabel.userData.text !== t) { pinLabel.userData.text = t; const nl = W.buildLabel(t, '#fff', 'rgba(220,40,60,0.8)'); pinLabel.material.map.dispose(); pinLabel.material.dispose(); pinLabel.material = nl.material; }
       scaleLabel(pinLabel, pinPos, 0.6, 0.04);
       pinLabel.position.y += pinLabel.scale.y * 1.6;   // sit above the goose label when they line up
+      if (aimLabel.visible) unstackLabels(aimLabel, pinLabel);
     }
     const onGreen = ['green', 'fringe'].includes(G.course.surf(G.ball.x, G.ball.z)) && (G.mode === 'address');
     G.slope.visible = onGreen;
-    if (onGreen) G.slope.material.opacity = 0.3 + 0.2 * Math.sin(G.time * 3);
+    if (onGreen) G.slope.material.opacity = 0.5 + 0.2 * Math.sin(G.time * 3);
     // labels + glow
     updateRivals(dt);
     ghostMesh.visible = G.mode !== 'title' && !G.room && G.holeDef.spotlight !== 'scare';
+    // Old Tom's ghost ball shares your tee: right beside your own ball it reads as a
+    // second ball or a stray shadow, so it fades in only once the two are apart
+    { const gd = Math.hypot(ghostMesh.position.x - ballMesh.position.x, ghostMesh.position.z - ballMesh.position.z);
+      ghostMesh.material.opacity = 0.55 * clamp((gd - 2.5) / 6, 0, 1); if (gd < 2.5) ghostMesh.visible = false; }
     const gHalo = ghostMesh.children[0];
-    if (gHalo) gHalo.material.opacity = clamp((camera.position.distanceTo(ghostMesh.position) - 3) / 10, 0.05, 0.35);
+    if (gHalo) gHalo.material.opacity = clamp((camera.position.distanceTo(ghostMesh.position) - 3) / 10, 0.05, 0.35) * ghostMesh.material.opacity / 0.55;
     const bd = camera.position.distanceTo(ballMesh.position);
     ballGlow.position.copy(ballMesh.position);
     ballGlow.scale.setScalar(Math.max(0.4, bd * 0.03));
@@ -4421,10 +4576,10 @@ function roomSendProgress() {
   G.room.client.send({ type: 'progress', round: G.room.playingRound, progress: p });
   updateRoomRace();
 }
-function roomSendShot(start, sim, clubId) {
+function roomSendShot(start, sim, clubId, wmP) {
   const p = roomProgress({ rest: sim.result === 'rest' ? { x: sim.end.x, y: sim.end.y, z: sim.end.z } : null, holed: sim.result === 'holed' });
   if (!p) return;
-  G.room.client.send({ type: 'shot', round: G.room.playingRound, hole: G.holeIdx + 1, stroke: G.strokes, start: { x: start.x, y: start.y, z: start.z }, res: sim.result, club: clubId, f: encodeFrames(sim), progress: p });
+  G.room.client.send({ type: 'shot', round: G.room.playingRound, hole: G.holeIdx + 1, stroke: G.strokes, start: { x: start.x, y: start.y, z: start.z }, res: sim.result, club: clubId, f: encodeFrames(sim), wm: Math.round((wmP ?? 0) * 1000), progress: p });
 }
 
 // ---- receiving
@@ -4452,7 +4607,7 @@ function onRoomShot(ev) {
   if (sameRound() && G.room.inRound && ev.hole === G.holeIdx + 1 && Array.isArray(ev.f) && ev.f.length >= 3) {
     if (r.playing) finishRivalShot(r, true);
     const { frames, n } = decodeFrames(ev.f);
-    r.playing = { shot: { frames, n, result: ev.res }, t: 0, stroke: ev.stroke, pos: { x: frames[0], y: frames[1], z: frames[2] } };
+    r.playing = { shot: { frames, n, result: ev.res }, t: 0, stroke: ev.stroke, pos: { x: frames[0], y: frames[1], z: frames[2] }, wm: typeof ev.wm === 'number' ? ev.wm / 1000 : undefined };
     if (dist2(r.playing.pos, G.ball) < 40) sfx.strike(false, ev.club);   // you hear a friend's shot nearby
   }
   updateRoomRace();
@@ -4618,6 +4773,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z })), tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t },
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,

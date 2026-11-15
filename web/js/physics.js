@@ -107,7 +107,7 @@ export function simulate(world, start, L) {
   // flies. The angle is a pure function of the stroke number and sim time, so
   // the player, the preview, rivals and Old Tom all see the same blades.
   const wm = course.hole?.windmill;
-  const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + wm.face, len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: (world.strokeNo ?? 1) * wm.step } : null;
+  const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + wm.face, len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: world.wmPhase ?? (world.strokeNo ?? 1) * wm.step } : null;
   let swatted = false;
   // Hole 7's boss goose bends space: the Honk Hole, a horizontal whirlpool
   // around its throne (pulls in, swirls anticlockwise). Deterministic, so the

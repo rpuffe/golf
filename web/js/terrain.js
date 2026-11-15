@@ -53,7 +53,7 @@ export function buildTerrainMesh(course) {
   // the green has its own finer mesh (buildGreenMesh): cut the coarse terrain out under it
   const [gcx, gcz, grx, grz] = course.green;
   mat.onBeforeCompile = sh => {
-    sh.uniforms.uGreen = { value: new THREE.Vector4(gcx, gcz, grx * 1.5, grz * 1.5) };
+    sh.uniforms.uGreen = { value: new THREE.Vector4(gcx, gcz, grx * 1.4, grz * 1.4) };
     sh.vertexShader = 'varying vec2 vGW;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xz;');
     sh.fragmentShader = 'uniform vec4 uGreen;\nvarying vec2 vGW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  vec2 gq = (vGW - uGreen.xy) / uGreen.zw; if (dot(gq, gq) < 1.0) discard;');
   };
@@ -88,7 +88,7 @@ export function buildWater(course) {
 // ---------------------------------------------------------------------------
 export function buildGreenMesh(course) {
   const [cx, cz, rx, rz] = course.green, pin = course.hole.pin;
-  const R = 1.75;                                   // well past where the terrain is cut (1.5), so no seams
+  const R = 1.6;                                    // a little past the terrain cut (1.4); the edge fades out
   const rings = 40, segs = 96;
   const pos = [], uv = [], idx = [], alpha = [];
   for (let i = 0; i <= rings; i++) for (let j = 0; j <= segs; j++) {
@@ -109,8 +109,12 @@ export function buildGreenMesh(course) {
   const x = c.getContext('2d');
   const toPx = (wx, wz) => [(wx - (cx - rx * R)) / (2 * rx * R) * S, (wz - (cz - rz * R)) / (2 * rz * R) * S];
   const ell = (k, fill) => { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, rx * k / (2 * rx * R) * S, rz * k / (2 * rz * R) * S, 0, 0, Math.PI * 2); x.fillStyle = fill; x.fill(); };
-  ell(R, '#3e7428');                                  // rough-coloured apron under the terrain's cut edge
-  ell(1.45, '#4a8a33');                               // the collar / fringe
+  { // the collar fades softly into the terrain beyond the fringe: no ring, no lip
+    const [px, pz] = toPx(cx, cz), r0 = 1.38 / R * (S / 2), r1 = S / 2;
+    const g = x.createRadialGradient(px, pz, r0, px, pz, r1); g.addColorStop(0, 'rgba(84,140,58,1)'); g.addColorStop(1, 'rgba(84,140,58,0)');
+    x.fillStyle = g; x.beginPath(); x.arc(px, pz, r1, 0, Math.PI * 2); x.fill();
+  }
+  ell(1.38, '#548c3a');                               // the collar / fringe
   ell(1.0, '#7cc84f');                                // the putting surface
   // diagonal mowing stripes, clipped to the green
   x.save(); { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, S / (2 * R), S / (2 * R) * (rz / rz), 0, 0, Math.PI * 2); x.clip(); }
@@ -124,7 +128,8 @@ export function buildGreenMesh(course) {
   // fine grain so it reads as grass, not paint
   for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,220' : '20,60,10'},0.05)`; x.fillRect(Math.random() * S, Math.random() * S, 2, 2); }
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-  const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+  // no depth offset: it must never draw over the cup
+  const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.82, depthWrite: false });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true; mesh.renderOrder = 1;
   return mesh;
