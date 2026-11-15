@@ -76,6 +76,8 @@ Also in the game:
     leader's ball. Hit it first and the goose face-plants.
   - **The Gallery:** stand in the rough with a giant umbrella. It's solid:
     it saves some shots and robs others.
+  - **Final Group:** the last tee waits for everyone still playing (45 s at
+    most, or tap "Tee off now"), then a shared 3-2-1 sends the room off together.
 - **📏 Carry, in Geese.** While you pull back, a live ring shows where the
   ball will land, in metres and in one absurd unit per hole.
 - **⛳ Putting** scales the putter's stroke to the putt (2/3/6/10/15/21 m

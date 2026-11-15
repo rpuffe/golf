@@ -80,6 +80,8 @@
   #reelBtn { display: block; width: 100%; margin-top: 12px; padding: 18px; border: 0; border-radius: 18px; background: linear-gradient(180deg, #5fd3ff, #2f9bd0); color: #fff; font-size: 20px; font-weight: 900; box-shadow: 0 4px 0 #1d6c94; touch-action: none; }
   #reelBtn:active, #reelBtn.on { transform: translateY(2px); box-shadow: 0 2px 0 #1d6c94; }
   #gimme { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 10px 14px; pointer-events: auto; font-size: 15px; }
+  #finalGroup { position: absolute; left: 50%; top: 210px; transform: translateX(-50%); padding: 10px 14px; pointer-events: auto; font-size: 15px; white-space: nowrap; }
+  #finalGroup button { margin-left: 8px; border: 0; border-radius: 10px; padding: 6px 10px; background: var(--sun); color: var(--plum); font-weight: 900; }
   #gimme button { margin-left: 8px; border: 0; border-radius: 10px; padding: 6px 10px; background: var(--mint); color: var(--plum); font-weight: 900; }
   #reactBar { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
   #reactBar button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: var(--panel); font-size: 18px; }
@@ -287,7 +289,7 @@
     /* the ball picker gets its own full-width row above the clubs; the swing pad sits above it */
     #ballChoose { left: calc(8px + env(safe-area-inset-left)); right: auto; bottom: calc(58px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); gap: 3px; padding: 3px; } .bp small { display: none; }
     .bc { padding: 3px 6px; font-size: 11px; max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bc i { font-size: 10px; }
-    #reactBar { right: 8px; top: 40%; } #reactBar button { width: 36px; height: 36px; }
+    #reactBar { right: 8px; top: 60%; } #reactBar button { width: 36px; height: 36px; }   /* below the wheel, above the swing pad */
     #wheel { left: auto; right: 10px; bottom: auto; top: 300px; width: 84px; height: 84px; } #wheelOut { left: auto; right: 100%; margin: 0 10px 0 0; text-align: right; font-size: 12px; white-space: normal; width: 52vw; } #wheelOut b { font-size: 17px; }
     #emoteFeed { top: 230px; }
     #hint { top: auto; bottom: calc(112px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); transform: none; max-width: calc(100vw - 150px); font-size: 12px; padding: 6px 10px; }
@@ -353,6 +355,7 @@
   </div>
   <div id="emoteFeed"></div>
   <div id="gimme" class="panel hidden"></div>
+  <div id="finalGroup" class="panel hidden"><span></span><button type="button">Tee off now</button></div>
   <div id="reactBar" class="hidden"><button data-react="honk">📯</button><button data-react="clap">👏</button><button data-react="gasp">😱</button><button data-react="laugh">😂</button></div>
 </div>
 

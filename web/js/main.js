@@ -547,6 +547,7 @@ function loadHole(i) {
   for (const id of [...fans.keys()]) dropFan(id);
   for (const g of geese) if (g.puppetOf) { if (g.label) scene.remove(g.label); g.puppetOf = null; g.label = null; }
   G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
+  G.finalWait = null; $('finalGroup').classList.add('hidden');
   G.powerUp = null; renderPowerChip(); G.sicPending = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
   G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.scared = G.scared && G.holeIdx > 0;
@@ -1516,7 +1517,7 @@ function gooseSwallow(g) {
 // ============================================================ swing input
 const swing = { active: false, src: '', phase: 'back', back: 0, peak: 0, fwd: 0, drift: 0, tDown: 0, angle: 0, follow: 0 };
 const SWING_PX = 260;
-function canSwing() { return G.mode === 'address' && !G.shot && !G.walk; }
+function canSwing() { return G.mode === 'address' && !G.shot && !G.walk && !G.finalWait; }
 function beginSwing(src) {
   if (!canSwing() || swing.active) return;
   if (G.wheel) { hurryWheel(); }
@@ -2377,7 +2378,35 @@ function endFlyover() {
   G.ballTagFull = first; G.ballTagT = first ? 4 : 2.5;
   setTimeout(() => { if (G.mode === 'address' && !G.wheel && G.holeDef === h0) startWheel(); }, 300);
   if (h0.deck) hud.toast(`Tonight: ${esc(h0.deck)}.`);
-  if (h0.finale) finaleStakes();
+  if (h0.finale) { finaleStakes(); startFinalGroup(); }
+}
+// The Final Group (council round 7): in a room, the last hole waits for everyone
+// still playing to reach its tee (45 s at most, or "Tee off now"), then a shared
+// 3-2-1 sends you off together. Only online members count, so a dropout can't stall it.
+const finalOthers = () => [...rivals.values()].filter(r => r.online && r.prog && !r.prog.done);
+function startFinalGroup() {
+  if (!G.room || !finalOthers().length) return;
+  G.finalWait = { t0: performance.now(), count: 0, shown: -1, lastN: -1 };
+  $('finalGroup').classList.remove('hidden');
+  hud.hint('');
+}
+function finalCountdown() { const F = G.finalWait; if (F && !F.count) { F.count = performance.now(); $('finalGroup').classList.add('hidden'); } }
+$('finalGroup').querySelector('button').addEventListener('click', e => { e.stopPropagation(); finalCountdown(); });
+function updateFinalGroup() {
+  const F = G.finalWait; if (!F) return;
+  if (!G.room || !G.holeDef?.finale) { G.finalWait = null; $('finalGroup').classList.add('hidden'); return; }
+  const now = performance.now();
+  if (!F.count) {
+    const waiting = finalOthers().filter(r => (r.prog.hole ?? 0) < HOLES.length);
+    if (!waiting.length || now - F.t0 > 45000) { finalCountdown(); return; }
+    if (waiting.length !== F.lastN) { F.lastN = waiting.length; $('finalGroup').querySelector('span').textContent = `Final group. Waiting for ${waiting.length}.`; }
+    return;
+  }
+  const k = Math.floor((now - F.count) / 800);
+  if (k === F.shown) return;
+  F.shown = k;
+  if (k < 3) { hud.banner(String(3 - k), 700); sfx.tick(); }
+  else { hud.banner('⛳ TEE OFF!', 1200); (sfx.wheelLand ?? sfx.calledIt)(true); G.finalWait = null; }
 }
 // The last hole raises the stakes: Old Tom's last wager when it's close, and
 // the Boss taxes a clear leader (once, never on a green, no stroke added).
@@ -4583,6 +4612,7 @@ function frame() {
     updateWindmill(dt);
     updateAura(dt);
     updatePins(dt);
+    updateFinalGroup();
     updatePuppets(dt);
     updateFans(dt);
     applyKnockQ();
@@ -5024,7 +5054,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t },
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
