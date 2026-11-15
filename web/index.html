@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b1d45">
+<meta name="description" content="Golden Hour Golf: first-person golf with a scope, a goose, a ghost and five balls with one life each.">
+<title>Golden Hour Golf</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⛳</text></svg>">
+<style>
+  :root {
+    --plum:#2b1d45; --plum2:#4a3470; --cream:#fff8ec; --sun:#ffc84a; --sun2:#ff9a3c; --coral:#ff6f61;
+    --mint:#4fd39a; --sky:#5fd3ff; --ghost:#7ff6ff; --muted:#cbbfe0;
+    --font: ui-rounded, "SF Pro Rounded", "Nunito", "Varela Round", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --panel: rgba(32, 20, 54, 0.62);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: #1d1430; overflow: hidden; }
+  body { font: 600 14px/1.35 var(--font); color: var(--cream); user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: crosshair; touch-action: none; }
+  .hidden { display: none !important; }
+  button { font: inherit; cursor: pointer; }
+
+  /* ---------- HUD ---------- */
+  #hud { position: fixed; inset: 0; pointer-events: none; }
+  .panel { background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
+  #topLeft { position: absolute; left: 14px; top: 14px; padding: 10px 14px; min-width: 210px; }
+  #holeName { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  #holeLine { font-size: 20px; font-weight: 900; letter-spacing: -0.3px; }
+  #holeLine small { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 6px; }
+  #roundLine { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  #topRight { position: absolute; right: 14px; top: 14px; display: flex; gap: 8px; align-items: stretch; }
+  #race { padding: 8px 12px; min-width: 170px; }
+  #race .lbl { font-size: 11px; color: var(--ghost); text-transform: uppercase; letter-spacing: .08em; }
+  #raceStatus { font-size: 18px; font-weight: 900; }
+  #raceStatus.ahead { color: var(--mint); } #raceStatus.behind { color: var(--coral); } #raceStatus.level { color: var(--sun); }
+  #raceDetail { font-size: 12px; color: var(--muted); }
+  #windBox { padding: 8px 12px; text-align: center; min-width: 86px; }
+  #windBox .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  #windArrow { display: inline-block; font-size: 24px; line-height: 1; transition: transform .15s; color: var(--sky); }
+  #windSpeed { font-weight: 900; font-size: 15px; }
+  #iconBtns { display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+  #iconBtns button { width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.15); background: var(--panel); color: var(--cream); font-size: 17px; }
+
+  #bottom { position: absolute; left: 0; right: 0; bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; padding: 0 14px; gap: 10px; }
+  #clubs { display: flex; gap: 6px; pointer-events: auto; padding: 6px; }
+  .club { border: 0; border-radius: 10px; padding: 6px 10px; background: rgba(255,255,255,0.08); color: var(--cream); min-width: 58px; text-align: center; }
+  .club b { display: block; font-size: 16px; font-weight: 900; }
+  .club span { font-size: 10px; color: var(--muted); }
+  .club.active { background: var(--sun); color: var(--plum); box-shadow: 0 0 0 2px #fff6; }
+  .club.active span { color: var(--plum2); }
+  .club kbd { font: 700 9px var(--font); opacity: .55; }
+  #lieBox { padding: 8px 16px; text-align: center; }
+  #lieDist { font-size: 22px; font-weight: 900; }
+  #lieDist small { font-size: 13px; color: var(--muted); }
+  #lieSurf { font-size: 12px; color: var(--muted); }
+  #bag { padding: 8px 10px; display: flex; gap: 6px; align-items: flex-end; }
+  .ball { width: 64px; text-align: center; font-size: 10px; line-height: 1.15; color: var(--muted); }
+  .ball i { display: block; width: 18px; height: 18px; margin: 0 auto 3px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 60%, #9a9a9a); box-shadow: 0 1px 3px #0008; }
+  .ball b { display: block; color: var(--cream); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ball.active b { color: var(--sun); }
+  .ball.active i { box-shadow: 0 0 0 2px var(--sun), 0 0 12px var(--sun); }
+  .ball.dead { opacity: .45; } .ball.dead i { background: #555; } .ball.dead i::after { content: "✝"; display: block; color: #ddd; font-size: 12px; line-height: 18px; }
+  .ball.dead b { text-decoration: line-through; }
+
+  #power { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); width: 16px; height: 220px; border-radius: 10px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); overflow: hidden; opacity: 0; transition: opacity .2s; }
+  #power.show { opacity: 1; }
+  #powerFill { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: linear-gradient(0deg, var(--mint), var(--sun) 70%, var(--coral) 87%); }
+  #powerMark { position: absolute; left: -4px; right: -4px; bottom: 86.9%; height: 2px; background: #fff; }
+  #powerLbl { position: absolute; right: 44px; top: 50%; transform: translateY(-50%); font-weight: 900; font-size: 22px; opacity: 0; text-shadow: 0 2px 6px #0008; }
+  #powerLbl.show { opacity: 1; }
+  #powerLbl small { display: block; font-size: 12px; font-weight: 700; opacity: .8; text-align: right; }
+  #tempoChip { position: absolute; right: 44px; top: calc(50% + 34px); font-size: 12px; font-weight: 800; letter-spacing: .08em; color: #fff; text-shadow: 0 2px 6px #0008; opacity: 0; transition: opacity .25s; white-space: nowrap; }
+  #tempoChip b { font-size: 15px; letter-spacing: .1em; margin-left: 4px; }
+  #tempoChip.show { opacity: 1; }
+
+  #acc { position: absolute; right: 44px; top: calc(50% + 26px); width: 130px; height: 12px; border-radius: 6px; background: rgba(0,0,0,.4); opacity: 0; transition: opacity .15s; }
+  #acc.show { opacity: 1; }
+  #accZone { position: absolute; left: 45%; width: 10%; top: 0; bottom: 0; background: var(--mint); opacity: .7; border-radius: 3px; }
+  #accNeedle { position: absolute; top: -3px; bottom: -3px; width: 4px; margin-left: -2px; left: 50%; background: #fff; border-radius: 2px; }
+  #acc span { position: absolute; top: 14px; right: 0; font-size: 10px; color: var(--muted); white-space: nowrap; }
+  #caption { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%) translateY(8px); max-width: min(760px, 92vw); padding: 8px 16px; border-radius: 12px; background: rgba(10, 6, 20, 0.72); font-size: 16px; text-align: center; opacity: 0; transition: opacity .25s, transform .25s; }
+  #caption::before { content: "🎙 "; }
+  #caption.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #caption[data-tier="1"] { color: #ffe08a; font-size: 17px; }
+  #caption[data-tier="2"] { color: #ff8f80; font-size: 19px; font-weight: 900; animation: shake .25s infinite; }
+  @keyframes shake { 0%,100% { transform: translateX(-50%) rotate(0); } 25% { transform: translateX(calc(-50% - 2px)) rotate(-.6deg); } 75% { transform: translateX(calc(-50% + 2px)) rotate(.6deg); } }
+
+  #banner { position: absolute; left: 50%; top: 26%; transform: translate(-50%, -50%) scale(.8); font-size: 46px; font-weight: 900; letter-spacing: -1px; text-shadow: 0 4px 0 rgba(0,0,0,.25), 0 0 30px rgba(0,0,0,.3); opacity: 0; transition: opacity .2s, transform .25s cubic-bezier(.2,1.6,.4,1); white-space: nowrap; text-align: center; }
+  #banner.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #banner small { display: block; font-size: 18px; letter-spacing: 0; font-weight: 800; opacity: .9; }
+  #hint { position: absolute; left: 50%; top: 128px; transform: translateX(-50%); padding: 8px 14px; font-size: 13px; text-align: center; max-width: 52vw; }
+  #hint:empty { display: none; }
+  #hint b { color: var(--sun); }
+  #toasts { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); display: flex; flex-direction: column; gap: 6px; align-items: center; }
+  .toast { padding: 6px 12px; border-radius: 10px; background: rgba(20,12,36,.8); font-size: 13px; opacity: 0; transform: translateY(-6px); transition: all .3s; }
+  .toast.show { opacity: 1; transform: none; }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; pointer-events: none; }
+  #crosshair { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: rgba(255,255,255,.7); box-shadow: 0 0 0 1px #0006; }
+
+  /* ---------- scope ---------- */
+  #scope { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .15s; }
+  #scope.show { opacity: 1; }
+  #scope .vig { position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, transparent 0, transparent min(38vh, 38vw), rgba(4,4,8,.94) calc(min(38vh, 38vw) + 2px)); }
+  #scope .ret { position: absolute; left: 50%; top: 50%; width: min(76vh, 76vw); height: min(76vh, 76vw); transform: translate(-50%, -50%); }
+  #rangeBox { position: absolute; left: calc(50% + 18px); top: calc(50% + 14px); text-align: left; font-family: ui-monospace, Menlo, monospace; color: #a8ffcf; text-shadow: 0 0 6px #0f0a; }
+  #rangeDist { font-size: 26px; font-weight: 800; }
+  #rangeElev { font-size: 13px; }
+  #scopeWind { position: absolute; left: calc(50% + 18px); top: calc(50% - min(28vh, 28vw)); text-align: left; font-family: ui-monospace, Menlo, monospace; color: #a8ffcf; font-size: 13px; }
+  #breath { position: absolute; left: calc(50% + 18px); bottom: calc(50% - min(30vh, 30vw)); width: 160px; text-align: left; font-size: 11px; color: #cfe; }
+  #breathBar { height: 6px; border-radius: 4px; background: rgba(255,255,255,.15); overflow: hidden; margin-top: 3px; }
+  #breathFill { height: 100%; width: 100%; background: #a8ffcf; }
+  #breath.gasp #breathFill { background: var(--coral); }
+
+  /* ---------- bullet cam ---------- */
+  #letterbox::before, #letterbox::after { content: ""; position: fixed; left: 0; right: 0; height: 0; background: #000; transition: height .3s; z-index: 2; }
+  #letterbox::before { top: 0; } #letterbox::after { bottom: 0; }
+  #letterbox.show::before, #letterbox.show::after { height: 11vh; }
+  #bulletLbl { position: fixed; left: 24px; top: calc(11vh + 12px); font: 800 14px ui-monospace, Menlo, monospace; color: #ffdf6b; letter-spacing: .2em; opacity: 0; transition: opacity .3s; z-index: 3; }
+  #letterbox.show #bulletLbl { opacity: 1; }
+  body.bullet #hud { z-index: 4; }
+  body.bullet #caption { bottom: calc(11vh + 18px); }
+  body.bullet #topLeft, body.bullet #topRight, body.bullet #bottom, body.bullet #hint, body.bullet #crosshair { opacity: 0; transition: opacity .3s; }
+
+  /* ---------- angler ---------- */
+  #angler { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, 92vw); padding: 18px 20px; text-align: center; pointer-events: auto; }
+  #angler h3 { font-size: 22px; font-weight: 900; }
+  #angler p { color: var(--muted); font-size: 13px; margin: 2px 0 12px; }
+  .meter { position: relative; height: 22px; border-radius: 12px; background: rgba(0,0,0,.4); overflow: hidden; margin: 8px 0; }
+  #tensionSafe { position: absolute; top: 0; bottom: 0; left: 20%; width: 68%; background: rgba(79, 211, 154, .28); }
+  #tensionNeedle { position: absolute; top: -2px; bottom: -2px; width: 6px; margin-left: -3px; left: 30%; background: #fff; border-radius: 3px; box-shadow: 0 0 8px #fff; }
+  #tensionDanger { position: absolute; top: 0; bottom: 0; right: 0; width: 12%; background: rgba(255, 90, 80, .45); }
+  #reelFill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: linear-gradient(90deg, var(--sky), var(--mint)); }
+  #anglerTimer { font-size: 12px; color: var(--muted); }
+  .meterLbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+
+  /* ---------- cards ---------- */
+  .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(18, 10, 32, 0.45); pointer-events: auto; padding: 16px; }
+  .card { background: linear-gradient(180deg, #fff8ec, #ffe9c9); color: var(--plum); border-radius: 22px; padding: 26px 28px; width: min(520px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.4); text-align: center; max-height: 100%; overflow: auto; }
+  .card h1 { font-size: 38px; font-weight: 900; letter-spacing: -1px; line-height: 1; }
+  .card h1 span { color: var(--sun2); }
+  .card h2 { font-size: 26px; font-weight: 900; letter-spacing: -.5px; }
+  .card .sub { color: #7a6a90; margin: 6px 0 16px; }
+  .card input { font: 700 16px var(--font); padding: 12px 14px; border-radius: 12px; border: 2px solid #e8d5b5; width: 100%; color: var(--plum); background: #fff; }
+  .card .go { margin-top: 12px; width: 100%; padding: 14px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffcf5c, #ff9a3c); color: var(--plum); font-size: 19px; font-weight: 900; box-shadow: 0 4px 0 #c66a1c; }
+  .card .go:active { transform: translateY(2px); box-shadow: 0 2px 0 #c66a1c; }
+  .card .alt { margin-top: 8px; background: none; border: 0; color: #7a6a90; text-decoration: underline; }
+  .card .how { font-size: 13px; color: #6a5a80; margin-top: 14px; line-height: 1.5; }
+  .card .how b { color: var(--plum); }
+  .feat { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin: 10px 0 2px; }
+  .feat span { font-size: 11px; padding: 3px 8px; border-radius: 999px; background: #2b1d450f; color: #5a4a70; }
+  table.sc { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  table.sc th, table.sc td { padding: 5px 4px; border-bottom: 1px solid #e8d5b5; }
+  table.sc th { color: #7a6a90; font-size: 11px; text-transform: uppercase; }
+  td.under { color: #13955a; font-weight: 900; } td.over { color: #d0453a; font-weight: 900; }
+  .boards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; margin-top: 10px; }
+  .boards h4 { font-size: 12px; text-transform: uppercase; color: #7a6a90; }
+  .boards ol { list-style: none; font-size: 13px; }
+  .boards li { display: flex; justify-content: space-between; padding: 2px 0; border-bottom: 1px dashed #e8d5b5; }
+  .boards li.me { color: #c66a1c; font-weight: 900; }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0; }
+  .stats div { background: #2b1d450d; border-radius: 12px; padding: 8px 4px; font-size: 11px; color: #7a6a90; }
+  .stats b { display: block; font-size: 20px; color: var(--plum); }
+  #holeCard .card { width: min(380px, 100%); }
+  .big { font-size: 54px; font-weight: 900; line-height: 1; }
+
+  #touchSwing { position: fixed; right: 18px; bottom: 120px; width: 110px; height: 150px; border-radius: 20px; border: 2px dashed rgba(255,255,255,.4); background: rgba(0,0,0,.2); color: #fff; font-size: 12px; display: grid; place-items: center; text-align: center; pointer-events: auto; touch-action: none; }
+  #touchScope { position: fixed; right: 140px; bottom: 120px; width: 64px; height: 64px; border-radius: 50%; border: 0; background: var(--panel); color: #fff; font-size: 22px; pointer-events: auto; }
+  /* ---------- rooms ---------- */
+  .card .go2 { margin-top: 10px; width: 100%; padding: 11px; border: 2px solid #e2b77a; border-radius: 14px; background: #fff3dc; color: var(--plum); font-size: 16px; font-weight: 900; }
+  .card .go2:disabled, .card .go:disabled { opacity: .55; }
+  #roomPanel { margin-top: 10px; padding: 12px; border-radius: 16px; background: #2b1d450a; }
+  #roomPanel .row { display: flex; gap: 8px; margin-top: 10px; }
+  #roomPanel .row input { text-transform: uppercase; letter-spacing: .3em; text-align: center; font-size: 20px; }
+  #roomPanel .row .go2 { margin-top: 0; width: auto; padding: 0 18px; }
+  #roomCodeShow { font-size: 40px; font-weight: 900; letter-spacing: .18em; display: block; line-height: 1.1; }
+  #roomMembers, .standings { list-style: none; text-align: left; margin: 10px 0 0; }
+  #roomMembers li, .standings li { display: flex; align-items: center; gap: 8px; padding: 5px 2px; border-bottom: 1px dashed #e8d5b5; font-weight: 700; }
+  #roomMembers li.off, .standings li.off { opacity: .45; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px #fff; }
+  .standings li b { margin-left: auto; } .standings li small { color: #7a6a90; font-weight: 400; min-width: 64px; text-align: right; }
+  .standings li.me { color: #c66a1c; }
+  #roomErr { color: #d0453a; font-size: 13px; min-height: 1em; margin-top: 6px; }
+  #roomNet { font-size: 12px; color: #7a6a90; margin-top: 6px; }
+  .rrow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #fff; line-height: 1.5; }
+  .rrow i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+  .rrow b { margin-left: auto; padding-left: 8px; font-weight: 700; font-size: 13px; letter-spacing: .02em; } .rrow small { color: var(--muted); min-width: 44px; text-align: right; }
+  .rrow.me { color: var(--sun); } .rrow.off { opacity: .45; }
+  @media (max-width: 760px) {
+    #topLeft { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
+    #holeLine { font-size: 15px; } #holeName { font-size: 10px; } #roundLine { font-size: 11px; }
+    #topRight { left: 8px; right: 8px; top: 76px; justify-content: space-between; gap: 6px; }
+    #race { min-width: 0; flex: 1; padding: 6px 10px; } #raceStatus { font-size: 14px; } #raceDetail { font-size: 10px; }
+    #windBox { min-width: 0; padding: 6px 8px; } #windArrow { font-size: 18px; }
+    #iconBtns { position: fixed; right: 8px; top: 8px; flex-direction: row; }
+    #iconBtns button { width: 34px; height: 34px; font-size: 15px; }
+    #bottom { bottom: 8px; padding: 0 8px; }
+    .club { min-width: 40px; padding: 5px 6px; } .club span, .club kbd { display: none; } .club b { font-size: 14px; }
+    #bag { padding: 6px; gap: 3px; }
+    .ball { width: 24px; font-size: 0; } .ball b { display: none; }
+    .ball.active { width: auto; min-width: 54px; } .ball.active b { display: block; font-size: 11px; }
+    #lieBox { display: none; }
+    #caption { bottom: auto; top: 150px; font-size: 14px; max-width: 94vw; }
+    #hint { top: auto; bottom: 74px; left: 8px; transform: none; max-width: calc(100vw - 140px); font-size: 12px; }
+    #power { right: auto; left: 14px; height: 160px; }
+    #powerLbl { right: auto; left: 40px; } #powerLbl small { text-align: left; }
+    #tempoChip { right: auto; left: 40px; top: calc(50% + 40px); }
+    #touchSwing { right: 10px; bottom: 74px; width: 100px; height: 140px; }
+    #touchScope { right: 120px; bottom: 156px; width: 54px; height: 54px; }
+    #banner { font-size: 32px; top: 34%; } #banner small { font-size: 14px; }
+    #angler { top: auto; bottom: 74px; transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce) { #caption[data-tier="2"] { animation: none; } }
+</style>
+<script type="importmap">{ "imports": { "three": "/lib/three.module.min.js" } }</script>
+</head>
+<body>
+<canvas id="c" tabindex="0" aria-label="Golf course, first-person view"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="crosshair"></div>
+  <div id="topLeft" class="panel">
+    <div id="holeName">—</div>
+    <div id="holeLine">Hole 1 <small>Par 4</small></div>
+    <div id="roundLine">Stroke 1 · Round 0 (E)</div>
+  </div>
+  <div id="topRight">
+    <div id="race" class="panel">
+      <div class="lbl" id="raceWho">👻 vs Old Tom</div>
+      <div id="raceStatus" class="level">LEVEL</div>
+      <div id="raceDetail">—</div>
+    </div>
+    <div id="windBox" class="panel">
+      <div class="lbl">Wind</div>
+      <div id="windArrow">➤</div>
+      <div id="windSpeed">0 m/s</div>
+    </div>
+    <div id="iconBtns">
+      <button id="muteBtn" title="Sound (M)" aria-label="Toggle sound">🔊</button>
+      <button id="voiceBtn" title="Commentator voice (V)" aria-label="Toggle commentator voice">🎙</button>
+      <button id="helpBtn" title="Controls (H)" aria-label="Show controls">?</button>
+    </div>
+  </div>
+  <div id="hint" class="panel"></div>
+  <div id="toasts"></div>
+  <div id="power"><div id="powerFill"></div><div id="powerMark"></div></div>
+  <div id="powerLbl">0%</div>
+  <div id="tempoChip" aria-live="polite"></div>
+  <div id="acc" aria-hidden="true"><div id="accZone"></div><div id="accNeedle"></div><span>tap Space on the centre</span></div>
+  <div id="banner"></div>
+  <div id="caption" aria-live="polite"></div>
+  <div id="bottom">
+    <div id="clubs" class="panel" role="radiogroup" aria-label="Club"></div>
+    <div id="lieBox" class="panel"><div id="lieDist">—</div><div id="lieSurf">—</div></div>
+    <div id="bag" class="panel" aria-label="Ball bag"></div>
+  </div>
+  <div id="flash"></div>
+</div>
+
+<div id="scope">
+  <div class="vig"></div>
+  <svg class="ret" viewBox="-100 -100 200 200" fill="none" stroke="#a8ffcf" stroke-width=".5">
+    <circle r="99" stroke-width="1.2" stroke="#000"/>
+    <line x1="-100" y1="0" x2="-6" y2="0"/><line x1="6" y1="0" x2="100" y2="0"/>
+    <line x1="0" y1="-100" x2="0" y2="-6"/><line x1="0" y1="6" x2="0" y2="100"/>
+    <line x1="-100" y1="0" x2="-40" y2="0" stroke-width="2"/><line x1="40" y1="0" x2="100" y2="0" stroke-width="2"/>
+    <line x1="0" y1="40" x2="0" y2="100" stroke-width="2"/>
+    <g stroke-width=".6">
+      <line x1="-20" y1="-2" x2="-20" y2="2"/><line x1="-30" y1="-2" x2="-30" y2="2"/><line x1="20" y1="-2" x2="20" y2="2"/><line x1="30" y1="-2" x2="30" y2="2"/>
+      <line x1="-2" y1="20" x2="2" y2="20"/><line x1="-2" y1="30" x2="2" y2="30"/>
+    </g>
+    <circle r="1.2" fill="#ff5050" stroke="none"/>
+  </svg>
+  <div id="scopeWind">WIND —</div>
+  <div id="rangeBox"><div id="rangeDist">— m</div><div id="rangeElev">ELEV —</div></div>
+  <div id="breath">HOLD <b>SHIFT</b> TO STEADY<div id="breathBar"><div id="breathFill"></div></div></div>
+</div>
+
+<div id="letterbox"><div id="bulletLbl">● BULLET CAM — CLICK TO SKIP</div></div>
+
+<div id="angler" class="panel hidden" role="dialog" aria-label="Fishing minigame">
+  <h3 id="anglerTitle">🎣 Reel in Gerald!</h3>
+  <p><b>Hold</b> mouse, Space or this panel to reel. Keep the needle in the <span style="color:var(--mint)">green</span>. Too tight and the line snaps.</p>
+  <div class="meterLbl"><span>slack</span><span>TENSION</span><span>snap!</span></div>
+  <div class="meter"><div id="tensionSafe"></div><div id="tensionDanger"></div><div id="tensionNeedle"></div></div>
+  <div class="meterLbl"><span>water</span><span>REELED IN</span><span>shore</span></div>
+  <div class="meter"><div id="reelFill"></div></div>
+  <div id="anglerTimer">10.0 s</div>
+</div>
+
+<div id="title" class="overlay">
+  <div class="card">
+    <h1>Golden Hour <span>Golf</span></h1>
+    <div class="sub">First-person golf with a sniper scope, a goose and a ghost.<br>You get five balls, and each has one life.</div>
+    <input id="name" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your name">
+    <button id="play" class="go">Tee off ⛳</button>
+    <button id="roomBtn" class="go2">👥 Play with friends</button>
+    <div id="roomPanel" class="hidden">
+      <div id="roomJoin">
+        <button id="roomCreate" class="go2">Create a room</button>
+        <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Room code"><button id="roomJoinBtn" class="go2">Join</button></div>
+      </div>
+      <div id="roomLobby" class="hidden">
+        <div class="sub" style="margin:0">Room code</div>
+        <b id="roomCodeShow">----</b>
+        <button id="roomCopy" class="alt">Copy invite link</button>
+        <ul id="roomMembers"></ul>
+        <button id="roomStart" class="go">Start the round for everyone ⛳</button>
+        <div id="roomWait" class="sub">Waiting for the host to start…</div>
+        <div id="roomNet"></div>
+        <button id="roomLeave" class="alt">Leave room</button>
+      </div>
+      <div id="roomErr" role="status"></div>
+    </div>
+    <div class="how"><b>Drag the mouse back, then push it forward</b> to swing. <b>Right-click</b> to scope, and hold <b>Shift</b> to steady your breath.</div>
+    <div class="feat"><span>🔭 Sniper's Lie</span><span>👻 Ghost Strokes</span><span>🪿 The Goose</span><span>🎙 Hysteria Commentator</span><span>🎣 Five Balls, One Life</span></div>
+    <button id="lbBtn" class="alt">Leaderboard</button>
+  </div>
+</div>
+
+<div id="holeCard" class="overlay hidden"><div class="card" id="holeCardBody"></div></div>
+<div id="end" class="overlay hidden"><div class="card" id="endBody"></div></div>
+<div id="help" class="overlay hidden">
+  <div class="card">
+    <h2>Controls</h2>
+    <table class="sc" style="text-align:left">
+      <tr><td><b>Aim</b></td><td>Move the mouse (click the course first), or A / D or the arrow keys.</td></tr>
+      <tr><td><b>Swing</b></td><td>Hold the left button. Pull back for power, then push forward fast. Sideways drift curves the ball.</td></tr>
+      <tr><td><b>Easy swing</b></td><td>Hold Space for power and release it, then tap Space again as the needle crosses the centre.</td></tr>
+      <tr><td><b>Club</b></td><td>1–4, Q / E or the scroll wheel.</td></tr>
+      <tr><td><b>Scope</b></td><td>Hold the right button or Z. Hold Shift to hold your breath.</td></tr>
+      <tr><td><b>Look</b></td><td>Mouse up and down, or W / S.</td></tr>
+      <tr><td><b>Sound</b></td><td>M mutes everything, and V toggles the commentator voice. Captions stay on.</td></tr>
+    </table>
+    <div class="how">The <b>ghost</b> is solid, and it can block you. If the <b>goose</b> steals your ball, hit it with a free shoo shot. Balls lost in <b>water</b> must be reeled back in, or they die.</div>
+    <button class="go" id="helpClose">Back to golf</button>
+  </div>
+</div>
+<div id="lb" class="overlay hidden"><div class="card"><h2>Leaderboard</h2><div class="boards" id="lbBoards"></div><button class="go" id="lbClose">Close</button></div></div>
+
+<button id="touchScope" class="hidden" aria-label="Scope">🔭</button>
+<div id="touchSwing" class="hidden">Drag ↓<br>then flick ↑<br>to swing</div>
+
+<script type="module" src="/js/main.js"></script>
+</body>
+</html>

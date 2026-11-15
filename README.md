@@ -1,26 +1,61 @@
 # ⛳ Golden Hour Golf
 
-A browser mini-golf game played at sunset, with a live leaderboard and
-real-time social notifications, deployed on [flightdeck](./CLAUDE.md).
+A first-person 3D golf game for the browser, played at sunset, with a live
+leaderboard and real-time social toasts. It is deployed on
+[flightdeck](./CLAUDE.md).
 
-Play nine hand-designed holes with three clubs (Power, Loft, Precision). The
-course has windmills, sliding blocks, springs, rifts and a hidden star on
-every hole. Race for the fewest strokes.
-Scores persist to S3, and while you play you get a toast whenever another
-player currently online finishes a hole.
+Four holes (par 16) are played from behind the ball in first person, with a
+mouse swing: pull back, then push through. On top of real golf, five odd
+features came out of a design council (see [design/council.md](design/council.md)):
+
+| Feature | Borrowed from | What it does |
+| --- | --- | --- |
+| 🔭 **Sniper's Lie** | tactical shooters | Right-click to scope. The scope has a laser rangefinder, a wind ticker and breathing sway, and Shift holds your breath. Great shots trigger a slow-mo **bullet-cam** into the cup. |
+| 👻 **Ghost Strokes** | Trackmania / Braid | You race a ghost stroke for stroke: **Old Tom**, the club pro buried by the first tee, and later your own best round. The ghost ball is **solid**, so it can collide with your ball mid-air or **stymie** your putt. |
+| 🪿 **The Goose** | Untitled Goose Game | Every hole has a goose. Stop your ball near it and it steals the ball. **Goose cam** then follows it as it struts off to its own theme song, ball in beak. You get no say, and it drops the ball when the song ends (no penalty). |
+| 🎙 **Whisper-to-Hysteria Commentator** | golf TV / skate-game announcers | A hushed, captioned broadcast voice that comes unglued as things go wrong. |
+| 🎣 **Five Balls, One Life** | XCOM / roguelikes + Stardew fishing | You carry five named balls, each with a physics trait. Water starts a reel-in fight: snap the line and the ball dies, and its tombstone joins a persistent graveyard by the first tee. |
+
+Also in the game:
+
+- **👥 Rooms (live multiplayer).** Create a room, share the 4-letter code or
+  link, and play the same holes at the same time with 2–8 friends. Their
+  balls fly in your world as they hit, and their resting balls are solid.
+- **📏 Carry, in Geese.** While you pull back, a live ring shows where the
+  ball will land, in metres and in one absurd unit per hole.
+- **⛳ Putting** scales the putter's stroke to the putt (3/6/10/15/21 m
+  tiers), shows the flat-green roll distance, and uses a generous cup.
 
 - **dev**: https://golf-dev.fd.robertpuffe.com (deploys on push to `main`)
 - **prod**: https://golf.fd.robertpuffe.com (promoted by tagging `v*`)
 
+## Controls
+
+| Action | Mouse / keyboard |
+| --- | --- |
+| Aim / look | Click the course to capture the mouse, then move it. A/D or the arrow keys also aim, and W/S look up and down. |
+| Swing | Hold left mouse, pull back (power: watch the carry ring), then push forward fast (tempo). Sideways drift on the push curves the ball. |
+| Putt | Same swing. The whole pull-back covers the putter's range for this putt (on the club button), and the white ring shows the flat-green roll. |
+| Easy swing | Hold Space for power and release it, then tap Space as the accuracy needle crosses the centre |
+| Club | 1–4, Q/E or the scroll wheel |
+| Scope / steady | Hold right mouse or Z, and hold Shift to hold your breath |
+| Reel (angler) | Hold mouse or Space, and keep the needle in the green |
+| Sound / voice / help | M / V / H |
+
+Touch devices get a drag-to-aim view plus an on-screen swing pad.
+
 ## How it works
 
-One Go binary does everything: it serves the game (a single embedded
-`index.html`) and exposes a small JSON + SSE API. No framework, no database —
-durable state lives in S3, live state lives in memory.
+One Go binary does everything. It serves the client (`web/`, embedded at
+build time) and a small JSON + SSE API. There is no framework and no
+database: durable state lives in S3, and live state lives in memory.
 
 ```
-browser (index.html: canvas game)
-  │  GET /                 → the game page
+browser (web/: Three.js game)
+  │  POST /api/rooms, /api/rooms/{code}/join → room membership
+  │  GET  /api/rooms/{code}/events → SSE: roster, start, shot, progress
+  │  POST /api/rooms/{code}/send   → relay a shot / progress / start / leave
+  │  GET /                 → web/index.html (+ /js/*, /lib/three.module.min.js)
   │  POST /api/score       → save a finished round, get leaderboards back
   │  GET  /api/leaderboard → { allTime, today }
   │  POST /api/hole        → "I just finished a hole" (broadcast)
@@ -28,101 +63,110 @@ browser (index.html: canvas game)
   ▼
 Go server (main.go)
   ├── Store  (store.go) ── S3 when STORAGE_BUCKET is set, else in-memory
-  └── Hub    (hub.go)  ──── in-memory SSE fan-out (ephemeral)
+  ├── Hub    (hub.go)  ──── in-memory SSE fan-out (ephemeral)
+  └── Rooms  (rooms.go) ─── in-memory multiplayer rooms (ephemeral)
 ```
 
-### The game (`index.html`)
+### The client (`web/`)
 
-Pure canvas, no assets: sounds are synthesized with WebAudio, and
-everything is drawn in code. The whole thing is one file embedded into the
-binary at build time (`//go:embed index.html`).
+Every mesh is procedural and every sound is synthesized with WebAudio, so the
+game uses no asset files. Three.js r170 is vendored at
+`web/lib/three.module.min.js` because the CSP only allows same-origin
+scripts.
 
-- **Course**: nine holes defined as data (`BASE_HOLES` — tee, cup, greens,
-  trees, mountains, sand, water, and moving parts). See the visual and
-  physics rules in [the course-design guide](course-design.md).
-- **Physics**: drag back anywhere to aim (slingshot), choose a club, and
-  release to hit. Lofted shots can clear trees and ground hazards; mountains
-  and windmills are permanent barriers. Physics runs at a fixed 60 Hz,
-  sub-stepped so fast shots cannot tunnel. The aim preview runs the same
-  physics, so it always matches the real shot.
-- **Flow**: enter a name → play 9 holes → a round-complete card shows your
-  score vs par and the **Today** and **All-time** leaderboards.
+| File | What it is |
+| --- | --- |
+| `js/holes.js` | the four holes as data (tee, pin, fairway path, hills, bunkers, ponds, goose area, wind) |
+| `js/course.js` | analytic terrain height and surface type, baked into 0.5 m grids for the physics |
+| `js/physics.js` | the deterministic ball sim (240 Hz step, drag, lift, sidespin, bounce/roll per surface, cup capture and lip-outs, trees, the goose, and the solid ghost) |
+| `js/oldtom.js` | Old Tom: a seeded brute-force planner that plays each hole in the sim to make the round-1 ghost |
+| `js/terrain.js`, `js/world.js` | meshes: terrain, water, trees, sky, flag, green-reading chevrons, graveyard, goose, club, fishing rod |
+| `js/audio.js` | the WebAudio synth, with a distinct sound for each outcome |
+| `js/commentator.js` | captioned speechSynthesis commentary in three hysteria tiers |
+| `js/main.js` | the game: input, swing, camera, scope, goose AI and goose cam, ghost race, angler, carry indicator, rooms UI, HUD and flow |
+| `js/room.js` | room networking: create/join, SSE with resync, an ordered retrying send queue |
+
+A shot is simulated in full at impact and then played back. That makes the
+bullet-cam, ghost replays and the aim preview exact, and it lets the ghost
+collide with your ball deterministically. `window.golf` is an automation hook
+used by the headless QA and fun-council playtests.
 
 ### Scores & storage (`store.go`)
 
-Every finished round is written **append-only** — one object (or one slice
-element) per round — so concurrent players never overwrite each other. A
-leaderboard is computed by reading all rounds and taking each player's best
-(fewest) strokes.
+Every finished round is written **append-only**, one object per round, so
+concurrent players never overwrite each other. The leaderboard shows each
+player's best (fewest) strokes. 3D rounds are stored under `scores-3d/`.
+Rounds from the old 2D course stay untouched under `scores/` but are no
+longer read. With no bucket (local dev, `make preflight`), scores go to an
+in-memory store. The healthcheck never touches S3.
 
-- With `storage: s3` in the manifest, the platform injects `STORAGE_BUCKET`
-  and rounds are stored at `scores/<YYYY-MM-DD>/<ts>-<rand>.json`.
-- With no bucket (local dev, `make preflight`), it falls back to an in-memory
-  store. The healthcheck never touches S3, so a slow/absent bucket can't fail
-  a deploy — see [docs/contract.md](docs/contract.md).
+Your personal-best ghost and the graveyard live in the browser's
+`localStorage`.
 
-"Today" is bucketed by UTC day.
+### Rooms (`rooms.go`, `web/js/room.js`)
+
+Every player simulates their own shots. The ball sim is deterministic, but
+browsers may differ in the last bit of `Math.sin`, so the server never runs
+physics.
+
+- **Relaying shots.** At impact, the shooter sends the shot's recorded
+  frames (30 Hz, centimetre integers, about 4 KB for a drive). The server
+  relays them to the room, and everyone else plays them back on arrival.
+- **Resyncing.** Each member's progress snapshot (hole, strokes, scores,
+  resting ball) rides along with every shot and is kept by the server.
+  Every SSE (re)connect starts with the full roster, so a dropped connection
+  or a page reload resyncs from one message.
+- **Ordering and retries.** Sends go through a one-at-a-time queue with
+  per-member sequence numbers. A progress update never overtakes its shot,
+  and the server ignores retries it has already seen.
+- **Fairness.** A room seed gives everyone the same balls and wind.
+- **Limits:**
+  - 8 players per room and 300 rooms per server.
+  - Rooms close after 30 idle minutes.
+  - Like the hub, rooms live in memory. A deploy (stop-then-start) ends
+    them, and clients carry on solo.
 
 ### Live social feed (`hub.go`)
 
-When you sink a hole the browser POSTs `/api/hole`, and the server fans that
-event out over Server-Sent Events to every browser currently connected to
-`/api/events`. Other players see a toast like *"Alice finished hole 2 in 3
-strokes"*. Each browser has a random client id so it ignores its own events.
-
-This is **ephemeral and in-memory** — nothing is stored, and only players
-online *right now* receive events, which is exactly the "playing at the same
-time" behavior we want. SSE (not websockets) because the feed is
-one-directional and rides plain HTTP through the load balancer; a 25s
-heartbeat keeps the stream under the ALB's 60s idle timeout.
-
-> **Scaling note:** the hub is per-instance, so two players on *different*
-> Fargate tasks wouldn't see each other. At a single task (today's setup)
-> everyone shares one instance, so it works. To run multiple tasks, swap the
-> in-memory hub for a shared broker (e.g. Redis pub/sub) behind the same
-> `/api/events` interface — the frontend wouldn't change.
+When you sink a hole, the browser POSTs `/api/hole`, and everyone else who is
+online gets a toast over Server-Sent Events. Nothing is stored. The hub is
+per-instance, which is fine for a single Fargate task.
 
 ## API
 
-| Method & path        | Body                              | Returns                          |
-| -------------------- | --------------------------------- | -------------------------------- |
-| `GET /`              | —                                 | the game page                    |
-| `GET /healthz`       | —                                 | `200 ok` (never touches S3)      |
-| `POST /api/score`    | `{ name, strokes }`               | `{ allTime, today }` leaderboards |
-| `GET /api/leaderboard` | —                               | `{ allTime, today }`             |
-| `POST /api/hole`     | `{ id, name, hole, strokes }`     | `204` (broadcasts to others; hole 1–18, strokes 1–99) |
-| `GET /api/events`    | — (SSE)                           | `event: holeout` stream          |
-
-Leaderboard rows are `{ name, strokes, date }`, best-per-player, ascending, top 10.
-`date` is the UTC calendar date of that player's latest matching best score.
+| Method & path | Body | Returns |
+| --- | --- | --- |
+| `GET /` | — | the game page |
+| `GET /healthz` | — | `200 ok` (never touches S3) |
+| `POST /api/score` | `{ name, strokes }` | `{ allTime, today }` leaderboards |
+| `GET /api/leaderboard` | — | `{ allTime, today }` |
+| `POST /api/hole` | `{ id, name, hole, strokes }` | `204` (broadcast to others) |
+| `POST /api/rooms` | `{ name }` | room state + `{ you, token }` (creator is host) |
+| `POST /api/rooms/{code}/join` | `{ name, id?, token? }` | room state + `{ you, token }` (id/token rejoin) |
+| `GET /api/rooms/{code}/events?id=&token=` | — (SSE) | `roster`, `start`, `shot`, `progress` events |
+| `POST /api/rooms/{code}/send` | `{ id, token, seq, type, … }` | `204` (`200` + `{ round, seed }` for `start`) |
+| `GET /api/events` | — (SSE) | `event: holeout` stream |
 
 ## Running locally
 
 ```sh
-go run .                       # http://localhost:8080 (in-memory store)
-# or the exact image CI builds + all its gates:
-make preflight                 # validate manifest, build, boot + healthcheck, Trivy scan
+WEB_DIR=web go run .     # http://localhost:8080, serves web/ from disk (edit + reload)
+go run .                 # serves the embedded copy, like production
+make preflight           # validate manifest, build, boot + healthcheck, Trivy scan
 ```
 
 `STORAGE_BUCKET` is unset locally, so scores live in memory and reset on
 restart. Set `PORT` to override the listen port (default `8080`).
 
-## Layout
+## Design records
 
-| File                 | What it is                                             |
-| -------------------- | ------------------------------------------------------ |
-| `index.html`         | the entire game (canvas + UI), embedded into the binary |
-| `main.go`            | HTTP server, routes, score validation, security headers |
-| `store.go`           | `Store` interface + S3 and in-memory implementations   |
-| `hub.go`             | SSE hub for the live social feed                        |
-| `course-design.md`   | obstacle language and hole-authoring guide (kept out of `docs/`, which `make upgrade` owns) |
-| `tools/course-solver.js` | brute-force playability checker for hole data      |
-| `Dockerfile`         | multi-stage Go build → distroless static image         |
-| `app-manifest.yaml`  | flightdeck service config (name, port, `storage: s3`)  |
+- [design/council.md](design/council.md): how five persona designers pitched
+  50 features and a five-judge council picked these five.
+- [design/fun-rubric.md](design/fun-rubric.md): the Fun Expert's ten pass
+  criteria that the demo is held to.
 
 ## Deploying
 
-flightdeck handles build, scan, deploy, TLS, and DNS. Push to `main` deploys
-dev; tag `v*` promotes that exact image to prod. Always run `make preflight`
-first — it mirrors CI's gates locally. See [CLAUDE.md](CLAUDE.md) and
-[docs/pipeline.md](docs/pipeline.md).
+flightdeck handles build, scan, deploy, TLS and DNS. Push to `main` to deploy
+dev, and tag `v*` to promote that exact image to prod. Always run
+`make preflight` first.

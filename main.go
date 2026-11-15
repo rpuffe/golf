@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
@@ -11,11 +12,17 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	_ "embed"
+	"embed"
 )
 
-//go:embed index.html
-var indexHTML []byte
+// web/ holds the whole client: index.html, the game modules, and the
+// vendored Three.js build (the CSP allows same-origin scripts only, so no CDN).
+//
+//go:embed web
+var webFiles embed.FS
+
+// minRoundStrokes is one stroke per hole on the 4-hole 3D course.
+const minRoundStrokes = 4
 
 func main() {
 	port := getenv("PORT", "8080")
@@ -44,7 +51,9 @@ func main() {
 			return
 		}
 		in.Name = cleanName(in.Name)
-		if in.Name == "" || in.Strokes <= 0 || in.Strokes > 9999 {
+		// A round is 4 holes: fewer than 4 strokes is impossible, and anything
+		// past 200 is a stuck client, not golf.
+		if in.Name == "" || in.Strokes < minRoundStrokes || in.Strokes > 200 {
 			http.Error(w, "invalid name or score", http.StatusBadRequest)
 			return
 		}
@@ -73,13 +82,33 @@ func main() {
 	mux.HandleFunc("/api/events", hub.serveSSE)
 	mux.HandleFunc("/api/hole", hub.serveHole)
 
+	// Multiplayer rooms: create/join by code, then an SSE stream per player.
+	newRooms().register(mux)
+
+	webRoot, err := fs.Sub(webFiles, "web")
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Local development only: WEB_DIR=web serves the client from disk so edits
+	// show on reload without rebuilding. Never set in the deployed image.
+	if dir := os.Getenv("WEB_DIR"); dir != "" {
+		webRoot = os.DirFS(dir)
+		log.Printf("serving client from disk: %s", dir)
+	}
+	static := http.FileServer(http.FS(webRoot))
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.NotFound(w, r)
+		// Embedded files carry no modtime, so steer caching explicitly: the
+		// pinned library is immutable per release, everything else revalidates.
+		if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
+			http.NotFound(w, r) // no directory listings
 			return
 		}
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(indexHTML)
+		if strings.HasPrefix(r.URL.Path, "/lib/") {
+			w.Header().Set("Cache-Control", "public, max-age=86400")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
+		static.ServeHTTP(w, r)
 	})
 
 	addr := "0.0.0.0:" + port
