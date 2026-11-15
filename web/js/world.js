@@ -30,6 +30,10 @@ export const LIGHTING = [
   { elev: 13, az: -20, top: 0x3b4f98, mid: 0xb39ac4, horizon: 0xffbe85, sun: 0xffcf8a, fog: 0xe6b48c, sunI: 2.7, hemi: 0.9 },
   { elev: 11, az: 10,  top: 0x34428e, mid: 0xc48fb0, horizon: 0xffae76, sun: 0xffbf7e, fog: 0xe0a88c, sunI: 2.8, hemi: 1.15 },
   { elev: 7,  az: 25,  top: 0x2c2a6e, mid: 0xb8709a, horizon: 0xff9a5e, sun: 0xffab62, fog: 0xd59482, sunI: 2.7, hemi: 1.25 },
+  { elev: 3,  az: 35,  top: 0x1e1c58, mid: 0x7d4f8a, horizon: 0xff7440, sun: 0xff8a4a, fog: 0xa86a78, sunI: 2.0, hemi: 1.2 },
+  // night: the sun disc doubles as the moon
+  { elev: 12, az: -12, top: 0x060a1e, mid: 0x15203f, horizon: 0x34446a, sun: 0xb4ccff, fog: 0x18213a, sunI: 0.6, hemi: 0.75, night: true, fogNear: 35, fogFar: 240 },
+  { elev: 30, az: 8,   top: 0x04061a, mid: 0x0f1a3e, horizon: 0x283866, sun: 0xe2eaff, fog: 0x121a30, sunI: 0.9, hemi: 0.85, night: true, fogNear: 160, fogFar: 1100 },
 ];
 
 export function createSky(scene) {
@@ -60,7 +64,9 @@ export function createSky(scene) {
       uni.top.value.set(L.top); uni.mid.value.set(L.mid); uni.horizon.value.set(L.horizon);
       uni.sunDir.value.copy(sunDir); uni.sunCol.value.set(L.sun);
       sun.color.set(L.sun); sun.intensity = L.sunI; hemi.intensity = L.hemi;
-      hemi.color.set(L.mid).lerp(new THREE.Color(0xffffff), 0.35); hemi.groundColor.set(0x5a4a30); scene.fog.color.set(L.fog);
+      hemi.color.set(L.mid).lerp(new THREE.Color(0xffffff), 0.35); hemi.groundColor.set(L.night ? 0x1a1a24 : 0x5a4a30); scene.fog.color.set(L.fog);
+      scene.fog.near = L.fogNear ?? 120; scene.fog.far = L.fogFar ?? 900;
+      return L;
     },
     follow(p) { // keep the shadow frustum around the action
       sun.position.set(p.x + sunDir.x * 150, p.y + sunDir.y * 150, p.z + sunDir.z * 150);
@@ -375,3 +381,37 @@ export function stretch(obj, a, b) {
 }
 
 export { textTexture, buildTerrainMesh, buildWater };
+
+// ------------------------------------------------------------- windmill (hole 5)
+// A giant mini-golf windmill: white tower, red cap, four lattice sails. The
+// rotor is returned separately so the game can set its angle every frame.
+export function buildWindmill(course, wm) {
+  const g = new THREE.Group();
+  const h = course.h(wm.at[0], wm.at[1]);
+  g.position.set(wm.at[0], h, wm.at[1]);
+  const white = new THREE.MeshStandardMaterial({ color: 0xf3ede2, roughness: 0.9 });
+  const red = new THREE.MeshStandardMaterial({ color: 0xc8402e, roughness: 0.8 });
+  const wood = new THREE.MeshStandardMaterial({ color: 0x8a5a34, roughness: 0.9 });
+  const sail = new THREE.MeshStandardMaterial({ color: 0xfff6e0, roughness: 1, side: THREE.DoubleSide });
+  const tower = new THREE.Mesh(new THREE.CylinderGeometry(wm.tower * 0.8, wm.tower * 1.05, wm.towerH, 8), white);
+  tower.position.y = wm.towerH / 2; tower.castShadow = tower.receiveShadow = true;
+  const cap = new THREE.Mesh(new THREE.ConeGeometry(wm.tower * 1.25, 3.2, 8), red);
+  cap.position.y = wm.towerH + 1.5; cap.castShadow = true;
+  const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.2), wood);
+  door.position.set(0, 1.1, wm.tower * 1.0);
+  g.add(tower, cap, door);
+  const rotor = new THREE.Group();
+  rotor.position.set(0, wm.hubH, wm.face);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.8, 12), red);
+  hub.rotation.x = Math.PI / 2; rotor.add(hub);
+  for (let b = 0; b < wm.blades; b++) {
+    const arm = new THREE.Group(); arm.rotation.z = b * 2 * Math.PI / wm.blades;
+    const spar = new THREE.Mesh(new THREE.BoxGeometry(wm.len, 0.35, 0.35), wood); spar.position.x = wm.len / 2;
+    const cloth = new THREE.Mesh(new THREE.PlaneGeometry(wm.len * 0.78, 1.5), sail); cloth.position.set(wm.len * 0.56, 0.85, 0.05);
+    spar.castShadow = cloth.castShadow = true;
+    arm.add(spar, cloth); rotor.add(arm);
+  }
+  g.add(rotor);
+  g.userData.rotor = rotor;
+  return g;
+}

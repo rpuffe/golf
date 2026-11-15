@@ -28,12 +28,12 @@ function mulberry32(a) {
   return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 }
 
-function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind) {
+function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, strokeNo = stroke) {
   const holePar = holeDef.par;
   const dx = cup.x - lie.x, dz = cup.z - lie.z, dist = Math.hypot(dx, dz);
   const surf = course.surf(lie.x, lie.z);
   const base = Math.atan2(dz, dx);
-  const world = { course, cup, colliders, wind };
+  const world = { course, cup, colliders, wind, strokeNo };
   const putting = (surf === 'green' || surf === 'fringe') && dist < 24;
   const mode = holeDef.spotlight === 'stymie' && !putting && dist < 140 ? 'stymie' : 'normal';
   const cands = [];
@@ -90,7 +90,7 @@ export function planHole(course, holeDef, cup, colliders, teeOffset = { x: -1.3,
   let lie = { x: holeDef.tee[0] + teeOffset.x, z: holeDef.tee[1] + teeOffset.z };
   const strokes = [];
   for (let k = 1; k <= 8; k++) {
-    const st = planStroke(course, cup, colliders, lie, k, holeDef, rng, wind);
+    const st = planStroke(course, cup, colliders, lie, k, holeDef, rng, wind, strokes.length + 1);
     strokes.push(st);
     if (st.shot.result === 'holed') break;
     if (st.shot.result === 'water' || st.shot.result === 'oob') {

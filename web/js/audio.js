@@ -23,7 +23,7 @@ export function unlockAudio() {
 }
 export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.8; }
 export function isMuted() { return muted; }
-document.addEventListener('visibilitychange', () => {
+if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {   // (guarded: the voice generator imports this in Node)
   if (!ctx) return;
   if (document.hidden) ctx.suspend(); else ctx.resume();
 });
@@ -126,7 +126,152 @@ export const sfx = {
   slowmo() { if (!ok()) return; noise(now(), 1.4, 0.25, { type: 'lowpass', f: 2500, f2: 200, a: 0.05 }); osc('sine', 220, now(), 1.4, 0.15, { f2: 55 }); },
   drop() { if (!ok()) return; osc('sine', 500, now(), 0.12, 0.2, { f2: 900 }); },
   newBall() { if (!ok()) return; const t = now(); osc('triangle', 660, t, 0.1, 0.15); osc('triangle', 990, t + 0.08, 0.15, 0.15); },
+
+  // Jumpscare sting: a ghost golfer lunges at the camera. Three layers — a sub
+  // drop, a dissonant saw cluster that glides up, and a shrieking noise sweep.
+  // gentle = true: no shriek, a softer cluster, ~10 dB down, slower attack.
+  scare(gentle = false) {
+    if (!ok()) return; const t = now();
+    const k = gentle ? 0.32 : 1, a = gentle ? 0.06 : 0.005;
+    osc('sine', 80, t, 0.6, 0.6 * k, { f2: 30, a });                        // layer 1: the floor drops out
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = gentle ? 1200 : 2500; lp.connect(sfxBus);
+    [233, 247, 349].forEach(f => [-25, 25].forEach(detune => {             // layer 2: the cluster, each note a detuned pair
+      const o = osc('sawtooth', f, t, 1.0, 0.11 * k, { a: gentle ? 0.08 : 0.01, bus: lp, detune });
+      o.frequency.exponentialRampToValueAtTime(f * (gentle ? 1.25 : 1.5), t + 0.18);
+    }));
+    if (!gentle) noise(t, 0.7, 0.25, { type: 'bandpass', f: 1800, f2: 5200, q: 6, a: 0.01 }); // layer 3: the shriek
+  },
+  // "heh-heh-heh": three falling square blips, a ghostly fifth on top, a breath of "h"
+  ghostLaugh() {
+    if (!ok()) return; const t = now();
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1800; lp.Q.value = 4; lp.connect(sfxBus);
+    [220, 196, 174].forEach((f, i) => {
+      const s = t + i * 0.19;
+      osc('square', f, s, 0.11, 0.12, { f2: f * 0.9, a: 0.006, bus: lp });
+      osc('square', f * 1.5, s, 0.08, 0.03, { f2: f * 1.35, a: 0.006, bus: lp, detune: 12 });
+      noise(s, 0.06, 0.06, { type: 'bandpass', f: 1100, q: 2 });
+    });
+  },
+  // Multiplayer reactions, at ~40% loudness: 'honk' | 'clap' | 'gasp' | 'laugh'
+  react(kind) {
+    if (!ok()) return; const t = now(), bus = reactBus();
+    if (kind === 'honk') {                                                   // honk-honk
+      [0, 0.2].forEach((dt, i) => {
+        const s = t + dt, f = (i ? 300 : 345) + Math.random() * 25;
+        osc('square', f, s, 0.15, 0.16, { f2: f * 0.78, a: 0.01, bus });
+        osc('sawtooth', f * 1.01, s, 0.15, 0.12, { f2: f * 0.8, a: 0.01, bus, detune: 25 });
+        noise(s, 0.12, 0.08, { type: 'bandpass', f: 1500, q: 4, bus });
+      });
+    } else if (kind === 'clap') {                                            // polite golf applause
+      for (let i = 0; i < 7; i++) {
+        const s = t + i * 0.055 + Math.random() * 0.03;
+        noise(s, 0.035, 0.8 * (1 - i * 0.07), { type: 'bandpass', f: 1000 + Math.random() * 1200, q: 1.4, a: 0.001, bus });
+      }
+    } else if (kind === 'gasp') {                                            // "ooh": saw voices through a rising formant
+      const fm = ctx.createBiquadFilter(); fm.type = 'bandpass'; fm.Q.value = 2.5; fm.connect(bus);
+      fm.frequency.setValueAtTime(380, t); fm.frequency.linearRampToValueAtTime(520, t + 0.2);
+      [170, 205, 240, 290].forEach(f => osc('sawtooth', f * (0.97 + Math.random() * 0.06), t + Math.random() * 0.03, 0.32, 0.22,
+        { a: 0.16, f2: f * 1.12, bus: fm, detune: Math.random() * 20 - 10 }));
+      noise(t, 0.3, 0.12, { type: 'bandpass', f: 700, q: 1.5, a: 0.15, bus });
+    } else if (kind === 'laugh') {                                           // a crowd chuckle: three voices, "ha-ha-ha-ha"
+      const fm = ctx.createBiquadFilter(); fm.type = 'bandpass'; fm.frequency.value = 800; fm.Q.value = 2; fm.connect(bus);
+      for (let v = 0; v < 3; v++) {
+        const base = 180 + v * 55 + Math.random() * 20, off = v * 0.025 + Math.random() * 0.02;
+        for (let i = 0; i < 4; i++) {
+          const f = base * (1 - i * 0.04);
+          osc('sawtooth', f, t + off + i * 0.095, 0.06, 0.32, { f2: f * 0.9, a: 0.01, bus: fm });
+        }
+      }
+    }
+  },
+  // a gosling peep: two quick rising chirps
+  squeak() { if (!ok()) return; const t = now(); osc('sine', 1900, t, 0.06, 0.14, { f2: 2700, a: 0.004 }); osc('sine', 2100, t + 0.09, 0.07, 0.16, { f2: 3200, a: 0.004 }); },
+  // windmill creak and groan: a low wobbling saw through a resonant bandpass
+  creak(v = 1) {
+    if (!ok()) return; const t = now(), d = 0.5, p = Math.max(0.001, 1.4 * v);
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    o.frequency.setValueAtTime(62, t); o.frequency.linearRampToValueAtTime(48, t + d);
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 7 + Math.random() * 4; lg.gain.value = 9;
+    lfo.connect(lg); lg.connect(o.frequency);
+    const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6;
+    bp.frequency.setValueAtTime(380, t); bp.frequency.linearRampToValueAtTime(620, t + 0.18); bp.frequency.linearRampToValueAtTime(300, t + d);
+    const g = ctx.createGain(); env(g, t, 0.06, p, d - 0.06);
+    o.connect(bp); bp.connect(g); g.connect(sfxBus);
+    o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+    noise(t, 0.03, Math.max(0.001, 0.12 * v), { type: 'bandpass', f: 900, q: 5 });   // the stick-slip grain as it starts
+  },
+  // a windmill blade swats the ball: wooden crack + plank ring + body
+  swat() {
+    if (!ok()) return; const t = now();
+    noise(t, 0.05, 0.6, { type: 'bandpass', f: 1400, q: 0.9, a: 0.001 });
+    osc('triangle', 420, t, 0.16, 0.4, { f2: 300, a: 0.002 });
+    osc('triangle', 690, t, 0.09, 0.2, { f2: 560, a: 0.002 });
+    osc('sine', 110, t, 0.22, 0.45, { f2: 55, a: 0.003 });
+    noise(t + 0.01, 0.25, 0.15, { type: 'lowpass', f: 600, a: 0.01 });
+  },
+  // cartoon spring: a rising tone with a fast, decaying pitch wobble
+  boing() {
+    if (!ok()) return; const t = now(), d = 0.6;
+    const o = ctx.createOscillator(); o.type = 'triangle';
+    o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(420, t + d);
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 16;
+    lg.gain.setValueAtTime(90, t); lg.gain.exponentialRampToValueAtTime(2, t + d);
+    lfo.connect(lg); lg.connect(o.frequency);
+    const g = ctx.createGain(); env(g, t, 0.005, 0.28, d);
+    o.connect(g); g.connect(sfxBus);
+    o.start(t); lfo.start(t); o.stop(t + d + 0.05); lfo.stop(t + d + 0.05);
+    osc('sine', 90, t, 0.08, 0.3, { f2: 50 });
+  },
+  // prize wheel: one clicker tick, and the landing sting
+  wheelTick() { if (!ok()) return; const t = now(); noise(t, 0.01, 0.3, { type: 'bandpass', f: 3200, q: 3, a: 0.001 }); osc('square', 1800, t, 0.012, 0.05, { a: 0.001 }); },
+  wheelLand(good = true) {
+    if (!ok()) return; const t = now();
+    if (good) {
+      [523, 659, 784, 1047, 1319].forEach((f, i) => { osc('triangle', f, t + i * 0.07, 0.25, 0.18); osc('sine', f * 2, t + i * 0.07, 0.12, 0.04); });
+      osc('sine', 2637, t + 0.35, 0.4, 0.05);
+      return;
+    }
+    // cursed: sad trombone, wah-wah-wah-waaah
+    [294, 277, 262, 247].forEach((f, i) => wah(f, t + i * 0.32, i === 3 ? 0.9 : 0.28, i === 3));
+  },
+  // "saved!": a bright rising chime over a quick glissando and shimmer
+  lifeRing() {
+    if (!ok()) return; const t = now();
+    osc('sine', 600, t, 0.25, 0.08, { f2: 1600 });
+    [784, 988, 1175, 1568, 1976].forEach((f, i) => { osc('sine', f, t + i * 0.06, 0.5, 0.14); osc('triangle', f * 2, t + i * 0.06, 0.15, 0.04); });
+    osc('sine', 2637, t + 0.3, 0.6, 0.05);
+    noise(t, 0.4, 0.06, { type: 'highpass', f: 6000, a: 0.05 });
+  },
+  // tug-of-war rope strain, intensity 0..1. Called often: one oscillator into a
+  // shared filter, and throttled so rapid calls don't pile up voices.
+  tugPull(intensity = 0.5) {
+    if (!ok()) return; const t = now();
+    if (t - lastTug < 0.07) return; lastTug = t;
+    const i = Math.max(0, Math.min(1, intensity)), f = 95 + i * 90 + Math.random() * 15;
+    osc('sawtooth', f, t, 0.11, 0.15 + i * 0.45, { f2: f * 1.08, a: 0.015, bus: tugBus(), detune: Math.random() * 40 - 20 });
+  },
 };
+
+// Shared, lazily built routing for the new sfx above.
+let rBus = null, tBus = null, lastTug = -1;
+function reactBus() { if (!rBus) { rBus = ctx.createGain(); rBus.gain.value = 0.4; rBus.connect(sfxBus); } return rBus; }
+function tugBus() {
+  if (!tBus) { tBus = ctx.createBiquadFilter(); tBus.type = 'bandpass'; tBus.frequency.value = 700; tBus.Q.value = 4; tBus.connect(sfxBus); }
+  return tBus;
+}
+// one sad-trombone note: a saw whose lowpass opens and closes ("wah"), optional vibrato
+function wah(f, s, d, vib) {
+  const o = ctx.createOscillator(); o.type = 'sawtooth';
+  o.frequency.setValueAtTime(f, s); o.frequency.linearRampToValueAtTime(f * 0.97, s + d);
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 6;
+  lp.frequency.setValueAtTime(350, s); lp.frequency.linearRampToValueAtTime(1500, s + d * 0.35); lp.frequency.linearRampToValueAtTime(450, s + d);
+  const g = ctx.createGain(); env(g, s, 0.04, 0.16, d);
+  o.connect(lp); lp.connect(g); g.connect(sfxBus); o.start(s); o.stop(s + d + 0.1);
+  if (vib) {
+    const lfo = ctx.createOscillator(), lg = ctx.createGain(); lfo.frequency.value = 5.5; lg.gain.value = f * 0.03;
+    lfo.connect(lg); lg.connect(o.frequency); lfo.start(s + 0.15); lfo.stop(s + d + 0.1);
+  }
+}
 
 // Ambience: wind bed + occasional birds; wind gain follows the hole's wind.
 function startAmbience() {
@@ -149,6 +294,14 @@ export function setWindAmbience(speed) {
   amb.wind.gain.setTargetAtTime(0.03 + speed * 0.012, now(), 0.5);
   amb.windFilter.frequency.setTargetAtTime(250 + speed * 50, now(), 0.5);
 }
+// Duck (or restore) the whole ambience bed — wind and birds — to level 0..1
+// (1 = normal) over ~0.3 s, e.g. under a jumpscare.
+const AMB_GAIN = 0.5;
+export function setAmbience(level) {
+  if (!ambBus) return;
+  const t = now(), g = ambBus.gain, l = Math.max(0, Math.min(1, level));
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(AMB_GAIN * l, t + 0.3);
+}
 // Flight whistle: a looping band of noise whose pitch follows ball speed.
 let flight = null;
 export function flightSound(speed) {
@@ -169,11 +322,14 @@ export function flightSound(speed) {
 // your ball off. 4 bars at 132 bpm (~7.3 s), so the theft lasts exactly one
 // performance. Returns a stop function (fades the song out early).
 export const GOOSE_SONG_SECS = 32 * (60 / 132 / 2) + 0.45;
-const mid = m => 440 * 2 ** ((m - 69) / 12);
-export function gooseSong() {
+const midiHz = m => 440 * 2 ** ((m - 69) / 12);
+// transpose shifts every pitched note by that many semitones (the boss goose
+// sings a fourth lower: { transpose: -5 }); timing is unchanged.
+export function gooseSong({ transpose = 0 } = {}) {
   if (!ok()) return () => {};
   const bus = ctx.createGain(); bus.gain.value = 0.9; bus.connect(sfxBus);
   const t0 = now() + 0.05, e = 60 / 132 / 2;   // one eighth note
+  const mid = m => midiHz(m + transpose), tr = 2 ** (transpose / 12);
   // lead: every note is a little honk (square + saw, sagging pitch, a breath of noise)
   const lead = [69, 0, 72, 0, 69, 64, 0, 69, 71, 0, 72, 0, 74, 72, 71, 0, 69, 0, 72, 0, 76, 0, 74, 72, 71, 69, 68, 0, 69, 0, 0, 0];
   lead.forEach((m, i) => {
@@ -190,7 +346,7 @@ export function gooseSong() {
   for (let i = 1; i < 32; i += 2) noise(t0 + i * e, 0.04, 0.05, { type: 'highpass', f: 7000, bus });
   // the big finish: a triple honk, as the goose lets go
   for (let k = 0; k < 3; k++) {
-    const t = t0 + 28 * e + k * 0.16, f = 300 - k * 25;
+    const t = t0 + 28 * e + k * 0.16, f = (300 - k * 25) * tr;
     osc('square', f, t, 0.15, 0.13, { f2: f * 0.75, a: 0.01, bus });
     osc('sawtooth', f * 1.01, t, 0.15, 0.1, { f2: f * 0.78, a: 0.01, bus, detune: 25 });
   }
@@ -232,3 +388,28 @@ export const swingTone = {
     const t = now(); ther.g.gain.setTargetAtTime(0.0001, t, 0.02); ther.o.stop(t + 0.15); ther = null;
   },
 };
+
+// ---------------------------------------------------------------- voice clips
+// Pre-generated commentator lines (web/voice/*.mp3). One at a time: a new
+// line cuts off the last, like a broadcaster talking over themselves.
+const voiceCache = new Map();
+let voiceSrc = null, voiceGain = null, voiceSeq = 0;
+export async function playVoice(url) {
+  if (!ok()) return;
+  const seq = ++voiceSeq;
+  try {
+    let buf = voiceCache.get(url);
+    if (!buf) {
+      const r = await fetch(url); if (!r.ok) return;
+      buf = await ctx.decodeAudioData(await r.arrayBuffer());
+      voiceCache.set(url, buf);
+      if (voiceCache.size > 80) voiceCache.delete(voiceCache.keys().next().value);
+    }
+    if (seq !== voiceSeq) return;   // a newer line arrived while this one loaded
+    stopVoice();
+    if (!voiceGain) { voiceGain = ctx.createGain(); voiceGain.gain.value = 1.0; voiceGain.connect(master); }
+    const src = ctx.createBufferSource(); src.buffer = buf; src.connect(voiceGain); src.start();
+    voiceSrc = src;
+  } catch { /* the caption already said it */ }
+}
+export function stopVoice() { try { voiceSrc?.stop(); } catch { /* already ended */ } voiceSrc = null; }

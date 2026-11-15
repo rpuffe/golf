@@ -106,10 +106,11 @@ type S3Store struct {
 	bucket string
 }
 
-// The 3D course (4 holes, par 16) keeps its own leaderboard. Rounds from the
-// old 9-hole 2D course remain untouched under "scores/" but are no longer
-// read, since the two courses' stroke counts aren't comparable.
-const scorePrefix = "scores-3d/"
+// Each version of the course keeps its own leaderboard, since stroke counts
+// aren't comparable across them. The 7-hole 3D course (par 27) reads and
+// writes "scores-3d7/". Older rounds remain untouched under "scores/" (the 2D
+// course) and "scores-3d/" (the 4-hole 3D course) but are no longer read.
+const scorePrefix = "scores-3d7/"
 
 func (s *S3Store) Save(ctx context.Context, e Entry) error {
 	body, err := json.Marshal(e)

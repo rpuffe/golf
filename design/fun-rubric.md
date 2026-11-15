@@ -163,3 +163,13 @@ Automation checks use a JS hook, `window.golf`:
       commentary when you overtake or fall behind a named friend.
     - The room survives latency, jitter, a dropped connection mid-shot and a
       page reload. Late joiners can jump into a round in progress.
+
+## Round 6 additions
+
+Criteria 14–20 (holes 5–7, the hole 6 jumpscare, the power-up wheel, room
+interactions, more geese, the seven-word rule) and the amendments to 1, 4
+and 5 (par 27, a 10-minute round, hole 6 exempt from the 3 s rule until
+the scare ends) live in [council-round6.md](council-round6.md), section 6.
+The owner's tug-of-war (after the goose's song) is judged with criterion 6:
+it must be winnable by frantic shaking, lost more often than won by a
+typical effort, and every loss must end on a playable lie with no stroke added.

@@ -3,6 +3,9 @@
 // speechSynthesis), lines never repeat back-to-back, and speech is
 // fire-and-forget so it can never block input.
 
+import { voiceText, voiceTag, voiceKey, TOM_LINES, tomKey } from './voice.js';
+import { playVoice, stopVoice } from './audio.js';
+
 const L = {
   // [calm, rattled, hysterical]
   tee: [
@@ -31,16 +34,25 @@ const L = {
     ['Took the scenic route. Still counts.', 'All the way round the edge... and down!', 'THE LIP! THE LIP! IT FELL IN! IT FELL IN!']],
   tree: [['Clips the timber.', 'Into the trees. A woodpecker would have done better.', 'THE TREE! THE TREE HAS BETRAYED US!'],
     ['Timber. Literally.', 'The trees want it more than we do.', 'IT HIT ANOTHER TREE! THE FOREST IS WINNING!']],
-  gooseTheft: [['Oh. Oh no. The goose has {ball}.', 'THE GOOSE. The goose has taken {ball}. Shoo it, {name}!', 'THE GOOSE IS A THIEF! A FEATHERED THIEF! HIT IT! HIT THE GOOSE!'],
+  gooseTheft: [['Oh. Oh no. The goose has {ball}.', 'THE GOOSE. The goose has taken {ball}. Get ready to pull, {name}!', 'THE GOOSE IS A THIEF! A FEATHERED THIEF! GET READY TO PULL!'],
     ['And the goose... has taken {ball}.', 'Thief! The goose is off with {ball}!', 'ROBBERY! BROAD DAYLIGHT! THE GOOSE HAS {ball}!']],
-  gooseHit: [['Direct hit on the goose. It drops {ball}.', 'BONK! Right on the goose. Justice!', 'YOU HIT THE GOOSE! THE GOOSE IS FURIOUS! I LOVE THIS SPORT!'],
-    ['A well-aimed shoo. The goose objects.', 'Goose struck! It drops {ball} in disgust!', 'DIRECT HIT! FEATHERS EVERYWHERE! GLORIOUS!']],
+  tugStart: [['It has come to this. A tug of war.', 'Pull, {name}! Pull for {ball}!', 'PULL! PULL! PULL FOR YOUR LIFE! PULL FOR {ball}!'],
+    ['The goose plants its feet.', 'Man against goose. Only one leaves with {ball}.', 'IT IS A TUG OF WAR WITH A GOOSE! THIS IS NOT GOLF! I LOVE IT!']],
+  tugWin: [['And {name} wrestles {ball} free. Remarkable.', 'YOINK! {ball} is back! The goose is furious!', '{name} BEAT THE GOOSE! {name} BEAT A GOOSE IN SINGLE COMBAT!'],
+    ['{ball} is recovered. The goose sulks.', 'The goose lets go! {name} wins the tug!', 'THE GOOSE HAS LOST! FEATHERS EVERYWHERE! WHAT A COMEBACK!']],
+  tugPunt: [['The goose... has kicked {ball}. Away.', 'The goose PUNTED {ball}! Look at it go!', 'THE GOOSE DROP-KICKED {ball}! INTO THE SKY! I HAVE SEEN EVERYTHING!'],
+    ['A tidy little punt from the goose.', 'It won, and it kicked {ball} for good measure!', 'IT KICKED THE BALL! GEESE CAN KICK? NOBODY TOLD ME GEESE CAN KICK!']],
+  tugBunker: [['The goose is airborne, with {ball}.', 'It is flying {ball} to the bunker! Out of spite!', 'THE GOOSE HAS AN AIR FORCE! {ball} IS GOING TO THE BEACH!'],
+    ['A short flight to the sand.', 'Special delivery: one {ball}, to the bunker.', 'IT FLEW AWAY WITH IT! IT FLEW AWAY WITH {ball}!']],
+  tugSwallow: [['The goose has... eaten {ball}. Goodbye, {ball}.', 'It SWALLOWED {ball}! Is that allowed? It is not allowed!', 'IT ATE {ball}! IT ATE {ball} WHOLE! SOMEBODY CALL A VET!']],
+  tugGooseHoled: [['The goose has holed it. For you. Unbelievable.', 'THE GOOSE PUNTED IT IN! The goose should turn pro!', 'THE GOOSE HOLED IT! SIGN THE GOOSE! SIGN THE GOOSE!']],
+  windmill: [['Oh, the windmill has taken an interest.', 'SWATTED by the windmill! It only moves when you swing!', 'THE WINDMILL! THE WINDMILL HATES {name}! IT WAITED FOR THIS!'],
+    ['Off the sails. Mini golf rules apply.', 'The windmill sends it back. Spiteful thing.', 'IT HIT THE WINDMILL! WHO PUT A WINDMILL ON A GOLF COURSE!']],
+  tomb: [['Off a headstone. Respectfully.', 'Clattered a gravestone. Sorry, whoever you were.', 'IT HIT A GRAVE! DO NOT WAKE THEM! DO NOT WAKE ANYONE!']],
+  scared: [['What was that. Par, I think.', 'WHAT WAS THAT. Was that Old Tom? Par, I think.', 'WHAT WAS THAT! WHAT WAS THAT! I AM UNDER THE DESK! PAR, I THINK!']],
+  gallery: [['The gallery has opinions.', 'The gallery has opinions, and they are loud.', 'THE GALLERY IS GOING WILD! EVERYONE HAS AN OPINION!']],
   gooseBlock: [['The goose was in the way.', 'Bounced right off the goose. Unbelievable.', 'THE GOOSE BLOCKED IT! THE GOOSE IS PLAYING DEFENCE!'],
     ['The goose stands its ground.', 'Off the goose! It did not even flinch!', 'THE GOOSE IS A WALL! A FEATHERED WALL!']],
-  gooseDrop: [['The goose loses interest and drops {ball}.', 'The goose has dropped {ball}. We may continue.', 'THE GOOSE LET IT GO. THE GOOSE IS IN CHARGE NOW.'],
-    ['The goose tires of {ball}.', '{ball} has been released by the goose. Generously.', 'THE GOOSE DROPPED IT! WE ARE ALLOWED TO PLAY AGAIN!']],
-  shooMiss: [['The shoo misses. The goose is unbothered.', 'Missed the goose. The goose noticed.', 'MISSED! THE GOOSE IS LAUGHING AT US!'],
-    ['Wide of the goose.', 'The goose watched that one sail past.', 'MISSED AGAIN! THE GOOSE IS GETTING AWAY WITH IT!']],
   ghostHit: [['A collision with the ghost of {ghost}!', 'Bounced off {ghost}! The dead are playing defence!', 'THE GHOST! THE GHOST HIT IT! I SAW IT WITH MY OWN EYES!'],
     ['A spectral nudge from {ghost}.', 'Clipped by the ghost! The afterlife is competitive!', 'THE DEAD ARE ON THE COURSE! THE DEAD ARE ON THE COURSE!']],
   stymie: [['A stymie. {ghost} is sitting right on the line.', 'Stymied! {ghost} is blocking the putt. Golf banned this in 1952!', 'A STYMIE! FROM BEYOND THE GRAVE! {ghost} WILL NOT MOVE!'],
@@ -51,7 +63,7 @@ const L = {
     ['{ghost} edges in front.', 'The ghost of {ghost} glides ahead.', 'THE GHOST IS WINNING! I CANNOT WATCH!']],
   snap: [['The line snaps. {ball} is gone. Rest well, {ball}.', 'SNAP. {ball} sinks. A moment of silence please.', '{ball}! NOOOO! {ball} WAS TOO YOUNG!'],
     ['The line goes slack. {ball} is lost.', '{ball} slips beneath the surface. Forever.', 'NOT {ball}! THEY HAD SO MUCH LEFT TO GIVE!']],
-  saved: [['{ball} is landed! Saved from the deep.', 'Reeled in! {ball} lives to roll again!', 'HE CAUGHT IT! {ball} LIVES! IT IS A MIRACLE!'],
+  saved: [['{ball} is landed! Saved from the deep.', 'Reeled in! {ball} lives to roll again!', '{name} CAUGHT IT! {ball} LIVES! IT IS A MIRACLE!'],
     ['Out of the depths comes {ball}.', '{ball} is back from the brink!', '{ball} RISES FROM THE LAKE! A RESURRECTION!']],
   junk: [['That is... a boot.', 'That is not a golf ball. That is rubbish.', 'IT IS A BOOT! WHY IS THERE A BOOT! WHERE IS {ball}!'],
     ['Well. That is a catch, of sorts.', 'Not what we were fishing for.', 'THAT IS NOT A GOLF BALL! WHAT HAVE YOU CAUGHT!']],
@@ -77,14 +89,18 @@ const L = {
     ["{rival} is in the way.", "{rival}'s ball sits on the line. Curl it, chip it, or knock it in.", "BLOCKED BY {rival}! I SMELL A RIVALRY!"]],
   roomLevel: [['And {name} draws level with {rival}.', 'All square with {rival}! Nobody breathe!', '{name} AND {rival} ARE LEVEL! THE TENSION IS UNBEARABLE!'],
     ['{name} pulls level with {rival}.', 'Level with {rival}. It is anyone\'s round.', 'DEAD LEVEL WITH {rival}! I CANNOT FEEL MY HANDS!']],
-  overswing: [['A big, big swing.', 'Swinging out of the shoes there.', 'HE SWUNG SO HARD HIS HAT FELL OFF!'],
-    ['Everything on that one.', 'He has gone after that with real violence.', 'HE SWUNG LIKE HE OWED IT MONEY!']],
+  overswing: [['A big, big swing.', 'Swinging out of the shoes there.', '{name} SWUNG SO HARD THE HAT FLEW OFF!'],
+    ['Everything on that one.', '{name} has gone after that with real violence.', '{name} SWUNG LIKE THE BALL OWED THEM MONEY!']],
 };
 
+export const LINES = L;
 const lastIdx = {};
+// which pre-recorded clips exist (web/voice/index.json); empty until it loads
+let clips = new Set();
+fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys) clips = new Set(j.keys); }).catch(() => {});
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, gooseHit: 3, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+const PRIO = { windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
 let lastPrio = 0, lastAt = 0, pending = null;
 let voice = null, enabled = true, captionEl = null, captionTimer = 0;
 export const commentator = { hysteria: 0, lastLine: '', lastClass: '', history: [] };
@@ -101,7 +117,23 @@ export function initCommentator(el) {
   pick();
   try { window.speechSynthesis?.addEventListener?.('voiceschanged', pick); } catch {}
 }
-export function setVoiceEnabled(on) { enabled = on; if (!on) try { window.speechSynthesis?.cancel(); } catch {} }
+// iOS Safari (and Chrome's autoplay policy) only allow speech once an
+// utterance has been started inside a user gesture. Call this from a tap or
+// click handler: it speaks one silent word so later lines are allowed.
+let primed = false;
+export function primeSpeech() {
+  if (primed) return;
+  try {
+    const ss = window.speechSynthesis;
+    if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
+    const u = new SpeechSynthesisUtterance(' ');
+    u.volume = 0; u.rate = 2;
+    ss.speak(u);
+    primed = true;
+    if (!voice) { try { const vs = ss.getVoices(); voice = vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null; } catch { /* later */ } }
+  } catch { /* captions still work */ }
+}
+export function setVoiceEnabled(on) { enabled = on; if (!on) { stopVoice(); try { window.speechSynthesis?.cancel(); } catch {} } }
 export function voiceEnabled() { return enabled; }
 
 export function tier() { return commentator.hysteria < 34 ? 0 : commentator.hysteria < 67 ? 1 : 2; }
@@ -126,22 +158,24 @@ export function say(cls, vars = {}, { bump = 0 } = {}) {
   let i = Math.floor(Math.random() * sets.length);
   if (sets.length > 1 && i === lastIdx[key]) i = (i + 1) % sets.length;
   lastIdx[key] = i;
-  let line = sets[i][tr];
-  line = line.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+  let tpl = sets[i][tr];
+  let line = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   if (line === commentator.lastLine) {
     // never say the exact same thing twice in a row: try the other variants
     const alt = sets.map(s => s[tr]).find(l => l !== sets[i][tr]);
     if (!alt) return;
+    tpl = alt;
     line = alt.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   }
   commentator.lastLine = line; commentator.lastClass = cls;
   commentator.history.push({ cls, line, tier: tr });
   showCaption(line, tr);
-  speak(line, tr);
+  speak(line, tr, cls, tpl, vars);
 }
 
 function showCaption(text, tr) {
   if (!captionEl) return;
+  delete captionEl.dataset.who;
   captionEl.textContent = text;
   captionEl.dataset.tier = tr;
   captionEl.classList.remove('show'); void captionEl.offsetWidth; captionEl.classList.add('show');
@@ -149,8 +183,18 @@ function showCaption(text, tr) {
   captionTimer = setTimeout(() => captionEl.classList.remove('show'), 2600 + text.length * 45);
 }
 
-function speak(text, tr) {
+function speak(text, tr, cls, tpl, vars) {
   if (!enabled) return;
+  // a real voice actor (pre-generated) when we have the clip, else the browser's voice
+  if (tpl) {
+    const tag = voiceTag(cls, tr);
+    // the clip with this ball's name if we have it, else the one that says "the ball"
+    for (const vt of [voiceText(tpl, vars), tpl.includes('{ball}') ? voiceText(tpl, vars, true) : null]) {
+      if (!vt) continue;
+      const key = voiceKey(vt, tag);
+      if (clips.has(key)) { try { window.speechSynthesis?.cancel(); } catch {} playVoice(`/voice/${key}.mp3`); return; }
+    }
+  }
   try {
     const ss = window.speechSynthesis;
     if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
@@ -162,4 +206,25 @@ function speak(text, tr) {
     u.volume = [0.55, 0.8, 1][tr];
     ss.speak(u);
   } catch { /* captions already shown */ }
+}
+
+// Old Tom talks for himself (in his own voice, a Scot from 1882). His line
+// takes over the caption with a ghostly style. At most once every 20 s.
+let tomAt = -1e9;
+export function tomSay(cls, { force = false } = {}) {
+  const lines = TOM_LINES[cls]; if (!lines) return false;
+  const now = performance.now();
+  if (!force && now - tomAt < 20000) return false;
+  tomAt = now;
+  const line = lines[Math.floor(Math.random() * lines.length)];
+  const text = line.replace(/\[[^\]]*\]\s*/g, '').trim();
+  if (captionEl) {
+    captionEl.textContent = text; captionEl.dataset.tier = 0; captionEl.dataset.who = 'tom';
+    captionEl.classList.remove('show'); void captionEl.offsetWidth; captionEl.classList.add('show');
+    clearTimeout(captionTimer);
+    captionTimer = setTimeout(() => { captionEl.classList.remove('show'); delete captionEl.dataset.who; }, 2600 + text.length * 45);
+  }
+  const key = tomKey(line);
+  if (enabled && clips.has(key)) playVoice(`/voice/${key}.mp3`);
+  return clips.has(key);
 }

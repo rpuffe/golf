@@ -58,3 +58,30 @@ export function treeColliders(trees, course) {
   }
   return cs;
 }
+
+// --------------------------------------------------------------- hole 6 tombstones
+export function placeTombs(course, holeDef) {
+  const T = holeDef.tombs; if (!T) return [];
+  const rng = mulberry32((holeDef.seed ?? 1) * 31337);
+  const [cx, cz, rx, rz] = T.area, g = course.green, out = [];
+  for (let tries = 0; tries < 2000 && out.length < T.n; tries++) {
+    const x = cx + (rng() * 2 - 1) * rx, z = cz + (rng() * 2 - 1) * rz;
+    if (((x - cx) / rx) ** 2 + ((z - cz) / rz) ** 2 > 1) continue;
+    if (course.fairwayDist(x, z) < (T.clear ?? 5)) continue;
+    if (Math.hypot(x - holeDef.tee[0], z - holeDef.tee[1]) < 16) continue;
+    if (((x - g[0]) / (g[2] * 1.6)) ** 2 + ((z - g[1]) / (g[3] * 1.6)) ** 2 < 1) continue;
+    const s = course.surf(x, z);
+    if (s === 'water' || s === 'sand' || s === 'oob') continue;
+    out.push({ x, z, y: course.h(x, z), rot: (rng() - 0.5) * 0.7, lean: (rng() - 0.5) * 0.2, k: out.length });
+  }
+  return out;
+}
+// Colliders beyond the trees: the windmill tower and the tombstones. Shared
+// by the game and Old Tom's planner so both play the same course.
+export function extraColliders(course, holeDef) {
+  const cs = [];
+  const wm = holeDef.windmill;
+  if (wm) { const h = course.h(wm.at[0], wm.at[1]); cs.push({ kind: 'cyl', x: wm.at[0], z: wm.at[1], r: wm.tower, y0: h - 1, y1: h + wm.towerH, e: 0.4, tag: 'windmill' }); }
+  for (const t of placeTombs(course, holeDef)) cs.push({ kind: 'cyl', x: t.x, z: t.z, r: 0.38, y0: t.y - 1, y1: t.y + 1.2, e: 0.5, tag: 'tomb' });
+  return cs;
+}

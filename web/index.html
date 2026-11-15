@@ -17,24 +17,92 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; background: #1d1430; overflow: hidden; }
   body { font: 600 14px/1.35 var(--font); color: var(--cream); user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
-  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: crosshair; touch-action: none; }
+  canvas#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; cursor: grab; touch-action: none; }
   .hidden { display: none !important; }
   button { font: inherit; cursor: pointer; }
 
   /* ---------- HUD ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; }
   .panel { background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
-  #topLeft { position: absolute; left: 14px; top: 14px; padding: 10px 14px; min-width: 210px; }
-  #holeName { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
-  #holeLine { font-size: 20px; font-weight: 900; letter-spacing: -0.3px; }
+  #topLeft { position: absolute; left: 14px; top: 14px; padding: 8px 14px; }
+  #holeLine { font-size: 18px; font-weight: 900; letter-spacing: -0.3px; }
   #holeLine small { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 6px; }
-  #roundLine { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  #roundLine { font-size: 13px; color: var(--muted); margin-top: 1px; }
+  #ballLine { font-size: 13px; margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+  #ballLine i { width: 14px; height: 14px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 60%, #9a9a9a); flex: none; position: relative; }
+  #ballLine i::after { content: "👀"; position: absolute; font-size: 8px; left: 1px; top: 1px; }
+  #ballLine b { color: var(--sun); } #ballLine span { color: var(--muted); font-size: 12px; }
   #topRight { position: absolute; right: 14px; top: 14px; display: flex; gap: 8px; align-items: stretch; }
-  #race { padding: 8px 12px; min-width: 170px; }
-  #race .lbl { font-size: 11px; color: var(--ghost); text-transform: uppercase; letter-spacing: .08em; }
-  #raceStatus { font-size: 18px; font-weight: 900; }
-  #raceStatus.ahead { color: var(--mint); } #raceStatus.behind { color: var(--coral); } #raceStatus.level { color: var(--sun); }
-  #raceDetail { font-size: 12px; color: var(--muted); }
+  .rrow { display: flex; align-items: center; gap: 6px; font-size: 13px; line-height: 1.6; }
+  .rrow i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .rrow b { margin-left: auto; padding-left: 10px; font-weight: 800; } .rrow small { color: var(--muted); min-width: 50px; text-align: right; }
+  .rrow.me { color: var(--sun); } .rrow.off { opacity: .45; }
+  #swingCancel { position: fixed; width: 84px; height: 300px; border-radius: 42px; border: 2px dashed rgba(255,255,255,.5); background: rgba(40,10,20,.35); color: #fff; font-weight: 900; font-size: 15px; display: none; place-items: center; text-align: center; padding-top: 0; z-index: 6; pointer-events: none; }
+  #swingCancel.show { display: grid; }
+  #swingCancel.hot { background: rgba(255,90,80,.6); border-color: #fff; }
+  #flyTitle { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); text-align: center; opacity: 0; transition: opacity .4s; text-shadow: 0 3px 0 rgba(0,0,0,.25), 0 0 24px rgba(0,0,0,.4); white-space: nowrap; }
+  #flyTitle.show { opacity: 1; }
+  #flyTitle small { display: block; font-size: 18px; letter-spacing: .2em; text-transform: uppercase; color: var(--sun); }
+  #flyTitle b { display: block; font-size: 46px; font-weight: 900; letter-spacing: -1px; }
+  #flyTitle span { display: block; font-size: 12px; opacity: .65; margin-top: 6px; }
+  body.flying #topLeft, body.flying #topRight, body.flying #bottom, body.flying #crosshair, body.flying #hint, body.flying #powerChip, body.flying #emoteFeed { opacity: 0; }
+  #wheel { position: absolute; left: 14px; bottom: 150px; width: 120px; height: 120px; pointer-events: auto; transition: opacity .3s; }
+  #wheelDisc { position: absolute; inset: 0; border-radius: 50%; border: 6px solid #fff8ec; box-shadow: 0 10px 40px #0007; overflow: hidden; }
+  #wheelDisc div { position: absolute; left: 50%; top: 50%; width: 50%; height: 2px; transform-origin: 0 0; }
+  #wheelDisc span { position: absolute; left: 50%; top: 50%; font-size: 17px; line-height: 1; transform-origin: 0 0; }
+  #wheelPtr { position: absolute; left: 50%; top: -17px; transform: translateX(-50%); font-size: 18px; color: #fff; text-shadow: 0 2px 4px #0008; }
+  #wheelOut { position: absolute; left: 100%; top: 50%; transform: translateY(-50%); margin-left: 14px; text-align: left; white-space: nowrap; font-size: 14px; text-shadow: 0 2px 6px #000a; }
+  #wheelOut b { display: block; font-size: 22px; font-weight: 900; }
+  body.flying #wheel { opacity: 0; }
+  #powerChip { position: absolute; left: 14px; top: 104px; padding: 6px 12px; border-radius: 12px; background: rgba(32,20,54,.7); font-size: 13px; max-width: 260px; }
+  #powerChip b { color: var(--sun); }
+  #between { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(440px, 94vw); padding: 14px 16px; pointer-events: auto; text-align: center; }
+  #betweenHead { font-size: 22px; font-weight: 900; }
+  #betweenHead small { display: block; font-size: 13px; color: var(--muted); font-weight: 700; }
+  #betweenScores { display: flex; justify-content: center; gap: 4px; margin: 8px 0; flex-wrap: wrap; }
+  #betweenScores div { min-width: 34px; padding: 3px 4px; border-radius: 8px; background: rgba(255,255,255,.08); font-size: 11px; color: var(--muted); }
+  #betweenScores div b { display: block; font-size: 16px; color: var(--cream); }
+  #betweenScores .under b { color: var(--mint); } #betweenScores .over b { color: var(--coral); } #betweenScores .cur { box-shadow: 0 0 0 2px var(--sun); }
+  #between .standings { margin: 4px 0 6px; } #between .standings li { border-bottom-color: rgba(255,255,255,.12); font-size: 14px; }
+  #between .standings li small { color: var(--muted); }
+  #betweenWait { font-size: 13px; color: var(--muted); min-height: 1em; }
+  #between .go { margin-top: 10px; width: 100%; padding: 11px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffcf5c, #ff9a3c); color: var(--plum); font-size: 17px; font-weight: 900; }
+  #between .go:disabled { opacity: .5; }
+  #emotes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+  #emotes button { border: 0; border-radius: 12px; padding: 8px 10px; background: rgba(255,255,255,.12); color: var(--cream); font-size: 14px; font-weight: 800; }
+  #emotes button:disabled { opacity: .4; }
+  #emoteFeed { position: absolute; right: 14px; top: 150px; display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+  #emoteFeed div { padding: 6px 12px; border-radius: 12px; background: rgba(20,12,36,.82); font-size: 14px; animation: pop .35s cubic-bezier(.2,1.6,.4,1); }
+  @keyframes pop { from { transform: scale(.6); opacity: 0; } }
+  #reelBtn { display: block; width: 100%; margin-top: 12px; padding: 18px; border: 0; border-radius: 18px; background: linear-gradient(180deg, #5fd3ff, #2f9bd0); color: #fff; font-size: 20px; font-weight: 900; box-shadow: 0 4px 0 #1d6c94; touch-action: none; }
+  #reelBtn:active, #reelBtn.on { transform: translateY(2px); box-shadow: 0 2px 0 #1d6c94; }
+  #gimme { position: absolute; left: 50%; bottom: 120px; transform: translateX(-50%); padding: 10px 14px; pointer-events: auto; font-size: 15px; }
+  #gimme button { margin-left: 8px; border: 0; border-radius: 10px; padding: 6px 10px; background: var(--mint); color: var(--plum); font-weight: 900; }
+  #reactBar { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+  #reactBar button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: var(--panel); font-size: 18px; }
+  body.scare #hud > *:not(#banner):not(#flash):not(#caption) { opacity: 0 !important; }
+  .toggles { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 13px; color: #6a5a80; }
+  .toggles input { width: auto; margin-right: 4px; }
+  .pickLbl { margin: 12px 0 4px; font-size: 12px; color: #7a6a90; text-transform: uppercase; letter-spacing: .08em; }
+  #charPick { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+  .cp { border: 2px solid #e8d5b5; background: #fff; border-radius: 12px; padding: 4px 2px; color: var(--plum); opacity: .6; }
+  .cp.on { opacity: 1; border-color: var(--sun2); box-shadow: 0 2px 0 #e2b77a; }
+  .cp img { display: block; width: 100%; max-width: 64px; aspect-ratio: 1; margin: 0 auto; }
+  .cp i { display: block; font-style: normal; font-size: 26px; }
+  .cp b { display: block; font-size: 10px; line-height: 1.1; }
+  #charBlurb { font-size: 12px; color: #7a6a90; min-height: 1.2em; margin-top: 3px; }
+  #ballPick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .bp { border: 2px solid #e8d5b5; background: #fff; border-radius: 12px; padding: 6px 4px; color: var(--plum); opacity: .55; }
+  .bp.on { opacity: 1; border-color: var(--sun2); box-shadow: 0 2px 0 #e2b77a; }
+  .bp i { display: block; font-style: normal; font-size: 13px; width: 26px; height: 26px; line-height: 26px; margin: 0 auto 2px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #ddd 60%, #aaa); }
+  .bp b { display: block; font-size: 12px; line-height: 1.1; } .bp small { display: block; font-size: 10px; color: #7a6a90; line-height: 1.15; margin-top: 2px; }
+  #ballChoose { position: absolute; left: 14px; bottom: 92px; display: flex; gap: 4px; padding: 5px; pointer-events: auto; }
+  .bc { border: 0; border-radius: 10px; padding: 4px 8px; background: rgba(255,255,255,.08); color: var(--cream); font-size: 12px; font-weight: 800; }
+  .bc i { display: block; font-style: normal; font-size: 12px; }
+  .bc.active { background: var(--sun); color: var(--plum); } .bc.dead { opacity: .35; }
+  #scareFlash { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle, transparent 35%, rgba(127,246,255,.55) 100%); transition: opacity .8s; z-index: 5; }
+  #scareFlash.show { transition: opacity .15s; }
+  #scareFlash.show { opacity: 1; }
   #windBox { padding: 8px 12px; text-align: center; min-width: 86px; }
   #windBox .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
   #windArrow { display: inline-block; font-size: 24px; line-height: 1; transition: transform .15s; color: var(--sky); }
@@ -50,17 +118,12 @@
   .club.active { background: var(--sun); color: var(--plum); box-shadow: 0 0 0 2px #fff6; }
   .club.active span { color: var(--plum2); }
   .club kbd { font: 700 9px var(--font); opacity: .55; }
-  #lieBox { padding: 8px 16px; text-align: center; }
-  #lieDist { font-size: 22px; font-weight: 900; }
-  #lieDist small { font-size: 13px; color: var(--muted); }
-  #lieSurf { font-size: 12px; color: var(--muted); }
-  #bag { padding: 8px 10px; display: flex; gap: 6px; align-items: flex-end; }
-  .ball { width: 64px; text-align: center; font-size: 10px; line-height: 1.15; color: var(--muted); }
-  .ball i { display: block; width: 18px; height: 18px; margin: 0 auto 3px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 60%, #9a9a9a); box-shadow: 0 1px 3px #0008; }
+  .balls { display: flex; gap: 6px; justify-content: center; margin: 6px 0; }
+  .ball { width: 62px; text-align: center; font-size: 10px; line-height: 1.15; color: var(--muted); }
+  .ball i { display: block; width: 20px; height: 20px; margin: 0 auto 3px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #d8d8d8 60%, #9a9a9a); box-shadow: 0 1px 3px #0008; font-style: normal; font-size: 9px; line-height: 20px; }
   .ball b { display: block; color: var(--cream); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ball.active b { color: var(--sun); }
-  .ball.active i { box-shadow: 0 0 0 2px var(--sun), 0 0 12px var(--sun); }
-  .ball.dead { opacity: .45; } .ball.dead i { background: #555; } .ball.dead i::after { content: "✝"; display: block; color: #ddd; font-size: 12px; line-height: 18px; }
+  .ball.dead { opacity: .45; } .ball.dead i { background: #555; }
   .ball.dead b { text-decoration: line-through; }
 
   #power { position: absolute; right: 22px; top: 50%; transform: translateY(-50%); width: 16px; height: 220px; border-radius: 10px; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.2); overflow: hidden; opacity: 0; transition: opacity .2s; }
@@ -81,6 +144,8 @@
   #acc span { position: absolute; top: 14px; right: 0; font-size: 10px; color: var(--muted); white-space: nowrap; }
   #caption { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%) translateY(8px); max-width: min(760px, 92vw); padding: 8px 16px; border-radius: 12px; background: rgba(10, 6, 20, 0.72); font-size: 16px; text-align: center; opacity: 0; transition: opacity .25s, transform .25s; }
   #caption::before { content: "🎙 "; }
+  #caption[data-who="tom"] { color: var(--ghost); font-style: italic; }
+  #caption[data-who="tom"]::before { content: "👻 Old Tom: "; font-style: normal; }
   #caption.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #caption[data-tier="1"] { color: #ffe08a; font-size: 17px; }
   #caption[data-tier="2"] { color: #ff8f80; font-size: 19px; font-weight: 900; animation: shake .25s infinite; }
@@ -119,8 +184,12 @@
   #bulletLbl { position: fixed; left: 24px; top: calc(11vh + 12px); font: 800 14px ui-monospace, Menlo, monospace; color: #ffdf6b; letter-spacing: .2em; opacity: 0; transition: opacity .3s; z-index: 3; }
   #letterbox.show #bulletLbl { opacity: 1; }
   body.bullet #hud { z-index: 4; }
-  body.bullet #caption { bottom: calc(11vh + 18px); }
-  body.bullet #topLeft, body.bullet #topRight, body.bullet #bottom, body.bullet #hint, body.bullet #crosshair { opacity: 0; transition: opacity .3s; }
+  body.bullet #caption { top: auto; bottom: calc(11vh + 18px); }
+  body.between #topLeft, body.between #bottom, body.between #ballChoose, body.between #reactBar, body.between #powerChip, body.between #wheel, body.between #hint { opacity: 0; pointer-events: none; }
+  body.between.waiting #betweenBag, body.between.waiting #betweenScores { display: none; }
+  body.goosecam #caption, body.goosecam #toasts, body.goosecam #emoteFeed, body.goosecam #powerChip { display: none; }
+  body.bullet #topLeft, body.bullet #topRight, body.bullet #bottom, body.bullet #hint, body.bullet #crosshair, body.bullet #wheel, body.bullet #reactBar { opacity: 0; transition: opacity .3s; }
+  body.angling #touchSwing, body.angling #touchScope, body.tugging #touchSwing, body.tugging #touchScope, body.bullet #touchSwing, body.bullet #touchScope, body.scare #touchSwing, body.between #touchSwing, body.between #touchScope, body.flying #touchSwing { opacity: 0; pointer-events: none; }
 
   /* ---------- angler ---------- */
   #angler { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, 92vw); padding: 18px 20px; text-align: center; pointer-events: auto; }
@@ -134,6 +203,12 @@
   #anglerTimer { font-size: 12px; color: var(--muted); }
   .meterLbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
 
+  #tug { position: fixed; left: 50%; bottom: calc(11vh + 18px); transform: translateX(-50%); width: min(460px, 92vw); padding: 14px 18px; text-align: center; z-index: 5; pointer-events: none; }
+  #tug h3 { font-size: 24px; font-weight: 900; color: var(--sun); }
+  #tug p { font-size: 15px; margin: 2px 0 8px; }
+  #tug .meter { height: 26px; background: rgba(255,255,255,.18); }
+  #tugFill { position: absolute; left: 0; top: 0; bottom: 0; width: 35%; background: linear-gradient(90deg, var(--coral), var(--sun), var(--mint)); }
+  #tugMid { position: absolute; right: 0; top: -2px; bottom: -2px; width: 6px; background: #fff; }
   /* ---------- cards ---------- */
   .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(18, 10, 32, 0.45); pointer-events: auto; padding: 16px; }
   .card { background: linear-gradient(180deg, #fff8ec, #ffe9c9); color: var(--plum); border-radius: 22px; padding: 26px 28px; width: min(520px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,.4); text-align: center; max-height: 100%; overflow: auto; }
@@ -182,25 +257,26 @@
   .standings li.me { color: #c66a1c; }
   #roomErr { color: #d0453a; font-size: 13px; min-height: 1em; margin-top: 6px; }
   #roomNet { font-size: 12px; color: #7a6a90; margin-top: 6px; }
-  .rrow { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #fff; line-height: 1.5; }
-  .rrow i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
-  .rrow b { margin-left: auto; padding-left: 8px; font-weight: 700; font-size: 13px; letter-spacing: .02em; } .rrow small { color: var(--muted); min-width: 44px; text-align: right; }
-  .rrow.me { color: var(--sun); } .rrow.off { opacity: .45; }
   @media (max-width: 760px) {
     #topLeft { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
-    #holeLine { font-size: 15px; } #holeName { font-size: 10px; } #roundLine { font-size: 11px; }
-    #topRight { left: 8px; right: 8px; top: 76px; justify-content: space-between; gap: 6px; }
-    #race { min-width: 0; flex: 1; padding: 6px 10px; } #raceStatus { font-size: 14px; } #raceDetail { font-size: 10px; }
+    #holeLine { font-size: 15px; } #roundLine { font-size: 12px; } #ballLine { font-size: 12px; }
+    #topRight { right: 8px; top: 50px; }
     #windBox { min-width: 0; padding: 6px 8px; } #windArrow { font-size: 18px; }
     #iconBtns { position: fixed; right: 8px; top: 8px; flex-direction: row; }
     #iconBtns button { width: 34px; height: 34px; font-size: 15px; }
     #bottom { bottom: 8px; padding: 0 8px; }
     .club { min-width: 40px; padding: 5px 6px; } .club span, .club kbd { display: none; } .club b { font-size: 14px; }
-    #bag { padding: 6px; gap: 3px; }
-    .ball { width: 24px; font-size: 0; } .ball b { display: none; }
-    .ball.active { width: auto; min-width: 54px; } .ball.active b { display: block; font-size: 11px; }
-    #lieBox { display: none; }
-    #caption { bottom: auto; top: 150px; font-size: 14px; max-width: 94vw; }
+    #caption { bottom: auto; top: 140px; font-size: 13px; max-width: 86vw; padding: 6px 12px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    #toasts { top: 92px; }
+    #flyTitle b { font-size: 30px; } #flyTitle small { font-size: 13px; } #flyTitle { top: 22%; }
+    #powerChip { top: 92px; left: 8px; font-size: 12px; max-width: 60vw; }
+    #emoteFeed { right: 8px; top: 118px; }
+    #between { top: 8px; padding: 10px 12px; }
+    #reelBtn { padding: 26px; font-size: 22px; }
+    #ballChoose { left: 8px; bottom: 60px; } .bp small { display: none; }
+    #reactBar { right: 8px; top: 40%; } #reactBar button { width: 36px; height: 36px; }
+    #wheel { left: auto; right: 10px; bottom: auto; top: 300px; width: 84px; height: 84px; } #wheelOut { left: auto; right: 100%; margin: 0 10px 0 0; text-align: right; font-size: 12px; white-space: normal; width: 52vw; } #wheelOut b { font-size: 17px; }
+    #emoteFeed { top: 230px; }
     #hint { top: auto; bottom: 74px; left: 8px; transform: none; max-width: calc(100vw - 140px); font-size: 12px; }
     #power { right: auto; left: 14px; height: 160px; }
     #powerLbl { right: auto; left: 40px; } #powerLbl small { text-align: left; }
@@ -220,16 +296,11 @@
 <div id="hud" class="hidden">
   <div id="crosshair"></div>
   <div id="topLeft" class="panel">
-    <div id="holeName">—</div>
     <div id="holeLine">Hole 1 <small>Par 4</small></div>
-    <div id="roundLine">Stroke 1 · Round 0 (E)</div>
+    <div id="roundLine">Shot 1 · 0 m to pin</div>
+    <div id="ballLine"><i></i><b>—</b> <span></span></div>
   </div>
   <div id="topRight">
-    <div id="race" class="panel">
-      <div class="lbl" id="raceWho">👻 vs Old Tom</div>
-      <div id="raceStatus" class="level">LEVEL</div>
-      <div id="raceDetail">—</div>
-    </div>
     <div id="windBox" class="panel">
       <div class="lbl">Wind</div>
       <div id="windArrow">➤</div>
@@ -246,15 +317,30 @@
   <div id="power"><div id="powerFill"></div><div id="powerMark"></div></div>
   <div id="powerLbl">0%</div>
   <div id="tempoChip" aria-live="polite"></div>
-  <div id="acc" aria-hidden="true"><div id="accZone"></div><div id="accNeedle"></div><span>tap Space on the centre</span></div>
+  <div id="acc" aria-hidden="true"><div id="accZone"></div><div id="accNeedle"></div><span>Tap Space in the green</span></div>
   <div id="banner"></div>
   <div id="caption" aria-live="polite"></div>
+  <div id="ballChoose" class="panel hidden" aria-label="Ball for this hole"></div>
   <div id="bottom">
     <div id="clubs" class="panel" role="radiogroup" aria-label="Club"></div>
-    <div id="lieBox" class="panel"><div id="lieDist">—</div><div id="lieSurf">—</div></div>
-    <div id="bag" class="panel" aria-label="Ball bag"></div>
   </div>
   <div id="flash"></div>
+  <div id="swingCancel" aria-hidden="true">✕<br>Cancel</div>
+  <div id="flyTitle"><small id="flyHole">Hole 1 · Par 4</small><b id="flyName">—</b><span id="flySkip">Tap to skip</span></div>
+  <div id="wheel" class="hidden"><div id="wheelDisc"></div><div id="wheelPtr">▼</div><div id="wheelOut"></div></div>
+  <div id="powerChip" class="hidden"></div>
+  <div id="between" class="panel hidden">
+    <div id="betweenHead">—</div>
+    <div id="betweenScores"></div>
+    <div id="betweenBag"></div>
+    <ol class="standings" id="betweenStand"></ol>
+    <div id="betweenWait"></div>
+    <div id="emotes" class="hidden"></div>
+    <button id="betweenGo" class="go">Next hole ▶</button>
+  </div>
+  <div id="emoteFeed"></div>
+  <div id="gimme" class="panel hidden"></div>
+  <div id="reactBar" class="hidden"><button data-react="honk">📯</button><button data-react="clap">👏</button><button data-react="gasp">😱</button><button data-react="laugh">😂</button></div>
 </div>
 
 <div id="scope">
@@ -276,23 +362,37 @@
   <div id="breath">HOLD <b>SHIFT</b> TO STEADY<div id="breathBar"><div id="breathFill"></div></div></div>
 </div>
 
+<div id="scareFlash"></div>
 <div id="letterbox"><div id="bulletLbl">● BULLET CAM — CLICK TO SKIP</div></div>
 
 <div id="angler" class="panel hidden" role="dialog" aria-label="Fishing minigame">
   <h3 id="anglerTitle">🎣 Reel in Gerald!</h3>
-  <p><b>Hold</b> mouse, Space or this panel to reel. Keep the needle in the <span style="color:var(--mint)">green</span>. Too tight and the line snaps.</p>
+  <p>Hold to reel. Keep the needle <span style="color:var(--mint)">green</span>.</p>
   <div class="meterLbl"><span>slack</span><span>TENSION</span><span>snap!</span></div>
   <div class="meter"><div id="tensionSafe"></div><div id="tensionDanger"></div><div id="tensionNeedle"></div></div>
   <div class="meterLbl"><span>water</span><span>REELED IN</span><span>shore</span></div>
   <div class="meter"><div id="reelFill"></div></div>
   <div id="anglerTimer">10.0 s</div>
+  <button id="reelBtn" type="button">🎣 HOLD TO REEL</button>
+</div>
+
+<div id="tug" class="panel hidden" role="dialog" aria-label="Tug of war with the goose">
+  <h3>🪿 TUG OF WAR!</h3>
+  <p id="tugHow">Hold click and shake!</p>
+  <div class="meterLbl"><span>🪿 goose</span><span id="tugTimer">6.0 s</span><span>you 💪</span></div>
+  <div class="meter"><div id="tugGoose"></div><div id="tugFill"></div><div id="tugMid"></div></div>
 </div>
 
 <div id="title" class="overlay">
   <div class="card">
     <h1>Golden Hour <span>Golf</span></h1>
-    <div class="sub">First-person golf with a sniper scope, a goose and a ghost.<br>You get five balls, and each has one life.</div>
+    <div class="sub">First-person golf with geese and a ghost.<br>Four named balls. One life each.</div>
     <input id="name" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your name">
+    <div class="pickLbl">Pick your golfer</div>
+    <div id="charPick" role="group" aria-label="Pick a golfer"></div>
+    <div id="charBlurb"></div>
+    <div class="pickLbl">Pick your four balls</div>
+    <div id="ballPick" role="group" aria-label="Pick four balls"></div>
     <button id="play" class="go">Tee off ⛳</button>
     <button id="roomBtn" class="go2">👥 Play with friends</button>
     <div id="roomPanel" class="hidden">
@@ -312,8 +412,8 @@
       </div>
       <div id="roomErr" role="status"></div>
     </div>
-    <div class="how"><b>Drag the mouse back, then push it forward</b> to swing. <b>Right-click</b> to scope, and hold <b>Shift</b> to steady your breath.</div>
-    <div class="feat"><span>🔭 Sniper's Lie</span><span>👻 Ghost Strokes</span><span>🪿 The Goose</span><span>🎙 Hysteria Commentator</span><span>🎣 Five Balls, One Life</span></div>
+    <div class="how"><b>Drag down, flick up</b> to swing.</div>
+    <div class="feat"><span>🪿 Geese</span><span>👻 Old Tom</span><span>🎡 Power-ups</span><span>🎣 Four Balls, One Life</span></div>
     <button id="lbBtn" class="alt">Leaderboard</button>
   </div>
 </div>
@@ -324,22 +424,24 @@
   <div class="card">
     <h2>Controls</h2>
     <table class="sc" style="text-align:left">
-      <tr><td><b>Aim</b></td><td>Move the mouse (click the course first), or A / D or the arrow keys.</td></tr>
-      <tr><td><b>Swing</b></td><td>Hold the left button. Pull back for power, then push forward fast. Sideways drift curves the ball.</td></tr>
-      <tr><td><b>Easy swing</b></td><td>Hold Space for power and release it, then tap Space again as the needle crosses the centre.</td></tr>
-      <tr><td><b>Club</b></td><td>1–4, Q / E or the scroll wheel.</td></tr>
-      <tr><td><b>Scope</b></td><td>Hold the right button or Z. Hold Shift to hold your breath.</td></tr>
-      <tr><td><b>Look</b></td><td>Mouse up and down, or W / S.</td></tr>
-      <tr><td><b>Sound</b></td><td>M mutes everything, and V toggles the commentator voice. Captions stay on.</td></tr>
+      <tr><td><b>Aim</b></td><td>Drag sideways. Or A / D.</td></tr>
+      <tr><td><b>Swing</b></td><td>Drag down, flick up.</td></tr>
+      <tr><td><b>Curve</b></td><td>Flick up at an angle.</td></tr>
+      <tr><td><b>Cancel</b></td><td>Slide onto ✕. Or Esc.</td></tr>
+      <tr><td><b>Key swing</b></td><td>Hold Space, release, tap again.</td></tr>
+      <tr><td><b>Club</b></td><td>1–4 or scroll wheel.</td></tr>
+      <tr><td><b>Zoom</b></td><td>Hold right-click or Z.</td></tr>
+      <tr><td><b>Sound</b></td><td>M mutes. V mutes the voice.</td></tr>
     </table>
-    <div class="how">The <b>ghost</b> is solid, and it can block you. If the <b>goose</b> steals your ball, hit it with a free shoo shot. Balls lost in <b>water</b> must be reeled back in, or they die.</div>
+    <div class="how">Geese steal balls. Water drowns them.</div>
+    <div class="toggles"><label><input type="checkbox" id="noScare">Scares off</label><label><input type="checkbox" id="muteReact">Mute reactions</label></div>
     <button class="go" id="helpClose">Back to golf</button>
   </div>
 </div>
 <div id="lb" class="overlay hidden"><div class="card"><h2>Leaderboard</h2><div class="boards" id="lbBoards"></div><button class="go" id="lbClose">Close</button></div></div>
 
 <button id="touchScope" class="hidden" aria-label="Scope">🔭</button>
-<div id="touchSwing" class="hidden">Drag ↓<br>then flick ↑<br>to swing</div>
+<div id="touchSwing" class="hidden">Drag ↓<br>flick ↑</div>
 
 <script type="module" src="/js/main.js"></script>
 </body>

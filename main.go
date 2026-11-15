@@ -21,8 +21,8 @@ import (
 //go:embed web
 var webFiles embed.FS
 
-// minRoundStrokes is one stroke per hole on the 4-hole 3D course.
-const minRoundStrokes = 4
+// minRoundStrokes is one stroke per hole on the 7-hole 3D course.
+const minRoundStrokes = 7
 
 func main() {
 	port := getenv("PORT", "8080")
@@ -51,7 +51,7 @@ func main() {
 			return
 		}
 		in.Name = cleanName(in.Name)
-		// A round is 4 holes: fewer than 4 strokes is impossible, and anything
+		// A round is 7 holes: fewer than 7 strokes is impossible, and anything
 		// past 200 is a stuck client, not golf.
 		if in.Name == "" || in.Strokes < minRoundStrokes || in.Strokes > 200 {
 			http.Error(w, "invalid name or score", http.StatusBadRequest)

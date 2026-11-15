@@ -2,7 +2,9 @@
 // default first-person view looks down the fairway.
 //
 // Ellipses are [cx, cz, rx, rz]. Hills are [x, z, radius, height].
-// Each hole spotlights one of the five signature features (see design/).
+// Each hole spotlights one feature (see design/). Holes 5-7 came from the
+// round-6 council (design/council-round6.md): a windmill that only turns
+// while a ball flies, a graveyard with a jumpscare, and moon gravity.
 
 export const HOLES = [
   {
@@ -18,7 +20,8 @@ export const HOLES = [
     bunkers: [[19, -156, 8, 5], [-6, -238, 4, 3], [26, -252, 3.5, 4]],
     ponds: [],
     trees: { density: 0.9 },
-    goose: { area: [-2, -158, 14], radius: 42 },   // the welcome committee meets every drive
+    geese: [{ area: [-2, -158, 14], radius: 26 }],   // the welcome committee meets a lot of drives
+    goslings: 2,
     wind: 3,
   },
   {
@@ -34,7 +37,7 @@ export const HOLES = [
     bunkers: [[-9, -129, 7, 2.5], [4, -107, 2.5, 3.5]],
     ponds: [[-3, -66, 20, 17]],
     trees: { density: 0.7 },
-    goose: { area: [-22, -108, 6], radius: 9 },
+    geese: [{ area: [-22, -108, 6], radius: 11 }, { area: [14, -124, 5], radius: 11 }],
     wind: 4,
   },
   {
@@ -50,7 +53,7 @@ export const HOLES = [
     bunkers: [[-44, -208, 4, 3], [14, -140, 7, 4]],
     ponds: [],
     trees: { density: 1.1, clumps: [[-30, -98, 14], [-85, -150, 12]] },
-    goose: { area: [-10, -150, 10], radius: 9 },
+    geese: [{ area: [-10, -150, 10], radius: 11 }, { area: [-50, -196, 5], radius: 11 }],
     wind: 2.5,
   },
   {
@@ -66,8 +69,64 @@ export const HOLES = [
     bunkers: [[14, -366, 4, 2.5], [40, -388, 3.5, 4.5], [-22, -175, 6, 4]],
     ponds: [[10, -262, 34, 14]],
     trees: { density: 0.8 },
-    goose: { area: [4, -330, 12], radius: 9 },
+    geese: [{ area: [4, -330, 12], radius: 11 }, { area: [-12, -150, 12], radius: 11 }, { area: [38, -370, 5], radius: 11 }],
     wind: 6.5,
+  },
+  {
+    name: 'The Windmill of Spite',
+    par: 4, seed: 67,
+    spotlight: 'windmill',
+    tee: [0, 0], pin: [-12, -292],
+    path: [[0, -6], [0, -160], [-12, -292]],
+    fairwayWidth: 36,
+    bounds: [-60, -322, 60, 14],
+    greenSize: [14, 12], greenTilt: [0.012, -0.01],
+    hills: [[-40, -60, 26, 3], [42, -150, 30, 4], [-30, -310, 22, 3]],
+    bunkers: [[14, -168, 6, 4], [-26, -276, 4, 3], [2, -306, 5, 2.5]],
+    ponds: [],
+    trees: { density: 0.8 },
+    windmill: { at: [0, -100], hubH: 9, len: 8.5, blades: 4, period: 5, step: 0.9, tower: 2.4, towerH: 12, face: 2.6 },
+    geese: [{ area: [-6, -175, 14], radius: 11 }, { area: [10, -205, 10], radius: 11 }, { area: [-14, -268, 8], radius: 11 }],
+    wind: 3.5,
+    hint: 'It only spins when you swing.',
+  },
+  {
+    name: "Old Tom's Plot",
+    par: 3, seed: 79,
+    spotlight: 'scare',
+    tee: [0, 0], pin: [6, -136],
+    path: [[0, -6], [0, -60], [6, -136]],
+    fairwayWidth: 20,
+    bounds: [-42, -162, 46, 14],
+    greenSize: [13, 11], greenTilt: [-0.01, 0.012],
+    hills: [[-26, -70, 18, 2.5], [28, -120, 16, 3]],
+    bunkers: [[-4, -124, 3.2, 1.2], [15, -142, 4, 2.5]],   // the first one is "the open grave"
+    ponds: [],
+    trees: { density: 0.5, clumps: [[-24, -110, 9], [30, -60, 8]] },
+    tombs: { area: [2, -80, 34, 60], n: 46, clear: 5 },
+    geese: [{ area: [-12, -150, 5], radius: 9, stare: true }, { area: [18, -128, 5], radius: 9, stare: true }],
+    wind: 1.5,
+    hint: 'Shh. Old Tom is resting.',
+  },
+  {
+    name: 'Moonshot',
+    par: 4, seed: 97,
+    spotlight: 'moon',
+    tee: [0, 0], pin: [20, -330],
+    path: [[0, -6], [-6, -190], [20, -330]],
+    fairwayWidth: 30,
+    bounds: [-70, -360, 80, 14],
+    greenSize: [16, 13], greenTilt: [0.008, 0.01], greenBumps: 0.2,
+    hills: [[20, -330, 34, 9], [-40, -110, 30, 4], [55, -230, 26, 4]],   // the green sits on a 9 m mesa
+    bunkers: [[4, -312, 4, 3], [38, -322, 3.5, 4], [-20, -200, 6, 4]],
+    ponds: [[-2, -255, 40, 16]],
+    trees: { density: 0.6 },
+    airGravity: 0.5,
+    geese: [{ area: [14, -300, 10], radius: 14, boss: true }, { area: [0, -300, 8], radius: 11 }, { area: [30, -300, 8], radius: 11 },
+      { area: [-8, -180, 12], radius: 11 }, { area: [16, -150, 12], radius: 11 }],
+    goslings: 3,
+    wind: 4,
+    hint: 'Moon gravity. Everything floats.',
   },
 ];
 

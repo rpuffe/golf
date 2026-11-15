@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
+	"unicode/utf8"
 )
 
 // Rooms: live multiplayer for 2–8 friends sharing a room code. Every player
@@ -22,6 +24,10 @@ import (
 // Like the hole-out hub, rooms are in memory only. A deploy (stop-then-start,
 // because the manifest has storage) ends every room; clients fall back to
 // solo play. Nothing here touches S3 or the healthcheck.
+//
+// Emotes (heckles, honks, power-up attacks) are relayed opaquely: the server
+// checks the shape of kind/to/arg and rate-limits each member, but the client
+// decides what each kind means.
 
 const (
 	roomCodeChars   = "ABCDEFGHJKLMNPQRSTUVWXYZ" // no I or O: codes get read aloud
@@ -34,6 +40,17 @@ const (
 	roomSendLimit   = 64 << 10         // a long shot is ~8 KB of frames
 	maxShotInts     = 3600             // 28 s of 30 Hz frames × 3 coordinates, with headroom
 	connBuffer      = 64
+	maxEmoteKind    = 24 // bytes; kinds are [a-z0-9_-]
+	maxEmoteArg     = 64 // bytes, after control characters are stripped
+	emoteBurst      = 5  // emotes a member can fire back to back
+)
+
+// emoteRefill is how long the bucket takes to earn back one emote, and
+// emoteClock is what it is measured against. Both are vars so tests can
+// drive the bucket without sleeping.
+var (
+	emoteRefill = 1500 * time.Millisecond
+	emoteClock  = time.Now
 )
 
 type Rooms struct {
@@ -64,6 +81,9 @@ type Member struct {
 	lastSeq  int
 	conns    map[chan []byte]struct{}
 	Progress Progress
+
+	emoteTokens float64   // token bucket for emotes; see allowEmoteLocked
+	emoteAt     time.Time // when emoteTokens was last brought up to date
 }
 
 // Progress is a member's standing in the current round. Decoding into a
@@ -76,6 +96,7 @@ type Progress struct {
 	Holed   bool   `json:"holed"`
 	Done    bool   `json:"done"`
 	Ball    string `json:"ball,omitempty"`
+	Char    string `json:"char,omitempty"` // chosen golfer model, cosmetic
 }
 
 type Vec3 struct {
@@ -221,7 +242,7 @@ func (r *Room) addLocked(name string) *Member {
 		color++
 	}
 	now := time.Now()
-	m := &Member{ID: randToken(6), Name: name, Color: color, token: randToken(16), joined: now, lastSeen: now, conns: map[chan []byte]struct{}{}}
+	m := &Member{ID: randToken(6), Name: name, Color: color, token: randToken(16), joined: now, lastSeen: now, conns: map[chan []byte]struct{}{}, emoteTokens: emoteBurst, emoteAt: emoteClock()}
 	r.members[m.ID] = m
 	r.order = append(r.order, m.ID)
 	if r.hostID == "" {
@@ -468,8 +489,8 @@ type sendReq struct {
 	ID       string    `json:"id"`
 	Token    string    `json:"token"`
 	Seq      int       `json:"seq"`   // per-member, increasing: retries are idempotent
-	Type     string    `json:"type"`  // shot | progress | start | leave
-	Round    int       `json:"round"` // round the event belongs to (shot/progress)
+	Type     string    `json:"type"`  // shot | progress | start | leave | emote
+	Round    int       `json:"round"` // round the event belongs to (shot/progress; emote passes it through)
 	Hole     int       `json:"hole"`
 	Stroke   int       `json:"stroke"`
 	Start    *Vec3     `json:"start,omitempty"`
@@ -477,6 +498,9 @@ type sendReq struct {
 	Club     string    `json:"club"`
 	F        []int     `json:"f"`
 	Progress *Progress `json:"progress,omitempty"`
+	Kind     string    `json:"kind"` // emote: what happened, meaning is up to the client
+	To       string    `json:"to"`   // emote: target member id, empty for everyone
+	Arg      string    `json:"arg"`  // emote: optional free text
 }
 
 type shotEvent struct {
@@ -503,6 +527,16 @@ type startEvent struct {
 	By    string `json:"by"`
 }
 
+// emoteEvent goes to everyone but the sender, targeted or not, so the rest of
+// the room can see who heckled whom.
+type emoteEvent struct {
+	From  string `json:"from"`
+	Kind  string `json:"kind"`
+	To    string `json:"to"`
+	Arg   string `json:"arg"`
+	Round int    `json:"round"`
+}
+
 var validRes = map[string]bool{"rest": true, "holed": true, "water": true, "oob": true}
 var validClub = map[string]bool{"driver": true, "iron": true, "wedge": true, "putter": true}
 
@@ -510,7 +544,7 @@ func validProgress(p *Progress) bool {
 	if p == nil {
 		return true
 	}
-	if p.Hole < 0 || p.Hole > 18 || p.Strokes < 0 || p.Strokes > 99 || len(p.Scores) > 18 || len(p.Ball) > 40 {
+	if p.Hole < 0 || p.Hole > 18 || p.Strokes < 0 || p.Strokes > 99 || len(p.Scores) > 18 || len(p.Ball) > 40 || len(p.Char) > 16 {
 		return false
 	}
 	for _, s := range p.Scores {
@@ -518,6 +552,46 @@ func validProgress(p *Progress) bool {
 			return false
 		}
 	}
+	return true
+}
+
+func validEmoteKind(k string) bool {
+	if len(k) < 1 || len(k) > maxEmoteKind {
+		return false
+	}
+	for i := 0; i < len(k); i++ {
+		c := k[i]
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// cleanArg strips control characters like cleanName, but does not truncate:
+// the caller rejects an over-long arg rather than silently cutting it.
+func cleanArg(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || r == utf8.RuneError {
+			return -1
+		}
+		return r
+	}, s)
+	return strings.TrimSpace(s)
+}
+
+// allowEmoteLocked takes one token from the member's emote bucket (burst
+// emoteBurst, one token back per emoteRefill), or reports false when empty.
+func (m *Member) allowEmoteLocked() bool {
+	now := emoteClock()
+	if elapsed := now.Sub(m.emoteAt); elapsed > 0 {
+		m.emoteTokens = min(emoteBurst, m.emoteTokens+float64(elapsed)/float64(emoteRefill))
+	}
+	m.emoteAt = now
+	if m.emoteTokens < 1 {
+		return false
+	}
+	m.emoteTokens--
 	return true
 }
 
@@ -592,6 +666,26 @@ func (rs *Rooms) serveSend(w http.ResponseWriter, r *http.Request) {
 		room.broadcastLocked("roster", room.stateLocked(), "")
 		writeJSON(w, http.StatusOK, startEvent{Round: room.round, Seed: room.seed, By: m.ID})
 		return
+	case "emote":
+		// no round check: emotes work in the lobby and between rounds too
+		in.Arg = cleanArg(in.Arg)
+		if !validEmoteKind(in.Kind) || len(in.Arg) > maxEmoteArg {
+			http.Error(w, "bad emote", http.StatusBadRequest)
+			return
+		}
+		if in.To != "" {
+			if _, ok := room.members[in.To]; !ok || in.To == m.ID {
+				http.Error(w, "bad emote target", http.StatusBadRequest)
+				return
+			}
+		}
+		if !m.allowEmoteLocked() {
+			// lastSeq stays put, so the same seq can be sent again later
+			http.Error(w, "slow down", http.StatusTooManyRequests)
+			return
+		}
+		m.lastSeq = in.Seq
+		room.broadcastLocked("emote", emoteEvent{From: m.ID, Kind: in.Kind, To: in.To, Arg: in.Arg, Round: in.Round}, m.ID)
 	case "leave":
 		m.lastSeq = in.Seq
 		room.removeLocked(m.ID)

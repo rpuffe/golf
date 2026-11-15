@@ -124,7 +124,8 @@ export function buildCourse(hole) {
 
   function surface(x, z) {
     if (x < B[0] || x > B[2] || z < B[1] || z > B[3]) return 'oob';
-    for (const p of ponds) if (ell(x, z, p.e) < 1 && height(x, z) < p.level + 0.05) return 'water';
+    // water is wherever the drawn water plane covers the ground (the plane spans 1.6x the pond)
+    for (const p of ponds) if (ell(x, z, p.e) < 1.6 && height(x, z) < p.level + 0.05) return 'water';
     for (const b of hole.bunkers ?? []) if (ell(x, z, b) < 1) return 'sand';
     const ge = ell(x, z, green);
     if (ge < 1) return 'green';

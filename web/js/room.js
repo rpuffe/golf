@@ -9,7 +9,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 export class RoomClient {
   constructor(handlers) {
-    this.h = handlers;           // onState, onShot, onProgress, onStart, onConn, onClosed
+    this.h = handlers;           // onState, onShot, onProgress, onStart, onEmote, onConn, onClosed
     this.code = null; this.id = null; this.token = null; this.state = null;
     this.queue = []; this.sending = false;
     // Increasing across page reloads too (the server keeps the last seq per member).
@@ -54,6 +54,7 @@ export class RoomClient {
     on('shot', d => this.h.onShot?.(d));
     on('progress', d => this.h.onProgress?.(d));
     on('start', d => this.h.onStart?.(d));
+    on('emote', d => this.h.onEmote?.(d));
     es.onerror = () => {
       this._conn(false);
       // CONNECTING = the browser is already retrying. CLOSED = the server

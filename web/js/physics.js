@@ -14,7 +14,7 @@ export const FPS = 1 / (DT * REC);
 const DRAG = 0.0036;            // quadratic air drag (1/m)
 const SIDE_K = 0.055;           // sidespin curve strength
 const MAX_T = 28;
-const GREEN_SLOPE = 0.5;        // fraction of slope gravity felt while rolling on a green               // seconds of sim before we force a stop
+const GREEN_SLOPE = 0.5;        // fraction of slope gravity felt while rolling on a green
 
 export const CLUBS = {
   driver: { id: 'driver', name: 'Driver', short: '1W', speed: 47, angle: 15, lift: 0.11, check: 1.0,  curve: 1.0,  range: 125 },
@@ -85,6 +85,8 @@ export function simulate(world, start, L) {
   const wind = world.wind ?? { x: 0, z: 0 };
   const cup = world.cup;
   const cupY = course.h(cup.x, cup.z);
+  // power-up hooks: a bigger cup, lighter gravity (all optional, default to normal golf)
+  const CR = world.cupR ?? CUP_R, Gs = G * (world.gravity ?? 1);
   const maxFrames = Math.ceil(MAX_T * FPS) + 2;
   const frames = new Float32Array(maxFrames * 3);
   const events = [];
@@ -97,7 +99,15 @@ export function simulate(world, start, L) {
   const n = { x: 0, y: 1, z: 0 };
   let grid = world.colliders ?? [];
   if (Array.isArray(grid)) grid = prepColliders(grid);
-  const extra = world.dynamic ?? EMPTY;   // few, unbucketed (the goose)
+  const extra = world.dynamic ?? EMPTY;   // few, unbucketed (the geese, rival balls)
+  const noTrees = !!world.noTrees;          // Ghost Ball power-up: through trees, tombstones and the windmill
+  const ag = (course.hole?.airGravity ?? 1) * (world.airGravity ?? 1);   // moon gravity, in the air only
+  // Hole 5's windmill: blades sweep the plane z = pz, turning only while a ball
+  // flies. The angle is a pure function of the stroke number and sim time, so
+  // the player, the preview, rivals and Old Tom all see the same blades.
+  const wm = course.hole?.windmill;
+  const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + wm.face, len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: (world.strokeNo ?? 1) * wm.step } : null;
+  let swatted = false;
   const ev = (type, extra = {}) => events.push({ type, frame: fi, x, y, z, ...extra });
   const rec = () => { frames[fi * 3] = x; frames[fi * 3 + 1] = y; frames[fi * 3 + 2] = z; fi++; };
   rec();
@@ -109,7 +119,7 @@ export function simulate(world, start, L) {
       const w = trait.wind;
       const rx = vx - wind.x * w, rz = vz - wind.z * w;
       const sp = Math.hypot(rx, vy, rz);
-      let ax = -DRAG * sp * rx, ay = -G - DRAG * sp * vy + lift * sp, az = -DRAG * sp * rz;
+      let ax = -DRAG * sp * rx, ay = (-Gs + lift * sp) * ag - DRAG * sp * vy, az = -DRAG * sp * rz;
       ax += side * SIDE_K * (-vz); az += side * SIDE_K * vx;
       lift *= 0.9993;
       vx += ax * DT; vy += ay * DT; vz += az * DT;
@@ -148,6 +158,7 @@ export function simulate(world, start, L) {
     const bucket = grid.cells.get(Math.floor(x / CELL) * 100003 + Math.floor(z / CELL)) ?? EMPTY;
     for (let ci = 0, cn = bucket.length + extra.length; ci < cn; ci++) {
       const c = ci < bucket.length ? bucket[ci] : extra[ci - bucket.length];
+      if (noTrees && (c.tag === 'tree' || c.tag === 'tomb' || c.tag === 'windmill')) continue;
       if (c.kind === 'sphere') {
         const dx = x - c.x, dy = y - c.y, dz = z - c.z, rr = c.r + R;
         const d2 = dx * dx + dy * dy + dz * dz;
@@ -184,6 +195,27 @@ export function simulate(world, start, L) {
           vx *= k; vz *= k; if (vy > 0) vy *= k;
           lift = 0; side *= 0.98;
         } else inCanopy.delete(c);
+      }
+    }
+    if (wmD && !noTrees && Math.abs(z - wmD.pz) < 1.0 && (x - wmD.hx) ** 2 + (y - wmD.hy) ** 2 < (wmD.len + 1) ** 2) {
+      const th = wmD.th0 + wmD.w * step * DT, rr = 0.8 + R;
+      blades:
+      for (let b = 0; b < wmD.n; b++) {
+        const a = th + b * 2 * Math.PI / wmD.n, ca = Math.cos(a), sa = Math.sin(a);
+        for (let k = 1; k <= 5; k++) {
+          const rho = wmD.len * k / 5, sx = wmD.hx + ca * rho, sy = wmD.hy + sa * rho;
+          const ex = x - sx, ey = y - sy, ez = z - wmD.pz, d2 = ex * ex + ey * ey + ez * ez;
+          if (d2 >= rr * rr) continue;
+          const d = Math.sqrt(d2) || 1e-6, nx = ex / d, ny = ey / d, nz = ez / d;
+          const bvx = -wmD.w * rho * sa, bvy = wmD.w * rho * ca;
+          const vn = (vx - bvx) * nx + (vy - bvy) * ny + vz * nz;
+          if (vn < 0) {
+            vx -= 1.7 * vn * nx; vy -= 1.7 * vn * ny; vz -= 1.7 * vn * nz; air = true;
+            if (!swatted) { swatted = true; ev('hit', { tag: 'windmill', speed: -vn }); }
+          }
+          x = sx + nx * rr; y = sy + ny * rr; z = wmD.pz + nz * rr;
+          break blades;
+        }
       }
     }
     // Rival ghost ball: solid, one-way.
@@ -243,9 +275,9 @@ export function simulate(world, start, L) {
 
     // ----------------------------------------------------------------- cup
     const cdx = x - cup.x, cdz = z - cup.z, cd = Math.hypot(cdx, cdz);
-    if (cd < CUP_R) {
+    if (cd < CR) {
       const sp = Math.hypot(vx, vy, vz);
-      if (!air && cd < CUP_R - R * 0.4) {
+      if (!air && cd < CR - R * 0.4) {
         if (sp < 1.0 * trait.capture) { result = 'holed'; ev('holed', { speed: sp }); x = cup.x; z = cup.z; y = cupY - 0.05; break outer; }
         if (!lipping) {
           lipping = true;
@@ -260,7 +292,7 @@ export function simulate(world, start, L) {
       } else if (air && vy < 0 && y - R < cupY + 0.12 && sp < 9) {
         result = 'holed'; ev('holed', { speed: sp, dunk: true }); x = cup.x; z = cup.z; y = cupY - 0.05; break outer;
       }
-    } else if (cd > CUP_R + 0.1) lipping = false;
+    } else if (cd > CR + 0.1) lipping = false;
 
     if (step % REC === 0) {
       rec();
@@ -312,3 +344,6 @@ export function puttPower(metres) {
   const [pa, da] = T[T.length - 2], [pb, db] = T[T.length - 1];
   return Math.min(1.15, pb + (pb - pa) * (metres - db) / ((db - da) || 1));
 }
+
+// Windmill rotor angle for stroke `strokeNo` at `t` seconds into the shot (matches simulate()).
+export function windmillAngle(wm, strokeNo, t) { return strokeNo * wm.step + (2 * Math.PI / wm.period) * t; }

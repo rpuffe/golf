@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -205,4 +206,179 @@ func TestRoomLimitsAndHandOff(t *testing.T) {
 		t.Fatal("idle room was not swept")
 	}
 	_ = last
+}
+
+// fakeEmoteClock pins the emote bucket's clock for the rest of the test and
+// returns a function that moves it forward.
+func fakeEmoteClock(t *testing.T) (advance func(time.Duration)) {
+	t.Helper()
+	var mu sync.Mutex
+	now := time.Unix(1_700_000_000, 0)
+	prev := emoteClock
+	emoteClock = func() time.Time {
+		mu.Lock()
+		defer mu.Unlock()
+		return now
+	}
+	t.Cleanup(func() { emoteClock = prev })
+	return func(d time.Duration) {
+		mu.Lock()
+		now = now.Add(d)
+		mu.Unlock()
+	}
+}
+
+// noEvent fails if an event with this name arrives within a short window.
+func noEvent(t *testing.T, ch <-chan sseEvent, name string) {
+	t.Helper()
+	deadline := time.After(150 * time.Millisecond)
+	for {
+		select {
+		case ev := <-ch:
+			if ev.name == name {
+				t.Fatalf("unexpected %q event: %s", name, ev.data)
+			}
+		case <-deadline:
+			return
+		}
+	}
+}
+
+func TestRoomEmotes(t *testing.T) {
+	advance := fakeEmoteClock(t)
+	srv, _ := roomServer(t)
+	_, body := postJSON(t, srv.URL+"/api/rooms", map[string]string{"name": "Ada"})
+	var ada joinResp
+	json.Unmarshal(body, &ada)
+	join := func(name string) joinResp {
+		_, b := postJSON(t, srv.URL+"/api/rooms/"+ada.Code+"/join", map[string]string{"name": name})
+		var j joinResp
+		json.Unmarshal(b, &j)
+		return j
+	}
+	bo, cy := join("Bo"), join("Cy")
+	stream := func(who joinResp) <-chan sseEvent {
+		s := openStream(t, srv.URL+"/api/rooms/"+ada.Code+"/events?id="+who.You+"&token="+who.Token)
+		waitEvent(t, s, "roster")
+		return s
+	}
+	adaStream, boStream, cyStream := stream(ada), stream(bo), stream(cy)
+
+	seq := 0
+	send := func(who joinResp, m map[string]any) int {
+		m["id"], m["token"], m["type"] = who.You, who.Token, "emote"
+		if _, ok := m["seq"]; !ok {
+			seq++
+			m["seq"] = seq
+		}
+		r, _ := postJSON(t, srv.URL+"/api/rooms/"+ada.Code+"/send", m)
+		return r.StatusCode
+	}
+	decode := func(ev sseEvent) emoteEvent {
+		var e emoteEvent
+		json.Unmarshal([]byte(ev.data), &e)
+		return e
+	}
+
+	// broadcast to everyone but the sender; lobby emotes are fine (round 0 ≠ room.round)
+	if c := send(ada, map[string]any{"kind": "honk", "arg": "  hi\x07 there\n", "round": 0}); c != http.StatusNoContent {
+		t.Fatalf("emote: %d", c)
+	}
+	if e := decode(waitEvent(t, boStream, "emote")); e.From != ada.You || e.Kind != "honk" || e.To != "" || e.Arg != "hi there" || e.Round != 0 {
+		t.Fatalf("bad relayed emote %+v", e)
+	}
+	waitEvent(t, cyStream, "emote")
+	noEvent(t, adaStream, "emote")
+
+	// targeted: still everyone but the sender, round passed through
+	if c := send(ada, map[string]any{"kind": "power_up-2", "to": bo.You, "round": 7}); c != http.StatusNoContent {
+		t.Fatalf("targeted emote: %d", c)
+	}
+	if e := decode(waitEvent(t, cyStream, "emote")); e.To != bo.You || e.Kind != "power_up-2" || e.Round != 7 {
+		t.Fatalf("bad targeted emote %+v", e)
+	}
+	if e := decode(waitEvent(t, boStream, "emote")); e.To != bo.You {
+		t.Fatalf("target missed its emote %+v", e)
+	}
+	noEvent(t, adaStream, "emote")
+
+	// validation
+	for name, m := range map[string]map[string]any{
+		"empty kind":     {"kind": ""},
+		"upper kind":     {"kind": "Honk"},
+		"spaced kind":    {"kind": "big honk"},
+		"long kind":      {"kind": strings.Repeat("a", maxEmoteKind+1)},
+		"unknown target": {"kind": "honk", "to": "nobody"},
+		"self target":    {"kind": "honk", "to": ada.You},
+		"long arg":       {"kind": "honk", "arg": strings.Repeat("é", maxEmoteArg/2+1)},
+	} {
+		if c := send(ada, m); c != http.StatusBadRequest {
+			t.Fatalf("%s: %d", name, c)
+		}
+	}
+	// control characters don't count against the limit
+	if c := send(ada, map[string]any{"kind": "honk", "arg": strings.Repeat("a", maxEmoteArg) + "\x00\x01"}); c != http.StatusNoContent {
+		t.Fatalf("arg at limit: %d", c)
+	}
+	waitEvent(t, boStream, "emote")
+	// seq dedup: a retry is accepted, not relayed, and costs no token
+	if c := send(bo, map[string]any{"kind": "honk"}); c != http.StatusNoContent {
+		t.Fatalf("bo emote: %d", c)
+	}
+	waitEvent(t, adaStream, "emote")
+	dup := map[string]any{"kind": "honk", "seq": seq}
+	for i := 0; i < 2*emoteBurst; i++ {
+		if c := send(bo, dup); c != http.StatusNoContent {
+			t.Fatalf("retry %d: %d", i, c)
+		}
+	}
+	noEvent(t, adaStream, "emote")
+
+	// rate limit: Bo has burst-1 tokens left (the retries cost nothing)
+	for i := 1; i < emoteBurst; i++ {
+		if c := send(bo, map[string]any{"kind": "honk"}); c != http.StatusNoContent {
+			t.Fatalf("burst %d: %d", i, c)
+		}
+	}
+	limited := map[string]any{"kind": "honk"}
+	if c := send(bo, limited); c != http.StatusTooManyRequests {
+		t.Fatalf("over burst: %d", c)
+	}
+	// a 429 doesn't burn the seq: the same message goes through once refilled
+	advance(emoteRefill / 2)
+	if c := send(bo, limited); c != http.StatusTooManyRequests {
+		t.Fatalf("half refill: %d", c)
+	}
+	advance(emoteRefill / 2)
+	drain := func(ch <-chan sseEvent) {
+		for {
+			select {
+			case <-ch:
+			case <-time.After(100 * time.Millisecond):
+				return
+			}
+		}
+	}
+	drain(adaStream)
+	if c := send(bo, limited); c != http.StatusNoContent {
+		t.Fatalf("after refill: %d", c)
+	}
+	waitEvent(t, adaStream, "emote")
+	if c := send(bo, map[string]any{"kind": "honk"}); c != http.StatusTooManyRequests {
+		t.Fatalf("one refill is one emote: %d", c)
+	}
+	// a long wait refills to the burst, no further
+	advance(100 * emoteRefill)
+	for i := 0; i < emoteBurst; i++ {
+		if c := send(bo, map[string]any{"kind": "honk"}); c != http.StatusNoContent {
+			t.Fatalf("refilled burst %d: %d", i, c)
+		}
+	}
+	if c := send(bo, map[string]any{"kind": "honk"}); c != http.StatusTooManyRequests {
+		t.Fatalf("burst cap: %d", c)
+	}
+	// buckets are per member
+	if c := send(cy, map[string]any{"kind": "honk"}); c != http.StatusNoContent {
+		t.Fatalf("cy unaffected: %d", c)
+	}
 }
