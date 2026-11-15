@@ -50,6 +50,13 @@ export function buildTerrainMesh(course) {
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geo.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 });
+  // the green has its own finer mesh (buildGreenMesh): cut the coarse terrain out under it
+  const [gcx, gcz, grx, grz] = course.green;
+  mat.onBeforeCompile = sh => {
+    sh.uniforms.uGreen = { value: new THREE.Vector4(gcx, gcz, grx * 1.5, grz * 1.5) };
+    sh.vertexShader = 'varying vec2 vGW;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvGW = (modelMatrix * vec4(transformed, 1.0)).xz;');
+    sh.fragmentShader = 'uniform vec4 uGreen;\nvarying vec2 vGW;\n' + sh.fragmentShader.replace('void main() {', 'void main() {\n  vec2 gq = (vGW - uGreen.xy) / uGreen.zw; if (dot(gq, gq) < 1.0) discard;');
+  };
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   return mesh;
@@ -72,4 +79,53 @@ export function buildWater(course) {
     group.add(m);
   }
   return group;
+}
+
+// ---------------------------------------------------------------------------
+// The green, drawn on its own: a fine mesh on the physics grid (so what you
+// see is exactly what a putt rolls over) with crisp mowing stripes, a darker
+// collar, a soft edge into the rough and a bright ring of turf at the cup.
+// ---------------------------------------------------------------------------
+export function buildGreenMesh(course) {
+  const [cx, cz, rx, rz] = course.green, pin = course.hole.pin;
+  const R = 1.75;                                   // well past where the terrain is cut (1.5), so no seams
+  const rings = 40, segs = 96;
+  const pos = [], uv = [], idx = [], alpha = [];
+  for (let i = 0; i <= rings; i++) for (let j = 0; j <= segs; j++) {
+    const k = (i / rings) * R, a = j / segs * Math.PI * 2;
+    const x = cx + Math.cos(a) * rx * k, z = cz + Math.sin(a) * rz * k;
+    pos.push(x, course.h(x, z) + 0.004, z);
+    uv.push((x - (cx - rx * R)) / (2 * rx * R), (z - (cz - rz * R)) / (2 * rz * R));
+    alpha.push(k);
+  }
+  // wound so the faces point up
+  for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) { const a = i * (segs + 1) + j, b = a + segs + 1; idx.push(a, a + 1, b, b, a + 1, b + 1); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  // paint the turf into a canvas in green-space
+  const S = 1024, c = document.createElement('canvas'); c.width = c.height = S;
+  const x = c.getContext('2d');
+  const toPx = (wx, wz) => [(wx - (cx - rx * R)) / (2 * rx * R) * S, (wz - (cz - rz * R)) / (2 * rz * R) * S];
+  const ell = (k, fill) => { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, rx * k / (2 * rx * R) * S, rz * k / (2 * rz * R) * S, 0, 0, Math.PI * 2); x.fillStyle = fill; x.fill(); };
+  ell(R, '#3e7428');                                  // rough-coloured apron under the terrain's cut edge
+  ell(1.45, '#4a8a33');                               // the collar / fringe
+  ell(1.0, '#7cc84f');                                // the putting surface
+  // diagonal mowing stripes, clipped to the green
+  x.save(); { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, S / (2 * R), S / (2 * R) * (rz / rz), 0, 0, Math.PI * 2); x.clip(); }
+  x.translate(S / 2, S / 2); x.rotate(Math.PI / 5);
+  const stripe = 2.6 / (2 * rx * R) * S;
+  for (let s = -S; s < S; s += stripe * 2) { x.fillStyle = 'rgba(255,255,200,0.22)'; x.fillRect(s, -S, stripe, S * 2); x.fillStyle = 'rgba(0,50,0,0.10)'; x.fillRect(s + stripe, -S, stripe, S * 2); }
+  x.restore();
+  // a crisp edge line and a bright ring of fresh turf round the cup
+  { const [px, pz] = toPx(cx, cz); x.beginPath(); x.ellipse(px, pz, S / (2 * R), S / (2 * R), 0, 0, Math.PI * 2); x.strokeStyle = 'rgba(255,245,200,0.6)'; x.lineWidth = 4; x.stroke(); }
+  { const [px, pz] = toPx(pin[0], pin[1]), r = 0.9 / (2 * rx * R) * S, g = x.createRadialGradient(px, pz, 0, px, pz, r); g.addColorStop(0, 'rgba(160,230,110,0.55)'); g.addColorStop(1, 'rgba(160,230,110,0)'); x.fillStyle = g; x.beginPath(); x.arc(px, pz, r, 0, Math.PI * 2); x.fill(); }
+  // fine grain so it reads as grass, not paint
+  for (let i = 0; i < 9000; i++) { x.fillStyle = `rgba(${Math.random() < 0.5 ? '255,255,220' : '20,60,10'},0.05)`; x.fillRect(Math.random() * S, Math.random() * S, 2, 2); }
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const mat = new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.82, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -8 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true; mesh.renderOrder = 1;
+  return mesh;
 }

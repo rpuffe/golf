@@ -655,3 +655,614 @@ above the ground.
 - Holes 1 and 6 are unchanged.
 - The caps are untouched: 2 thefts per hole, none right after a theft,
   never on the green.
+
+## 11. Geese, round 2 (owner playtest)
+
+**Owner:** the tug loss is "always the sand trap"; add a tree-dwelling monster
+goose; the boss needs a power that touches nearly every ball; geese should
+be more curious; breeds are optional.
+
+**Council verdicts on the pitched ideas.** Egg swap: **yes**, merged with
+"sits on it like an egg" into one outcome (Fun, Weird). Relay: **yes** (Fun).
+Water toss: **yes**, but the fishing is free and can't kill the ball (UX: a
+goose must never cost a stroke). Tree stash: **yes**, as the second door into
+the Sasquack (Weird). Golf Purist accepted all of it on one condition: the
+Sasquack punch-out costs about 10 m, like a real chip-out sideways.
+
+### 11.1 Tug-loss table (`endTug(false)` → new `pickLoss(g)`)
+
+| Key | Weight | Eligible when | Else | What happens (after the tug) | Banner (≤7 words) |
+| --- | --- | --- | --- | --- | --- |
+| `punt` | 22 | always | — | Unchanged `goosePunt` | 🪿 PUNTED! |
+| `relay` | 18 | another adult (not boss/stare, `graze`) within 60 m of the thief | `punt` | See below | 🏉 TRY!<small>a goose relay</small> |
+| `brood` | 15 | always | — | Egg swap, below | 🥚 BROODED<small>your ball is an egg now</small> |
+| `pond` | 12 | a pond ellipse centre within 70 m + its `rx` | `relay` | Hammer throw + free fishing | 🎣 HAMMER THROW<small>free fish, no penalty</small> |
+| `stash` | 13 | a `tree` trunk within 50 m, Sasquack caps free, not hole 6 | `brood` | Flies it into a tree → Sasquack (11.2) | 🌲 STASHED<small>something lives up there</small> |
+| `bunker` | 10 | existing bunker rule finds one | `punt` | Unchanged `gooseBunker` | unchanged |
+| `swallow` | 10 | always | — | Unchanged `gooseSwallow` | unchanged |
+
+- Weighted pick with `Math.random()`. If the pick equals `G.lastLoss`, re-roll once. Store `G.lastLoss` (reset in `startRound`). Canada geese are preferred relay receivers (pick the nearest Canada first, else the nearest adult).
+- **Shared drop rule** `lossSpot(p)`: accept `p` only if `validLand`, surface not green/fringe, and `dist(p, cup) ≥ dist(G.gooseLie, cup) − 0.01`; otherwise use `G.gooseLie`. Every new outcome ends in `placeBall(spot)`.
+- **Bug fix (existing):** a punt into water calls `startAngler`, whose `endAngler` adds a penalty stroke. Goose-caused splashes set `angler.free = true`: no `G.strokes++`, timer 5 s instead of 7, and a loss never kills the ball.
+
+**Relay** (~60 lines, new goose state `pass`):
+- 0.0 s: thief faces the receiver; neck flick (`neckPivot.rotation.x` −0.6 over 0.25 s).
+- 0.25 s: a scripted ball arc (not the sim): lerp beak → receiver beak, `y += 4·k(1−k)·max(2, d/6)`, duration `clamp(d/14, 0.5, 1.4)`. Camera holds position; look lerps to the airborne ball (rate 8).
+- Catch: receiver `honk(1)`, becomes `goose` (camera follows it), runs at 7 m/s, wings flapping, to `receiver + 14 m` along the away-from-cup direction ±0.6 rad (validLand, up to 12 tries). 35% chance of a second pass if a third adult is within 40 m.
+- Arrival or 2.0 s: it spikes the ball, 30 white feathers, `sfx.honk(2)`, `placeBall(lossSpot(here))`.
+
+**Brood / egg swap** (~70 lines):
+- 0.0 s: the goose sits: mesh y −0.25 over 0.4 s, wiggles (`body.rotation.z` ±0.1 at 6 Hz) for 1.4 s, `honk(1)`, 6 heart particles 0xff7fa0.
+- 1.8 s: it stands and grazes off 8 m. Left behind at `lossSpot(goose)`: an egg mesh (`W.buildBall(0xfff6e6)` scaled (1.25, 1.55, 1.25), **eyes kept**). Set `G.eggBall = true`; `ballMesh` swaps its look to the egg. Physics are unchanged.
+- The next player stroke: at its first `bounce`/`land` (`e.n === 0`), or at rest for a putt, the egg cracks: 16 shell bits 0xfff6e6 and 10 fluff 0xffe066, a two-tick noise crack (bandpass 3 kHz, 60 ms) and `sfx.squeak`. The ball reappears. A cosmetic gosling (reuse the gosling mesh, 0.45×) spawns there, follows `G.playerAt` 1.2 m behind at ≤3 m/s, squeaks on hole-out, and is removed in `loadHole`. Toast "🐣 It thinks you're its parent."
+
+**Pond** (~45 lines): the goose spins 2 turns in 0.7 s (hammer throw); the ball arcs (apex +6 m, 1.0 s) to `pondCentre + (goose − pondCentre)·0.5·min(rx, rz)/|…|` (or the centre if that point isn't water). Splash, then `startAngler(splash, G.gooseLie)` with `angler.free`. Title "🎣 Save {ball}! Free." Win → `placeBall(G.gooseLie)`. Lose → `shorePoint(splash, splash + (splash − cup)̂·40)` through `lossSpot`, banner "🎣 SPAT OUT<small>an unimpressed fish</small>".
+
+**Stash** (~25 lines): `g.state = 'fly'`, `g.stash = tree`, target = trunk. In `landGooseFlight`, when `g.stash`: put the held ball in the canopy (visible), send the goose home (`flee`), and call `startSasquack(tree, { fromTheft: true })`.
+
+### 11.2 The Sasquack (tree monster)
+
+**Trigger** (`maybeSasquack()`, called in `afterStroke(false)` *before* `maybeGooseSteal`):
+- A player shot, result `rest`, surface not green/fringe, `spotlight !== 'scare'`, Ghost Ball not active.
+- Either the nearest `tree` cyl is ≤ 3.0 m (horizontal) from the rest point, **or** the shot had a `hit`/`leaves` event tagged `tree` and the ball rests in the rough ≤ 9 m from the trunk nearest that event.
+- Caps: once per hole (`G.sasqHole`, reset in `loadHole`), 3 per round (`G.sasqRound`, reset in `startRound`). A stash counts toward both. It is not a theft, and doesn't touch the theft caps.
+
+**Punch-out plan, at t = 0** (deterministic, ~40 sims): from the lie, aim at the nearest `path` point. Offsets [0, ±0.3, ±0.6] rad × clubs [wedge, iron] × power [0.4, 0.55, 0.7, 0.85], with `world = {…, noTrees: true}` ("the trees let it through"). Accept a `rest` on fairway or rough with `lieD ≤ endD ≤ lieD + 25`. Score `(fairway ? 0 : 12) + |endD − (lieD + 10)|`; take the lowest. If none is accepted, it pats the ball, leaves it, and the banner reads "🦶 IT LEFT IT."
+
+| t (s) | Beat | Camera / sound |
+| --- | --- | --- |
+| 0.0 | `G.mode = 'sasquack'`, letterbox, label "🦶 SASQUACK CAM". Leaf bursts (30, 0x4e8a30) at the canopy at 0, 0.3, 0.6 | Ease (rate 3) to trunk + 10 m toward the ball, y + 2.2, looking at the canopy (flip ±40° if `gooseViewBlocked`). Ambience to 0.4. `sfx.leaves` ×3 plus a 55 Hz sine growl, 1.2 s, gain 0.25, 7 Hz tremolo |
+| 0.9 | Two yellow emissive eyes in the canopy; they blink at 1.2 | two soft ticks |
+| 1.5 | It drops (0.35 s fall) to trunk + 1.5 m toward the ball. Dust 40, 0xcbb89a. Banner "🦶 THE SASQUACK<small>it lives in the trees</small>" | `G.shake = 0.45`, FOV +6 (back over 0.5 s). New `sfx.roar()`: saw 140→90 Hz through a 600 Hz bandpass plus noise, 1.1 s, gain 0.35. Commentator `sasquack`, bump +25 |
+| 2.2 | `roar` clip, chest beat; `grab` picks up the ball between two fingers, sniffs | look at chest height (y + 1.8) |
+| 3.0 | Pulls a **whole pine tree from behind its back** (trunk r 0.18 × 3 m + cone r 1.2 × 2.4 m, 0x2f5a2a) | wood creak (`sfx.tugPull`) and a pop |
+| 3.2–4.3 | Tees the ball on a mushroom, two waggles (±0.3 rad), glances at the camera | — |
+| 4.4 | Swing: 2.2 rad in 0.18 s. At 4.5 the planned shot launches as `G.shot.kind = 'sasquack'` (handled like `punt` in `endShot`: no stroke) | normal flight cam; `thwack`; caption "🦶 FOOOORE!" (a honk 12 semitones down) |
+| flight | It rams the pine into the ground **roots-up** 2 m from the trunk (cosmetic, no collider, lives in `G.holeGroup`), waves, and climbs back up (0.6 s fade, leaf burst) | — |
+| rest | `linger(1.4, () => afterStroke(true))` | — |
+
+- **Skip:** click or Space after 1.5 s jumps to 4.4.
+- **Counterplay: none, by design.** It's pure spectacle. The tug is the skill game; the way to avoid the Sasquack is to stay out of the trees.
+- **Reduced motion:** no shake or FOV kick, and the roar at −10 dB.
+- **Rooms:** per-client. Send `emote sasquack`, arg the hole number; receivers toast "🦶 {name} met the Sasquack." Rivals see only the ball's new rest, via `roomSendProgress`.
+- **Model hooks assumed:** `W.buildSasquack()` → group with clips `drop/roar/grab/swing/run` and a hand anchor.
+- ~120 lines: `maybeSasquack`, `startSasquack`, `updateSasquack` (main-loop branch beside `scare`), `skipSasquack`, and the `endShot` kind check.
+
+**Commentator `sasquack`** (PRIO 4):
+```js
+sasquack: [
+  ['Something in the trees has taken an interest in {ball}.', 'That is not a goose. That is a GOOSE. It has arms, {name}.', 'IT HAS ARMS! WHY DOES THE GOOSE HAVE ARMS! WHO HAS BEEN FEEDING IT!'],
+  ['And the Sasquack will play this one for {name}. With a tree.', 'It pulled a pine tree out of nowhere. It is taking a practice swing.', 'IT IS GOLFING WITH A TREE! ITS TEMPO IS BETTER THAN {name}! I AM GOING HOME!'],
+],
+```
+One entry each for the new tug outcomes:
+- `tugRelay`: 'A lateral pass. The geese are organised.' / 'They are PASSING it! It is a team sport now!' / 'IT IS RUGBY! THE GEESE PLAY RUGBY! TRY! TRY!'
+- `tugBrood`: 'The goose is... sitting on {ball}.' / 'It is BROODING on {ball}. That is not an egg!' / 'IT LAID AN EGG! {ball} IS AN EGG NOW! SCIENCE IS OVER!'
+- `tugPond`: 'A hammer throw. Into the water.' / 'Olympic form from the goose! Into the drink!' / 'IT THREW {ball} IN THE LAKE! GET THE ROD! IT IS FREE! GET IT!'
+- `tugStash`: 'The goose has hidden {ball} up a tree.' / 'Up the tree! Why the tree? What is in the tree?' / 'DO NOT GO IN THE TREES! NOBODY GOES IN THE TREES!'
+
+### 11.3 The Boss: the Honk Hole (hole 7)
+
+The boss has its own gravity: a whirlpool of feathers centred on its throne.
+Add this to the hole 7 data, so `simulate`, the carry preview and Old Tom all
+see it, the same way they see `windmill`:
+```js
+bossAura: { at: [14, -300], r: 22, core: 3, pull: 3.5, swirl: 5.0, top: 18, fade: 12, ground: 0.3 },
+```
+In `simulate`, `ba = !world.noAura && course.hole?.bossAura`, `baY = h(at)`. Every step, while `r = hypot(at − (x, z)) < ba.r`:
+```
+u   = (at − (x,z)) / r                       // inward
+hk  = clamp((ba.top + ba.fade − (y − baY)) / ba.fade, 0, 1)   // full to 18 m up, gone at 30 m
+c   = clamp((r − 0.5) / (ba.core − 0.5), 0, 1); ck = c*c*(3 − 2c)
+f   = (1 − r/ba.r) · ck · hk
+a   = f · ( ba.pull·u + ba.swirl·(−u.z, u.x) )   // horizontal only, m/s²
+air:    ax += a.x; az += a.z
+ground: only if surface ∉ {green, fringe} and sp > 0.35:
+        a ← â · min(|a|·ba.ground, 0.8 · SURF[s].roll)   // added before the tangent projection
+```
+- The tangent `(−u.z, u.x)` makes the ball's left side (x < 14 when heading −z) a headwind and the right side a tailwind.
+- Worked example: a 25 m/s ball passing 8 m left loses about 2.3 m/s and is pulled about 1.6 m/s inward, so it ends roughly 5 m off. Balls that land inside the ring roll toward the throne.
+- The ground cap guarantees every ball still stops. Putts on the green are never touched (the green's front edge is 17 m away).
+- Emit `ev('aura')` once per shot, the first time `f > 0.15`. `fireEvent`: whoosh, 20 particles 0xb07cff, live trail tinted 0xb07cff for that shot. On the first one per hole, banner "🌀 THE HONK HOLE".
+- **Player gating:** pass `noAura: true` if the boss is more than 3 m from `at` at impact. The boss's `home.r` drops from 10 to 2 (it sits on its throne), and after any boss outcome it walks home at 11 m/s.
+- **Visuals:**
+  - a terrain-draped ring (r 21.5–22, 0xb07cff, opacity 0.35);
+  - a draped disc with a 4-arm spiral canvas texture (opacity 0.12, `depthWrite:false`), `rotation.y += 0.5·dt`;
+  - 24 feather sprites spiralling inward at 0.5 m/s, with tangential speed `5/√r`;
+  - a small moon (r 0.35, 0xd8dce8, emissive) orbiting the boss's head at 1.6 m, once every 3 s.
+- **Counterplay** (one toast on the first hole 7 address within 160 m: "🌀 Right of the Boss slings. Left stalls."):
+  - fly over it, above 30 m;
+  - use the right-hand slingshot;
+  - lay up 22 m or more short, then wedge over the top.
+  - The carry ring already shows the bend. Ghost Ball doesn't cancel it.
+- Boss steal radius 14 → **16**; the caps are unchanged.
+- **Tom gate:** run `planHole` for hole 7 headless. Accept Tom ≤ 5 (today he shoots 4). If he shoots more, scale `pull` and `swirl` by ×0.8 and retest.
+- ~45 lines in physics.js, ~50 in main.js/world.js.
+
+### 11.4 Curiosity
+
+| Knob | Old | New |
+| --- | --- | --- |
+| Steal radius, holes 2–5 and 7 | 11 | **14** (hole 1 stays 26, hole 6 stays 9, boss 16) |
+| Landing-honk range | min(1.5r, 20) | min(2r, 30) |
+| Curious range (afterStroke) | min(2.5r, 30), stop at 1.1r | min(3r, 42) |
+| The **nearest** eligible goose | stops short | an **approacher**: targets the ball −0.6 m, walks at 1.6 m/s (breed-adjusted) |
+| The others in range | — | the old 60%-toward glance |
+
+- **Address snatch:** in `updateGoose` graze, when `g.approach` and `dist(g, ball) < 1.0`, `G.mode === 'address'` and `!swing.active`, call the new `startTheft(g)`, factored out of `maybeGooseSteal`, with alert 0.3 s.
+- **Snatch caps:** all the theft caps, plus not when `G.strokes === G.lastTheftStroke` (a goose-placed lie), not on the tee (`G.strokes === 0`), not green/fringe, not hole 6 pre-scare, and at most 1 snatch per hole.
+- **Warning** at 6 m: "?" over the goose, `honk(1)`, hint "🪿 Hurry. A goose is curious." Mid-backswing it waits, pecking, at 1.2 m.
+- ~40 lines.
+
+### 11.5 Breeds (`breed` per goose def; `W.buildGoose(breed)` recolours, ~30 lines)
+
+| Breed | Look | Where | Behaviour |
+| --- | --- | --- | --- |
+| Embden | current white | holes 1, 5 (all), the hole 7 boss | baseline |
+| Toulouse | body 0x8f8b84, wings 0x6e6a64, belly 0xe8e4dc, dewlap sphere | holes 3, 6; hole 4 `[-12,-150]` | approach 1.2 m/s; tug strength +10 |
+| Canada | body 0x8a7560, wings 0x5e4c3c, neck/head/tail 0x1a1a1a, white chinstrap (flattened sphere on the cheek), black beak | hole 2; hole 4 `[4,-330]` and `[38,-370]`; the 4 hole 7 escorts (the V) | approach 2.0 m/s; tug yanks every 0.6–1.2 s, strength −8; preferred relay receiver |
+
+Goslings stay yellow.
+
+## 12. Multiplayer: players affecting players
+
+**Owner:** "a couple more multiplayer features that would increase fun… what
+would be the most fun if a group of friends played, so they can interact with
+each other. No more chat stuff or reactions, more how one player can impact
+the other."
+
+**Ground rules the council was given.** Each client simulates its own shots
+and relays frames; there is no server game logic. Anything that touches
+another player's ball must happen *inside their sim*: a collider or world
+param they hold before they swing, or a deterministic re-sim every client can
+run from the same few numbers. Everything rides `emote` (`kind`, `to`, `arg`
+≤ 64 bytes; burst 5, +1 per 1.5 s; relayed to everyone but the sender, even
+when targeted). Latency is 100–250 ms.
+
+### 12.1 Pitches (30; every one changes someone else's game)
+
+| # | Persona | Pitch (hook) | Over the wire |
+| --- | --- | --- | --- |
+| R1 | Roguelike | **Hex Deck**: last place throws a hex at the leader | `hex`, to, `h:id`; receiver queues a one-shot `shotMods` and shows it on the power chip |
+| R2 | Roguelike | **Swap Meet**: trade ball traits for one shot | `swap`, to, `h:trait`; both set a one-shot trait override |
+| R3 | Roguelike | **Regift**: hand your wheel wedge to a friend | `gift`, to, `h:wedge`; receiver `applyPowerUp` |
+| R4 | Roguelike | **Bounty**: their bogey refunds you a stroke | score-only; needs server-side validation changes |
+| R5 | Roguelike | **Caddie's Revenge**: you pick their next club | `club`, to; receiver locks `G.club` for one stroke |
+| R6 | Roguelike | **Roquet**: hit their ball, earn a bonus stroke | `knock` + free stroke (merged into P1) |
+| H1 | Horror | **Poltergeist**: drop a tombstone on a straggler's fairway | `tomb`, `h:x:z`; receiver adds a `cyl` to `G.colliders` |
+| H2 | Horror | **Lights Out**: black out their next flight cam | camera only |
+| H3 | Horror | **Cold Hands**: their swing trembles | `chill`; noise on swing input |
+| H4 | Horror | **The Hand in the Cup**: one lip-out, guaranteed-ish | `hand`; receiver `cupR ×0.7` for one putt |
+| H5 | Horror | **Haunt, revisited**: spectators stand on the course, solid | `stand`, `h:x:z`; collider (merged into P5) |
+| H6 | Horror | **Fog Bank**: fog over their hole for a shot | `fog`; env fog distance |
+| M1 | Rhythm | **Wind Sock**: twist their wind 30° before they swing | `wind`, to, `h:deg`; locked at backswing |
+| M2 | Rhythm | **Shot Clock**: a ticking deadline on a dawdler | `clock`, to (merged into P2's approach timer) |
+| M3 | Rhythm | **Duet Putt**: two players stroke one putt | needs real-time input; impossible on the bucket |
+| M4 | Rhythm | **Drumroll**: spectators hold a roll over the putt | cosmetic (a reaction; out of scope) |
+| M5 | Rhythm | **Echo Swing**: your tempo becomes their needle target | `echo`, to, `h:tempo` |
+| M6 | Rhythm | **Conductor**: set a straggler's green speed | `stimp`, to, `h:k`; world `greenRoll` multiplier |
+| P1 | Party | **Billiards / Knock-On**: your ball actually moves theirs | `knock`, to, contact velocity; every client re-sims |
+| P2 | Party | **Be the Goose, with Teeth**: the puppet can steal | `teeth`, to; receiver turns the puppet into a thief |
+| P3 | Party | **Bumper Drop**: a pinball bumper on their hole | `bump`, `h:x:z`; sphere collider, `e 1.4` |
+| P4 | Party | **Hot Potato Egg**: whoever holds the egg at hole-out takes +1 | `egg`, to; stroke penalty |
+| P5 | Party | **The Gallery**: stand on the course with a brolly; balls bounce off you | `stand`, `h:x:z`; cyl + sphere colliders |
+| P6 | Party | **Pass the Goose**: lose a tug, it flies on to a rival | `passgoose`, to; a forced theft like Sic 'Em |
+| S1 | Surrealist | **Pin Hex**: move a straggler's pin across the green | `pin`, to; moves `G.cup` |
+| S2 | Surrealist | **Mirror Hole**: flip their aim for one shot | `mirror`, to |
+| S3 | Surrealist | **Beach Ball**: their ball is 3× size for a shot | changes `R`, which is a physics constant |
+| S4 | Surrealist | **Moon a Friend**: gift them moon gravity | `moon`, to; `shotMods.airGravity` |
+| S5 | Surrealist | **Photobomb**: your golfer appears in their bullet cam | cosmetic |
+| S6 | Surrealist | **Lie Swap**: play each other's lie for one stroke | `swaplie`; races on both sides |
+
+### 12.2 Scores (1–5), picks and vetoes
+
+Same rule as before: a veto removes an idea unless at least three judges
+picked it.
+
+| Idea | Fun | Tech | UX | Weird | Golf | Sum | Picked by | Vetoed by |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| **P1 Knock-On** (+R6) | 5 | 4 | 4 | 3 | 5 | **21** | Fun, Tech, UX, Golf | — |
+| **P2 Teeth** (+M2) | 5 | 4 | 3 | 5 | 2 | **19** | Fun, Tech, Weird | Golf |
+| **P5 Gallery** (+H5) | 3 | 4 | 5 | 2 | 5 | **19** | Tech, UX, Golf | Weird |
+| P3 Bumper Drop | 4 | 4 | 3 | 4 | 2 | 17 | Fun, Weird | — |
+| M6 Conductor | 2 | 4 | 4 | 2 | 4 | 16 | UX, Golf | — |
+| R3 Regift | 3 | 5 | 4 | 1 | 3 | 16 | Tech, UX | — |
+| S4 Moon a Friend | 3 | 5 | 4 | 3 | 1 | 16 | Tech, UX | — |
+| H4 Hand in the Cup | 3 | 4 | 2 | 4 | 3 | 16 | Weird, Golf | — |
+| R1 Hex Deck | 4 | 4 | 2 | 4 | 1 | 15 | Fun, Weird | Golf |
+| R5 Caddie's Revenge | 2 | 5 | 3 | 1 | 4 | 15 | Golf | — |
+| P6 Pass the Goose | 4 | 3 | 2 | 4 | 1 | 14 | Fun | — |
+| M1 Wind Sock | 3 | 4 | 3 | 2 | 1 | 13 | — | Weird |
+| H1 Poltergeist | 3 | 4 | 2 | 3 | 1 | 13 | — | — |
+| R2 Swap Meet | 3 | 3 | 3 | 2 | 2 | 13 | — | — |
+| S6 Lie Swap | 4 | 1 | 2 | 5 | 1 | 13 | Weird | Tech |
+| S2 Mirror Hole | 2 | 5 | 2 | 3 | 1 | 13 | — | Golf |
+| S1 Pin Hex | 3 | 2 | 3 | 3 | 2 | 13 | — | Tech |
+| P4 Hot Potato Egg | 4 | 3 | 1 | 4 | 1 | 13 | — | UX |
+| H6 Fog Bank | 2 | 4 | 2 | 3 | 1 | 12 | — | — |
+| M5 Echo Swing | 2 | 4 | 2 | 3 | 1 | 12 | — | — |
+| H2 Lights Out | 3 | 5 | 1 | 2 | 1 | 12 | — | UX |
+| H3 Cold Hands | 2 | 4 | 1 | 2 | 1 | 10 | — | UX |
+| S3 Beach Ball | 4 | 1 | 2 | 5 | 1 | 13 | — | Tech |
+| R4 Bounty | 2 | 2 | 3 | 1 | 2 | 10 | — | Fun, Weird |
+| S5 Photobomb | 2 | 5 | 4 | 3 | 1 | 15 | — | Fun |
+| M3 Duet Putt | 4 | 1 | 2 | 4 | 2 | 13 | — | Fun |
+
+### 12.3 The argument
+
+**Downtime first (Fun Expert, chair).** "The people on the between-hole cam
+are the most bored people in this game, and right now all they can do is
+puppet a harmless goose. At least one winner must give the spectator a *real*
+lever on the player they're watching. And at least one must live inside play
+itself, so two friends on the same green feel each other."
+
+**Who is actually spectating (Player Advocate).** "Look at who finishes a
+hole first: whoever took the fewest strokes on it. So the spectators are
+usually the people doing well, and the person still out there is the one
+having a bad time. Every spectator weapon punches down. Poltergeist, Bumper
+Drop, Hex on a straggler, Pin Hex: I'm not vetoing all of them, but I won't
+vote for any that doesn't answer that." This one observation shaped
+everything below.
+
+**Hex Deck vs Teeth (the catch-up fight).** Fun and Weird loved the Hex Deck
+as Mario Kart's blue shell. Golf Purist vetoed it: "Random curses on the
+leader are a lottery that punishes playing well. The wheel already does
+chaos." Fun fought back: "Then where's the catch-up?" The deal: Fun dropped
+Hex, and Teeth inherits its catch-up rule. **Teeth only point up.** You can
+send a real goose only at someone level with you or ahead of you. Golf still
+vetoed Teeth ("a goose sent by a man is not rub of the green"), but with
+three picks it survives. Golf's price, accepted: Teeth never costs a stroke,
+and the player can always beat it by just hitting the ball.
+
+**Knock-On (near consensus).** Golf Purist brought the history: "Until 1952
+the stymie was legal. If your ball knocked your opponent's ball into the
+hole, it counted as holed at their previous stroke. That's not a gimmick,
+it's our sport's own lost rule." Tech: "And it's the only idea where one
+player moves another player's ball in *physics*, deterministically. The
+shooter's sim already treats rival balls as solid spheres. Make them movable,
+emit the contact velocity, and every client re-sims the knocked ball from the
+same inputs." Player Advocate set three conditions:
+1. a knock on the green can't drive a ball more than 3 m farther from the cup;
+2. water or OOB means the ball goes back, free;
+3. a trailing player may put a knocked ball back.
+
+Weird scored it 3 ("it's correct, not strange") but stopped objecting at
+**CANNON** (two balls in one shot).
+
+**Gallery vs Bumper Drop.** Tech: "These are the same code: a solid at x:z."
+Advocate: "A bumper is dropped and forgotten. A friend standing there has a
+face, the bonk has a victim, and behind-the-ropes placement means most hits
+are rescues." Weirdness Curator vetoed the Gallery ("a person standing in the
+rough is the least weird idea in this document"). It had three picks (Tech,
+UX, Golf), so it stood, and Weird extracted the brolly: every spectator holds
+a giant golf umbrella that flips inside out when hit. Fun conceded the
+Bumper: "The bonk needs a victim."
+
+**2 players vs 5.**
+- **Knock-On** scales with crowding. It's rare in 2p (one ball to hit) and
+  common on 5p greens. That is right: a crowded green should be a
+  billiard table.
+- **Teeth** in 2p works only when the trailing player finishes first. Then
+  the leader has a goose to beat, and it's the best comeback moment in the
+  game. In 5p, the first spectator to send it claims the target; the
+  broadcast greys everyone else's button.
+- **Gallery** gives the leaders a job. In 2p, the leader decides whether to
+  help their only rival or loom behind the green. Everyone's verdict
+  ("SAVED", "ROBBED") is public, which keeps the trolling honest.
+
+**Cut with regret:** Regift (Tech/UX: "lovely, but it's the wheel again"),
+Conductor (green speed; runner-up for a later round), Hand in the Cup
+(Weird/Golf runner-up). Hard no: Duet Putt and Shot Clock as a separate
+system (the bucket can't carry real-time input), Lie Swap and Pin Hex (races
+on shared state), Lights Out and Cold Hands (accessibility), Hot Potato (a
+stroke penalty for luck).
+
+### 12.4 Decision
+
+Build three, in this order:
+1. **Knock-On**: players in play affect each other.
+2. **Teeth**: trailing spectators press the leaders.
+3. **The Gallery**: any spectator can save or rob a friend.
+
+Together: **your standing picks your spectator role.** If you're behind, you
+get a goose with teeth. Anyone can take a brolly.
+
+**Shared plumbing (~10 lines).**
+- `sendEmote(kind, to, arg, { state })` gets an emote reserve. State kinds
+  (`knock`, `teethx`, `fanhit`) may spend the last token. Everything else
+  (reactions, `possess`, `stand`, `teeth`) needs ≥ 2 tokens, so a reaction
+  spammer can't drop a knock.
+- `toParThru(id, n)`: to-par over holes 1..n from `standings()` scores. Use
+  it with `n = myHole() − 1` wherever "ahead/behind" is compared, so a
+  finished spectator isn't compared against an unfinished hole.
+
+### 12.5 Spec: Knock-On (~165 lines: physics 15, main 135, lines 15)
+
+**Flow**
+- **Shooter** hits a resting rival ball:
+  - a billiard *clack*;
+  - their ball rolls away;
+  - banner "💥 KNOCK-ON<small>{rival}'s ball is moving</small>";
+  - for two knocks, "🎱 CANNON!".
+- **Target**:
+  - the flight cam briefly follows their own ball;
+  - banner "💥 KNOCKED BY {RIVAL}";
+  - if knocked in: "🎱 HOLED BY {RIVAL}<small>counts, no extra stroke</small>";
+  - if the target trails the knocker: chip "Knocked. Put it back? (R)" for 8 s.
+
+**physics.js**
+- Add `const knocked = new Set()` beside `inCanopy`.
+- At the top of the collider loop: `if (c.push && knocked.has(c)) continue;`.
+- In the sphere branch, when `vn < 0 && c.push`, replace the bounce with an
+  equal-mass exchange:
+  ```js
+  const k = (1 + (c.e ?? 0.9)) / 2;
+  const tvx = k * vn * nx, tvz = k * vn * nz;   // target leaves along −n
+  vx -= k * vn * nx; vy -= k * vn * ny; vz -= k * vn * nz;
+  knocked.add(c);
+  ev('knock', { tag: c.tag, vx: tvx, vz: tvz, speed: Math.hypot(tvx, tvz) });
+  continue;
+  ```
+  After a knock, the target is gone from this sim; it's rolling now.
+- `rivalColliders`: add `push: true`, `e: 0.9`.
+
+**`knockSim(start, vx, vz)`** must be identical on every client.
+- Clamp the speed to 12 m/s.
+- Call:
+  ```js
+  simulate(
+    { course: G.course, cup: G.cup, wind: { x: 0, z: 0 }, colliders: G.colliders, strokeNo: 0 },
+    start,
+    { vx, vy: 0, vz, side: 0, lift: 0, check: 0, rolling: true },
+  )
+  ```
+  It uses no trait, no `dynamic` and no player power-ups.
+- **Green cap:** if `start` is on green or fringe, truncate the frames at the
+  first frame whose cup distance exceeds `d0 + 3`. Rest there.
+
+**Send** (in `doShot`, after `simulate`)
+- Take up to 2 `knock` events with `speed ≥ 0.3`. Round `vx` and `vz` to
+  0.01 and use those rounded values locally too.
+- Send
+  `sendEmote('knock', rid, `${h}:${prog.strokes}:${x.toFixed(2)}:${z.toFixed(2)}:${vx}:${vz}:${e.frame}`, {state:true})`
+  (~38 bytes), where `x`, `z` is `rivalPos(r)`.
+- Locally, queue `r.knock = { at: e.frame, sim: knockSim(p, vx, vz) }`.
+  Start it when `G.shot.t ≥ at`.
+
+**Receive** (`onEmote`, *before* the `ev.to !== me` filter)
+- **Hole ≠ mine:** ignore.
+- **`to` is another player:** queue the same animation on `rivals.get(ev.to)`.
+  It starts when the sender's `r.playing.t ≥ f`, or now if their playback
+  is over.
+- **Animation:** set `target.playing = { shot: { frames, n, result }, t: 0, stroke: -1, pos }`.
+  When it ends, write a provisional `target.prog.rest = end`
+  (`holed: true` if holed) so the ball doesn't snap back before their real
+  progress arrives.
+- **`to` is me:** `G.knockQ = {r, strokes, x, z, vx, vz, f}`. In the main
+  update, apply it when the sender's playback reaches `f` *and*
+  `!swing.active`.
+- **Void (silently; progress reconciles everyone):**
+  - `strokes !== G.strokes`;
+  - `dist(G.ball, {x,z}) > 0.05`;
+  - the mode isn't address or walk;
+  - you struck first.
+- **Apply:** `G.walk = null`, then build `G.shot` as in `goosePunt`, with
+  `kind: 'knock'`, `G.mode = 'flight'` and the flight cam.
+- **`endShot`:** `if (s.kind === 'knock') return endKnock(s)`.
+  - **holed:** `G.ball = cup`, banner, `say('knockIn')`, then `holeOut(s)`.
+    No stroke is added.
+  - **water or oob:** `G.ball = s.start`, banner "💥 Put back<small>no penalty</small>".
+  - **rest:** `G.ball = end`. If `toParThru(me) > toParThru(r)`, offer the
+    put-back chip (key R); accepting restores `s.start`.
+  - Then `linger(1.2, () => afterStroke(true))`, which sends progress.
+
+**Limits**
+- Only resting balls on your hole (`rivalColliders` already skips flying
+  balls and cup-side balls).
+- At most 2 knocks a shot.
+- Never a stroke penalty.
+- Never applied mid-swing.
+- A knock-in always counts. That's the gift.
+
+**Visuals and sound**
+- 18-particle burst at contact in the shooter's colour; the knocked ball
+  trails in the shooter's colour.
+- `sfx.knock(v)`: triangle 2.6 kHz + 3.1 kHz for 40 ms, plus a 30 ms
+  highpass noise.
+- CANNON: `sfx.calledIt`.
+- Holed-by: `sfx.holed`, plus confetti in the knocker's colour.
+- PRIO: `knockOn` 3, `knockedBy` 3, `knockIn` 4.
+
+```js
+knockOn: [
+  ['A little contact there. {rival} will not enjoy that.', 'Oh, it has clattered into {rival}! Billiards!', 'IT HIT {rival}! IT IS SNOOKER NOW! NOBODY IS SAFE!'],
+  ['{name} has moved {rival} on. Rub of the green.', 'Knocked {rival} clean off the spot! Cheeky!', 'CLACK! {name} IS PLAYING POOL WITH A FRIENDSHIP!'],
+],
+knockedBy: [['And {rival} has moved {name}\'s ball for them.', '{rival} has knocked {name} sideways! Literally!', '{rival} HIT THE BALL! THE BALL IS MOVING! THIS IS AN ASSAULT!']],
+knockIn: [['Knocked in by {rival}. Under the old rules, that counts.', '{rival} has holed it for {name}! Is that allowed? It is!', '{rival} PUTTED {name} IN! NINETEEN FIFTY-ONE RULES! IT COUNTS!']],
+```
+
+### 12.6 Spec: Be the Goose, with Teeth (~110 lines)
+
+**Flow (spectator)**
+- While possessing, a new button appears: **"🦷 Go for the ball"**. It shows
+  only when all of these hold:
+  - the watched player `w` is level with you or ahead of you
+    (`toParThru(me) ≥ toParThru(w)`);
+  - `w` is at rest with `strokes > 0`, off the green and fringe;
+  - nobody has sent Teeth at `w` this hole (you see others' `teeth` in the
+    broadcast);
+  - your puppet's waypoint is ≥ 14 m from `w`'s ball.
+- Tapping it swaps in three chips: "🥚 Brood it", "🏉 Relay it",
+  "🎲 Surprise me".
+- Results arrive as toasts: "🦷 Got it!", "🦷 Too slow.",
+  "🦷 They won the tug.".
+
+**Flow (target)**
+- Their collar pulses red and the label becomes "🦷 {rival}".
+- `honk(2)`, and the hint "🦷 {rival}'s goose wants your ball."
+- It walks in at 1.7 m/s from 14 m or more (about 8 s). Footstep ticks
+  quicken as it closes.
+- **Hit the ball first and it face-plants.**
+
+**Messages**
+- `teeth`: to `w`, `arg h:strokes:trick`, where trick is `brood|relay|any`.
+- `teethx`: to the sender, `arg h:got|miss|tug|void`, sent with
+  `{state:true}`.
+
+**Receiver**
+- **Validate:**
+  - the hole matches, `strokes === G.strokes`, the mode is address or walk;
+  - `!G.teethHole` and `puppets.has(from)`;
+  - the sender is not behind me (`toParThru`);
+  - `canSnatch({ teeth: true })`: today's caps minus the `G.snatches`
+    limit. That means no tee, no green or fringe, no hole 6 before the
+    scare, at most 2 thefts, and no theft right after a theft.
+  - On failure, send `teethx void`.
+- **Start the hunt:** `G.teethHole = true; p.hunt = { trick, strokes, t: 0 }`.
+  If the puppet is within 14 m, relocate it to 14 m (a `validLand` ring,
+  12 tries) with a feather burst.
+- **`updatePuppets`, while `p.hunt`:**
+  - target = ball − 0.6 m toward the goose, speed 1.7;
+  - skip the green and 6 m clamps; no idle despawn.
+  - Ball struck (`G.strokes` changed) or mode left address/walk: face-plant
+    (`body.rotation.x → 1.2` over 0.25 s, 12 feathers, `sfx.squeak`), then
+    send `teethx miss`.
+  - `hunt.t > 25 s`: give up the same way.
+  - `d < 1.0`, `G.mode === 'address'`, `!swing.active` and
+    `now − G.addressAt > 1.5 s` (new `G.addressAt`, set on entering
+    address): call `promotePuppet(id)`.
+  - While swinging, it waits pecking at 1.2 m.
+- **`promotePuppet(id)`:**
+  - build a goose object on `p.mesh` with `radius 0`,
+    `home {x, z, r: 2}`, `breed: 'puppet'` (forces a rebuild next hole),
+    `puppetOf`, `trick` and `label`;
+  - `geese.splice(G.geeseN, 0, g); G.geeseN++; puppets.delete(id)`;
+  - `startTheft(g, 0.3)`, `say('teeth', …, {bump: 14})`, send `teethx got`.
+- **`pickLoss`:** after the `forceLoss` line,
+  `if (g.trick && g.trick !== 'any' && eligible(g.trick)) return g.trick;`.
+- **`endTug(true)`** with `g.puppetOf`: send `teethx tug`.
+- **`loadHole`:** dispose puppet labels and clear `puppetOf`.
+
+**Limits**
+- One Teeth per target per hole, and one per sender per hole.
+- Every theft cap still applies.
+- Never a stroke; never mid-swing; 1.5 s address grace.
+- It points up only.
+- The tug stays AI-strength; the bucket can't carry a PvP tug.
+
+**Sender view (optional, ~15 lines):** the sender's own puppet walks the same
+1.7 m/s line locally, so they watch it close in. On `got`, the spectator cam
+holds on it for 2 s.
+
+```js
+teeth: [
+  ['A goose with a familiar walk. That is {rival}.', 'That goose is {rival}! It wants {name}\'s ball!', '{rival} HAS BECOME A GOOSE AND IS COMING FOR {name}! HIT IT! HIT IT NOW!'],
+  ['The goose is wearing {rival}\'s colours. Hurry, {name}.', '{rival}, in goose form, is closing in!', 'IT IS {rival}! IN A GOOSE! WHY IS {rival} A GOOSE!'],
+],
+teethMiss: [['And {name} plays before the goose arrives.', 'Too slow, {rival}! The goose face-plants!', '{name} HIT IT FIRST! THE GOOSE HAS FALLEN OVER! LOOK AT IT!']],
+```
+PRIO: `teeth` 3, `teethMiss` 2.
+
+### 12.7 Spec: The Gallery (~140 lines)
+
+**Flow (spectator)**
+- **"☂️ Stand here"** toggles stand mode. It is mutually exclusive with
+  possess.
+- Tap the course and your golfer jogs there, opening a giant umbrella in
+  your room colour (a *fwump*).
+- An invalid tap feeds "☂️ Behind the ropes, please."
+- Moves are limited to 1 per 3 s. They're locked, with the button reading
+  "☂️ Ball in the air", while any ball on the hole is in flight
+  (`r.playing`).
+- Results arrive as toasts: "☂️ You saved {rival}!",
+  "☂️ You robbed {rival}.", "☂️ Bonk.".
+- When the watched playback passes within 1.2 m of your own body, your golfer
+  flinches and you hear `sfx.oof` (cosmetic).
+
+**Messages**
+- `stand`: no `to`, `arg h:x:z` (0.1 m). Every client still on hole `h`
+  places it at the same spot.
+- `fanhit`: to the spectator, `arg h:save|rob|bonk`, sent with `{state:true}`.
+
+**`ropeOk(x, z)`** is shared, deterministic, and checked by both sender and
+receiver:
+- `validLand`;
+- surface `rough` or `sand`;
+- outside the green ellipse grown by 2 m;
+- ≥ 12 m from the tee;
+- ≥ 1.2 m from any tree trunk.
+
+**Receiver**
+- `fans: Map<id, {x, z, at, arrived, next, idle}>`.
+- The body reuses `rivalAvatar(r)` (shown even though r has holed), plus a
+  child from `buildBrolly(hex)`: a half-sphere canopy, r 0.9, 8 segments,
+  with a 1 m stick.
+- It jogs at 12 m/s like `updateRivalAvatar` and is `arrived` within 0.2 m.
+- A `stand` that arrives while `swing.active` or `G.mode === 'flight'` goes
+  in `fan.next`, applied on return to address or walk.
+- **`galleryColliders(lie)`**, appended to `dynamic` in `doShot`:
+  - only for each arrived fan ≥ 8 m from `lie`; a fan closer than 8 m is
+    drawn at 40% opacity and is not solid;
+  - body: `{kind:'cyl', x, z, r:0.28, y0:gy, y1:gy+1.75, e:0.3, tag:'fan:'+id}`;
+  - brolly: `{kind:'sphere', x, y:gy+1.95, z, r:0.85, e:0.25, tag:'fan:'+id}`.
+  - At most 4 fans are solid (the most recent movers).
+- **Verdict:** if the sim has a `hit` tagged `fan:`, re-run `simulate` with
+  the same `L` and the fan colliders filtered out (the counterfactual).
+  Compare the real result with the counterfactual:
+
+  | Verdict | When |
+  | --- | --- |
+  | `save` | water/OOB without the fan but rest/holed with it, or it ends ≥ 5 m closer to the cup |
+  | `rob` | the reverse |
+  | `bonk` | anything else |
+
+  Store the verdict on `G.shot.fan`.
+- **`fireEvent` `hit` with tag `fan:`:**
+  - `sfx.oof()`: sine 300→140 Hz for 0.18 s, plus a 50 ms noise;
+  - the brolly flips inside out (`scale.y = −1` for 0.6 s);
+  - the golfer flinches (`rotation.x −0.4`);
+  - banner "☂️ OFF {RIVAL}'S BROLLY<small>saved from the water</small>"
+    (or "robbed!");
+  - `say('fanSave'|'fanRob'|'fanBonk')`, then send `fanhit`.
+- **Despawn:** the fan goes when that spectator's progress shows a later
+  hole, on `loadHole`, or after 90 s idle.
+
+**Limits**
+- One body per spectator.
+- Rough or sand only; never fairway, green, fringe or water.
+- ≥ 8 m from your ball to be solid.
+- Never moves mid-swing or mid-flight.
+- No stroke penalty in itself.
+- **Bias:** a ball only reaches the rough if it's already leaving the
+  fairway, so most hits are rescues. The public verdict keeps robbery
+  socially expensive.
+
+```js
+fanSave: [['Off {rival}\'s umbrella, and back into play.', 'Saved by {rival}\'s brolly! What a friend!', '{rival} TOOK ONE FOR THE TEAM! RIGHT IN THE UMBRELLA! HERO!']],
+fanRob: [['That has struck {rival} in the gallery. Unlucky, {name}.', 'Off {rival}! That was going somewhere nice!', '{rival} WAS STANDING THERE ON PURPOSE! I SAW IT! WE ALL SAW IT!']],
+fanBonk: [['A spectator has been struck. {rival} is fine.', 'Right off {rival}! Somebody check on {rival}!', 'IT HIT {rival}! THE UMBRELLA HAS INVERTED! THE GALLERY IS DOWN!']],
+```
+PRIO: all three at 3.
+
+### 12.8 Before shipping
+
+- **Determinism gate (Tech):**
+  - Two headless pages run `knockSim` from the same rest and velocity; the
+    end points must match bit for bit.
+  - A 5-bot room round: log the knocks per round (expect 1–3) and assert
+    that every target's progress matches the animation the other clients
+    played.
+- **Teeth:**
+  - A forced `teeth` at a bot that dawdles 10 s must steal.
+  - A bot that swings within 3 s must produce `miss`.
+  - The 2-thefts cap holds.
+- **Gallery:**
+  - Place a fan on the water side of hole 2's landing area and hit 20 sliced
+    drives. Count the saves; the counterfactual must agree with a no-fan
+    run.
+- **Voice:** regenerate clips with `tools/voices/gen.mjs` for the eight new
+  classes. Names are spoken as "the golfer" and "their rival", and every
+  line above still reads correctly with them.
+- No server changes are needed. Every new kind is ≤ 24 bytes and every arg
+  ≤ 40.

@@ -32,6 +32,14 @@ Also in the game:
   flies), Old Tom's Plot (a foggy graveyard, and a jumpscare when you hole
   out, with a gentle version for reduced motion or "Scares off"), and
   Moonshot (low gravity, a mesa green, the Goose Parliament).
+- **🦶 The Sasquack.** Leave your ball by a tree trunk and a 3 m goose-yeti
+  drops out of the canopy, pulls out a pine tree and chips you out.
+- **🪿 Smarter geese.** Three breeds, a curious goose that snatches your ball
+  while you line up, a boss whose "Honk Hole" whirlpool bends every shot
+  near it on hole 7, and seven ways to lose a tug-of-war (punt, relay,
+  brood, hammer throw, tree stash, bunker, swallow).
+- **🎣 Fishing docks.** A splash sends your golfer to the pond's dock; the
+  rescued ball is dropped on dry land.
 - **👀 Named balls.** Pick four of six signature balls on the title card
   (Bounce Springsteen, Sir Thud, Butterfingers, Clover, Lord Floofington,
   Nervous Nigel), then choose which one plays each hole at the tee. Each has
@@ -43,7 +51,14 @@ Also in the game:
   balls fly in your world as they hit, and their resting balls are solid.
   Everyone finishes a hole before anyone moves on; while you wait you watch
   the others, react (📯👏😱😂), offer a gimme, or **be the goose**: steer a
-  harmless puppet goose around a friend's hole. Scores show between holes.
+  puppet goose around a friend's hole. Scores show between holes. Players
+  affect each other:
+  - **Knock-On:** your ball moves a friend's resting ball (knock it in and it
+    counts for them).
+  - **Teeth:** if you're level or behind, your puppet goose can go for the
+    leader's ball. Hit it first and the goose face-plants.
+  - **The Gallery:** stand in the rough with a giant umbrella. It's solid:
+    it saves some shots and robs others.
 - **📏 Carry, in Geese.** While you pull back, a live ring shows where the
   ball will land, in metres and in one absurd unit per hole.
 - **⛳ Putting** scales the putter's stroke to the putt (3/6/10/15/21 m
@@ -107,6 +122,7 @@ scripts.
 | `js/physics.js` | the deterministic ball sim (240 Hz step, drag, lift, sidespin, bounce/roll per surface, cup capture and lip-outs, trees, the goose, and the solid ghost) |
 | `js/oldtom.js` | Old Tom: a seeded brute-force planner that plays each hole in the sim to make the round-1 ghost |
 | `js/characters.js` | Old Tom's ghost-golfer model (idle, swing, gloat, scare) and the hole-6 scare face |
+| `js/geese.js` | goose breeds (Embden, Toulouse, Canada), the Sasquack and the boss's crown |
 | `js/golfers.js` | the five player golfers: one shared rig and animator (idle, run, swing, cheer, sulk) plus title-card portraits |
 | `js/trees.js` | tree and tombstone placement, plus their colliders (shared with Old Tom's planner) |
 | `js/terrain.js`, `js/world.js` | meshes: terrain, water, trees, sky, flag, green-reading chevrons, graveyard, goose, club, fishing rod |

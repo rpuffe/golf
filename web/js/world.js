@@ -2,7 +2,7 @@
 // ball meshes. Everything is procedural geometry — no asset files.
 
 import * as THREE from 'three';
-import { buildTerrainMesh, buildWater } from './terrain.js';
+import { buildTerrainMesh, buildWater, buildGreenMesh } from './terrain.js';
 import { fbm } from './course.js';
 import { mulberry32, placeTrees, treeColliders } from './trees.js';
 export { mulberry32, placeTrees, treeColliders };
@@ -75,33 +75,64 @@ export function createSky(scene) {
   };
 }
 
+// Stylised trees for the golden-hour diorama: two-blob "cloud" canopies in a
+// warm palette (with the odd autumn tree), two-tier pines, and a gentle sway
+// in the wind done in the vertex shader (no per-frame CPU cost).
+export const treeTime = { value: 0 };
+function swayMaterial(opts) {
+  const m = new THREE.MeshStandardMaterial(opts);
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTime = treeTime;
+    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 ip = instanceMatrix[3].xyz;
+        float ph = ip.x * 0.37 + ip.z * 0.23;
+        float sway = (sin(uTime * 1.3 + ph) * 0.6 + sin(uTime * 2.7 + ph * 1.7) * 0.25) * 0.06 * max(0.0, position.y + 0.6);
+        transformed.x += sway; transformed.z += sway * 0.6;
+      #endif`);
+  };
+  return m;
+}
 export function buildTreeMeshes(trees) {
   const g = new THREE.Group();
-  const trunkGeo = new THREE.CylinderGeometry(0.18, 0.32, 1, 6); trunkGeo.translate(0, 0.5, 0);
+  const trunkGeo = new THREE.CylinderGeometry(0.16, 0.34, 1, 6); trunkGeo.translate(0, 0.5, 0);
   const roundGeo = new THREE.IcosahedronGeometry(1, 1);
-  const pineGeo = new THREE.ConeGeometry(1, 2.6, 7); pineGeo.translate(0, 1.3, 0);
+  const puffGeo = new THREE.IcosahedronGeometry(0.62, 1);
+  const pineGeo = new THREE.ConeGeometry(1, 1.6, 7); pineGeo.translate(0, 0.8, 0);
   const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5a3d26, roughness: 1 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, flatShading: true });
+  const leafMat = swayMaterial({ color: 0xffffff, roughness: 0.85, flatShading: true });
   const rounds = trees.filter(t => !t.pine), pines = trees.filter(t => t.pine);
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, trees.length);
   const rm = new THREE.InstancedMesh(roundGeo, leafMat, rounds.length || 1);
-  const pm = new THREE.InstancedMesh(pineGeo, leafMat, pines.length || 1);
+  const pm = new THREE.InstancedMesh(puffGeo, leafMat, rounds.length || 1);   // a second, lighter blob on top
+  const cones = new THREE.InstancedMesh(pineGeo, leafMat, (pines.length || 1) * 2);   // two tiers per pine
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), p = new THREE.Vector3(), col = new THREE.Color();
-  trees.forEach((t, i) => {
-    m.compose(p.set(t.x, t.y - 0.2, t.z), q.identity(), sc.set(t.s, t.trunkH + 0.4, t.s)); trunks.setMatrixAt(i, m);
-  });
+  trees.forEach((t, i) => { m.compose(p.set(t.x, t.y - 0.2, t.z), q.identity(), sc.set(t.s, t.trunkH + 0.4, t.s)); trunks.setMatrixAt(i, m); });
+  // warm greens, a few golden and a few autumn trees: the course at sunset
+  const leaf = t => {
+    const r = (t.hue * 7.13) % 1;
+    if (r < 0.07) return col.setHSL(0.04 + t.hue * 0.03, 0.62, 0.42);    // autumn red-orange
+    if (r < 0.16) return col.setHSL(0.11 + t.hue * 0.03, 0.62, 0.45);    // golden
+    return col.setHSL(0.22 + t.hue * 0.1, 0.42, 0.26 + t.hue * 0.1);
+  };
   rounds.forEach((t, i) => {
     q.setFromAxisAngle(p.set(0, 1, 0), t.hue * 6);
     m.compose(p.set(t.x, t.y + t.trunkH + t.canopyR * 0.75, t.z), q, sc.set(t.canopyR, t.canopyR * 0.85, t.canopyR)); rm.setMatrixAt(i, m);
-    rm.setColorAt(i, col.setHSL(0.24 + t.hue * 0.08, 0.45, 0.24 + t.hue * 0.1));
+    rm.setColorAt(i, leaf(t));
+    const a = t.hue * 9, off = t.canopyR * 0.42;
+    m.compose(p.set(t.x + Math.cos(a) * off, t.y + t.trunkH + t.canopyR * 1.25, t.z + Math.sin(a) * off), q, sc.set(t.canopyR, t.canopyR * 0.85, t.canopyR)); pm.setMatrixAt(i, m);
+    pm.setColorAt(i, leaf(t).offsetHSL(0.01, 0.04, 0.08));
   });
   pines.forEach((t, i) => {
-    m.compose(p.set(t.x, t.y + t.trunkH * 0.6, t.z), q.identity(), sc.set(t.canopyR * 0.8, t.canopyR * 1.1, t.canopyR * 0.8)); pm.setMatrixAt(i, m);
-    pm.setColorAt(i, col.setHSL(0.33 + t.hue * 0.05, 0.4, 0.17 + t.hue * 0.06));
+    const base = t.y + t.trunkH * 0.45, w = t.canopyR * 0.85, h = t.canopyR * 1.15;
+    m.compose(p.set(t.x, base, t.z), q.identity(), sc.set(w, h, w)); cones.setMatrixAt(i * 2, m);
+    cones.setColorAt(i * 2, col.setHSL(0.33 + t.hue * 0.05, 0.4, 0.17 + t.hue * 0.06));
+    m.compose(p.set(t.x, base + h * 0.95, t.z), q.identity(), sc.set(w * 0.68, h * 0.85, w * 0.68)); cones.setMatrixAt(i * 2 + 1, m);
+    cones.setColorAt(i * 2 + 1, col.setHSL(0.33 + t.hue * 0.05, 0.42, 0.22 + t.hue * 0.06));
   });
-  for (const im of [trunks, rm, pm]) { im.castShadow = true; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; g.add(im); }
-  if (!rounds.length) rm.count = 0;
-  if (!pines.length) pm.count = 0;
+  for (const im of [trunks, rm, pm, cones]) { im.castShadow = true; im.receiveShadow = true; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; g.add(im); }
+  if (!rounds.length) { rm.count = 0; pm.count = 0; }
+  if (!pines.length) cones.count = 0;
   return g;
 }
 
@@ -310,7 +341,8 @@ export function buildClub() {
     putter: new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.12), new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.9, roughness: 0.2 })),
   };
   heads.driver.scale.set(0.8, 0.6, 1.2);
-  for (const h of Object.values(heads)) { h.position.y = -1.06; h.castShadow = true; g.add(h); }
+  // heads lie across the line of aim (heel to toe sideways), not pointing at the target
+  for (const h of Object.values(heads)) { h.position.y = -1.06; h.rotation.y = Math.PI / 2; h.castShadow = true; g.add(h); }
   g.add(shaft, grip, glove, glove2);
   g.userData.heads = heads;
   g.traverse(o => { if (o.isMesh) o.castShadow = true; });
@@ -380,7 +412,7 @@ export function stretch(obj, a, b) {
   obj.scale.set(1, len, 1);
 }
 
-export { textTexture, buildTerrainMesh, buildWater };
+export { textTexture, buildTerrainMesh, buildWater, buildGreenMesh };
 
 // ------------------------------------------------------------- windmill (hole 5)
 // A giant mini-golf windmill: white tower, red cap, four lattice sails. The

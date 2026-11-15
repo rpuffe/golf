@@ -102,6 +102,9 @@
   .bc.active { background: var(--sun); color: var(--plum); } .bc.dead { opacity: .35; }
   #scareFlash { position: fixed; inset: 0; pointer-events: none; opacity: 0; background: radial-gradient(circle, transparent 35%, rgba(127,246,255,.55) 100%); transition: opacity .8s; z-index: 5; }
   #scareFlash.show { transition: opacity .15s; }
+  #scareFlash.blood { background: radial-gradient(circle, transparent 25%, rgba(70,0,8,.9) 100%); }
+  #scareBlack { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 6; }
+  #scareBlack.show { opacity: 1; transition: opacity .12s; }
   #scareFlash.show { opacity: 1; }
   #windBox { padding: 8px 12px; text-align: center; min-width: 86px; }
   #windBox .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
@@ -363,6 +366,7 @@
 </div>
 
 <div id="scareFlash"></div>
+<div id="scareBlack"></div>
 <div id="letterbox"><div id="bulletLbl">● BULLET CAM — CLICK TO SKIP</div></div>
 
 <div id="angler" class="panel hidden" role="dialog" aria-label="Fishing minigame">

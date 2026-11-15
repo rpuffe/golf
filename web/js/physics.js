@@ -95,6 +95,7 @@ export function simulate(world, start, L) {
   let side = L.side, lift = L.lift;
   let air = !L.rolling;
   let bounces = 0, lipping = false, inCanopy = new Set(), touchedGhost = false;
+  const knocked = new Set();   // rival balls this shot has knocked away (they're rolling now, not here)
   let fi = 0, step = 0, result = 'rest', apex = y, carry = null;
   const n = { x: 0, y: 1, z: 0 };
   let grid = world.colliders ?? [];
@@ -108,6 +109,23 @@ export function simulate(world, start, L) {
   const wm = course.hole?.windmill;
   const wmD = wm ? { hx: wm.at[0], hy: course.h(wm.at[0], wm.at[1]) + wm.hubH, pz: wm.at[1] + wm.face, len: wm.len, n: wm.blades, w: 2 * Math.PI / wm.period, th0: (world.strokeNo ?? 1) * wm.step } : null;
   let swatted = false;
+  // Hole 7's boss goose bends space: the Honk Hole, a horizontal whirlpool
+  // around its throne (pulls in, swirls anticlockwise). Deterministic, so the
+  // carry preview, rivals and Old Tom all see the same bend.
+  const ba = !world.noAura && course.hole?.bossAura;
+  const baY = ba ? course.h(ba.at[0], ba.at[1]) : 0;
+  let auraTold = false;
+  const aura = (x, y, z, out) => {
+    const dx = ba.at[0] - x, dz = ba.at[1] - z, r = Math.hypot(dx, dz);
+    if (r >= ba.r || r < 1e-3) { out.x = out.z = out.f = 0; return out; }
+    const ux = dx / r, uz = dz / r;
+    const hk = Math.max(0, Math.min(1, (ba.top + ba.fade - (y - baY)) / ba.fade));
+    const c = Math.max(0, Math.min(1, (r - 0.5) / (ba.core - 0.5))), ck = c * c * (3 - 2 * c);
+    const f = (1 - r / ba.r) * ck * hk;
+    out.x = f * (ba.pull * ux + ba.swirl * -uz); out.z = f * (ba.pull * uz + ba.swirl * ux); out.f = f;
+    return out;
+  };
+  const A = { x: 0, z: 0, f: 0 };
   const ev = (type, extra = {}) => events.push({ type, frame: fi, x, y, z, ...extra });
   const rec = () => { frames[fi * 3] = x; frames[fi * 3 + 1] = y; frames[fi * 3 + 2] = z; fi++; };
   rec();
@@ -121,6 +139,7 @@ export function simulate(world, start, L) {
       const sp = Math.hypot(rx, vy, rz);
       let ax = -DRAG * sp * rx, ay = (-Gs + lift * sp) * ag - DRAG * sp * vy, az = -DRAG * sp * rz;
       ax += side * SIDE_K * (-vz); az += side * SIDE_K * vx;
+      if (ba) { aura(x, y, z, A); ax += A.x; az += A.z; if (!auraTold && A.f > 0.15) { auraTold = true; ev('aura', { speed: A.f }); } }
       lift *= 0.9993;
       vx += ax * DT; vy += ay * DT; vz += az * DT;
       x += vx * DT; y += vy * DT; z += vz * DT;
@@ -134,6 +153,13 @@ export function simulate(world, start, L) {
       const gk = s === 'green' || s === 'fringe' ? GREEN_SLOPE : 1;
       const gn = -G * n.y;                      // g·n
       let ax = -gn * n.x * gk, ay = (-G - gn * n.y) * gk, az = -gn * n.z * gk;
+      if (ba && s !== 'green' && s !== 'fringe' && Math.hypot(vx, vy, vz) > 0.35) {
+        // on the ground it only nudges, capped below rolling friction so every ball still stops
+        aura(x, y, z, A);
+        const m = Math.hypot(A.x, A.z);
+        if (m > 0) { const k = Math.min(m * ba.ground, 0.8 * (SURF[s] ?? SURF.rough).roll) / m; ax += A.x * k; az += A.z * k; }
+        if (!auraTold && A.f > 0.15) { auraTold = true; ev('aura', { speed: A.f }); }
+      }
       vx += ax * DT; vy += ay * DT; vz += az * DT;
       // keep velocity in the tangent plane
       const vn = vx * n.x + vy * n.y + vz * n.z;
@@ -159,12 +185,22 @@ export function simulate(world, start, L) {
     for (let ci = 0, cn = bucket.length + extra.length; ci < cn; ci++) {
       const c = ci < bucket.length ? bucket[ci] : extra[ci - bucket.length];
       if (noTrees && (c.tag === 'tree' || c.tag === 'tomb' || c.tag === 'windmill')) continue;
+      if (c.push && knocked.has(c)) continue;
       if (c.kind === 'sphere') {
         const dx = x - c.x, dy = y - c.y, dz = z - c.z, rr = c.r + R;
         const d2 = dx * dx + dy * dy + dz * dz;
         if (d2 < rr * rr) {
           const d = Math.sqrt(d2) || 1e-6, nx = dx / d, ny = dy / d, nz = dz / d;
           const vn = vx * nx + vy * ny + vz * nz;
+          if (vn < 0 && c.push) {
+            // Knock-On: an equal-mass exchange with a friend's resting ball, which leaves along -n
+            const k = (1 + (c.e ?? 0.9)) / 2;
+            const tvx = k * vn * nx, tvz = k * vn * nz;
+            vx -= k * vn * nx; vy -= k * vn * ny; vz -= k * vn * nz;
+            knocked.add(c);
+            ev('knock', { tag: c.tag, vx: tvx, vz: tvz, speed: Math.hypot(tvx, tvz) });
+            continue;
+          }
           if (vn < 0) {
             const e = c.e ?? 0.5;
             vx -= (1 + e) * vn * nx; vy -= (1 + e) * vn * ny; vz -= (1 + e) * vn * nz;

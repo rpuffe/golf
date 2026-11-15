@@ -18,14 +18,17 @@ export function unlockAudio() {
     const d = noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     startAmbience();
+    // iOS: a silent buffer played inside the gesture fully unlocks output
+    try { const b = ctx.createBuffer(1, 1, 22050), src = ctx.createBufferSource(); src.buffer = b; src.connect(ctx.destination); src.start(); } catch { /* fine */ }
   }
-  if (ctx.state === 'suspended') ctx.resume();
+  // iOS Safari also has an 'interrupted' state (calls, Siri, other audio), not just 'suspended'
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
 }
 export function setMuted(m) { muted = m; if (master) master.gain.value = m ? 0 : 0.8; }
 export function isMuted() { return muted; }
 if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {   // (guarded: the voice generator imports this in Node)
   if (!ctx) return;
-  if (document.hidden) ctx.suspend(); else ctx.resume();
+  if (document.hidden) ctx.suspend(); else ctx.resume().catch(() => {});
 });
 
 const now = () => ctx.currentTime;
@@ -201,6 +204,22 @@ export const sfx = {
     noise(t, 0.03, Math.max(0.001, 0.12 * v), { type: 'bandpass', f: 900, q: 5 });   // the stick-slip grain as it starts
   },
   // a windmill blade swats the ball: wooden crack + plank ring + body
+  // the Sasquack: a big wet roar, and a low tremolo growl from the trees
+  roar(soft = false) {
+    if (!ok()) return; const t = now(), k = soft ? 0.32 : 1;
+    osc('sawtooth', 140, t, 1.1, 0.22 * k, { f2: 90, a: 0.05 });
+    osc('sawtooth', 146, t + 0.02, 1.0, 0.16 * k, { f2: 84, a: 0.05, detune: 20 });
+    noise(t, 1.1, 0.3 * k, { type: 'bandpass', f: 600, f2: 380, q: 1.4, a: 0.06 });
+    osc('sine', 60, t, 1.2, 0.35 * k, { f2: 40, a: 0.04 });
+  },
+  knock(v = 1) { if (!ok()) return; const t = now(); osc('triangle', 2600, t, 0.04, 0.22 * v); osc('triangle', 3100, t, 0.04, 0.15 * v); noise(t, 0.03, 0.2 * v, { type: 'highpass', f: 4000 }); },
+  oof() { if (!ok()) return; const t = now(); osc('sine', 300, t, 0.18, 0.3, { f2: 140 }); noise(t, 0.05, 0.2, { type: 'lowpass', f: 900 }); },
+  fwump() { if (!ok()) return; noise(now(), 0.22, 0.18, { type: 'lowpass', f: 700, f2: 250, a: 0.02 }); },
+  growl() {
+    if (!ok()) return; const t = now();
+    for (let i = 0; i < 8; i++) osc('sine', 55, t + i * 0.15, 0.16, 0.25, { a: 0.03 });
+    noise(t, 1.2, 0.08, { type: 'lowpass', f: 300, a: 0.2 });
+  },
   swat() {
     if (!ok()) return; const t = now();
     noise(t, 0.05, 0.6, { type: 'bandpass', f: 1400, q: 0.9, a: 0.001 });
@@ -406,6 +425,7 @@ export async function playVoice(url) {
       if (voiceCache.size > 80) voiceCache.delete(voiceCache.keys().next().value);
     }
     if (seq !== voiceSeq) return;   // a newer line arrived while this one loaded
+    if (ctx.state !== 'running') { try { await ctx.resume(); } catch { /* still locked */ } }
     stopVoice();
     if (!voiceGain) { voiceGain = ctx.createGain(); voiceGain.gain.value = 1.0; voiceGain.connect(master); }
     const src = ctx.createBufferSource(); src.buffer = buf; src.connect(voiceGain); src.start();

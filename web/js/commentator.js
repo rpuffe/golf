@@ -36,6 +36,22 @@ const L = {
     ['Timber. Literally.', 'The trees want it more than we do.', 'IT HIT ANOTHER TREE! THE FOREST IS WINNING!']],
   gooseTheft: [['Oh. Oh no. The goose has {ball}.', 'THE GOOSE. The goose has taken {ball}. Get ready to pull, {name}!', 'THE GOOSE IS A THIEF! A FEATHERED THIEF! GET READY TO PULL!'],
     ['And the goose... has taken {ball}.', 'Thief! The goose is off with {ball}!', 'ROBBERY! BROAD DAYLIGHT! THE GOOSE HAS {ball}!']],
+  knockOn: [['A little contact there. {rival} will not enjoy that.', 'Oh, it has clattered into {rival}! Billiards!', 'IT HIT {rival}! IT IS SNOOKER NOW! NOBODY IS SAFE!'],
+    ['{name} has moved {rival} on. Rub of the green.', 'Knocked {rival} clean off the spot! Cheeky!', 'CLACK! {name} IS PLAYING POOL WITH A FRIENDSHIP!']],
+  knockedBy: [["And {rival} has moved {name}'s ball for them.", '{rival} has knocked {name} sideways! Literally!', '{rival} HIT THE BALL! THE BALL IS MOVING! THIS IS AN ASSAULT!']],
+  knockIn: [['Knocked in by {rival}. Under the old rules, that counts.', '{rival} has holed it for {name}! Is that allowed? It is!', '{rival} PUTTED {name} IN! NINETEEN FIFTY-ONE RULES! IT COUNTS!']],
+  teeth: [['A goose with a familiar walk. That is {rival}.', "That goose is {rival}! It wants {name}'s ball!", '{rival} HAS BECOME A GOOSE AND IS COMING FOR {name}! HIT IT! HIT IT NOW!'],
+    ["The goose is wearing {rival}'s colours. Hurry, {name}.", '{rival}, in goose form, is closing in!', 'IT IS {rival}! IN A GOOSE! WHY IS {rival} A GOOSE!']],
+  teethMiss: [['And {name} plays before the goose arrives.', 'Too slow, {rival}! The goose face-plants!', '{name} HIT IT FIRST! THE GOOSE HAS FALLEN OVER! LOOK AT IT!']],
+  fanSave: [["Off {rival}'s umbrella and out of trouble. Lovely.", '{rival} has saved it! With an umbrella!', "{rival}'S BROLLY HAS SAVED {name}! KNIGHTHOOD! KNIGHTHOOD FOR THE BROLLY!"]],
+  fanRob: [["Off {rival}'s umbrella. That will cost {name}.", "{rival}'s umbrella has robbed {name}! Daylight robbery!", '{rival} STOOD THERE ON PURPOSE! I SAW IT! THE UMBRELLA IS GUILTY!']],
+  fanBonk: [["A gentle bonk off {rival}'s umbrella.", 'Off the brolly! {rival} is part of the course now!', '{rival} HAS BEEN HIT! {rival} IS FINE! THE UMBRELLA IS NOT!']],
+  tugRelay: [['A lateral pass. The geese are organised.', 'They are PASSING it! It is a team sport now!', 'IT IS RUGBY! THE GEESE PLAY RUGBY! TRY! TRY!']],
+  tugBrood: [['The goose is... sitting on {ball}.', 'It is BROODING on {ball}. That is not an egg!', 'IT LAID AN EGG! {ball} IS AN EGG NOW! SCIENCE IS OVER!']],
+  tugPond: [['A hammer throw. Into the water.', 'Olympic form from the goose! Into the drink!', 'IT THREW {ball} IN THE LAKE! GET THE ROD! IT IS FREE! GET IT!']],
+  tugStash: [['The goose has hidden {ball} up a tree.', 'Up the tree! Why the tree? What is in the tree?', 'DO NOT GO IN THE TREES! NOBODY GOES IN THE TREES!']],
+  sasquack: [['Something in the trees has taken an interest in {ball}.', 'That is not a goose. That is a GOOSE. It has arms, {name}.', 'IT HAS ARMS! WHY DOES THE GOOSE HAVE ARMS! WHO HAS BEEN FEEDING IT!'],
+    ['And the Sasquack will play this one for {name}. With a tree.', 'It pulled a pine tree out of nowhere. It is taking a practice swing.', 'IT IS GOLFING WITH A TREE! ITS TEMPO IS BETTER THAN {name}! I AM GOING HOME!']],
   tugStart: [['It has come to this. A tug of war.', 'Pull, {name}! Pull for {ball}!', 'PULL! PULL! PULL FOR YOUR LIFE! PULL FOR {ball}!'],
     ['The goose plants its feet.', 'Man against goose. Only one leaves with {ball}.', 'IT IS A TUG OF WAR WITH A GOOSE! THIS IS NOT GOLF! I LOVE IT!']],
   tugWin: [['And {name} wrestles {ball} free. Remarkable.', 'YOINK! {ball} is back! The goose is furious!', '{name} BEAT THE GOOSE! {name} BEAT A GOOSE IN SINGLE COMBAT!'],
@@ -97,10 +113,11 @@ export const LINES = L;
 const lastIdx = {};
 // which pre-recorded clips exist (web/voice/index.json); empty until it loads
 let clips = new Set();
-fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys) clips = new Set(j.keys); }).catch(() => {});
+let clipsFailed = false;
+fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+const PRIO = { knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
 let lastPrio = 0, lastAt = 0, pending = null;
 let voice = null, enabled = true, captionEl = null, captionTimer = 0;
 export const commentator = { hysteria: 0, lastLine: '', lastClass: '', history: [] };
@@ -122,7 +139,9 @@ export function initCommentator(el) {
 // click handler: it speaks one silent word so later lines are allowed.
 let primed = false;
 export function primeSpeech() {
-  if (primed) return;
+  // with recorded clips we never use the browser's voice, and on iOS touching
+  // speechSynthesis grabs the audio session and can silence Web Audio
+  if (primed || !clipsFailed) return;
   try {
     const ss = window.speechSynthesis;
     if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
@@ -133,7 +152,7 @@ export function primeSpeech() {
     if (!voice) { try { const vs = ss.getVoices(); voice = vs.find(v => /en-GB/i.test(v.lang)) || vs.find(v => /^en/i.test(v.lang)) || null; } catch { /* later */ } }
   } catch { /* captions still work */ }
 }
-export function setVoiceEnabled(on) { enabled = on; if (!on) { stopVoice(); try { window.speechSynthesis?.cancel(); } catch {} } }
+export function setVoiceEnabled(on) { enabled = on; if (!on) { stopVoice(); if (clipsFailed) try { window.speechSynthesis?.cancel(); } catch {} } }
 export function voiceEnabled() { return enabled; }
 
 export function tier() { return commentator.hysteria < 34 ? 0 : commentator.hysteria < 67 ? 1 : 2; }
@@ -192,9 +211,10 @@ function speak(text, tr, cls, tpl, vars) {
     for (const vt of [voiceText(tpl, vars), tpl.includes('{ball}') ? voiceText(tpl, vars, true) : null]) {
       if (!vt) continue;
       const key = voiceKey(vt, tag);
-      if (clips.has(key)) { try { window.speechSynthesis?.cancel(); } catch {} playVoice(`/voice/${key}.mp3`); return; }
+      if (clips.has(key)) { playVoice(`/voice/${key}.mp3`); return; }
     }
   }
+  if (!clipsFailed) return;   // recorded voice only: a missing clip stays caption-only
   try {
     const ss = window.speechSynthesis;
     if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
