@@ -26,11 +26,12 @@ export const TOM_LINES = {
   goose: ['[laughs] The goose! Oh, I do love that goose.', '[cackles] That goose has better hands than you.',
     '[amused] I fed that goose\'s great-grandmother. Good stock.', '[laughs] Never turn yer back on a goose. Never.'],
   final: ['[gravely] Last hole. Loser buys the drinks.'],
+  bonk: ['[dryly] Bonked that bird in fifty-two, too.'],
 };
 export const VOICE_BALLS = ['Bounce Springsteen', 'Sir Thud', 'Butterfingers', 'Clover', 'Lord Floofington', 'Nervous Nigel', 'Range Ball #4471'];
 export const VOICE_GHOSTS = ['Old Tom', 'your old self'];
 // tier 1 lines that are good news get excitement; the rest get sarcasm
-const POSITIVE = new Set(['choreWin', 'pure', 'fairway', 'green', 'greenBirdie', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
+const POSITIVE = new Set(['pinsHalf', 'pinsMost', 'bossBonk', 'choreWin', 'pure', 'fairway', 'green', 'greenBirdie', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
 
 export function voiceTag(cls, tier) {
   return tier === 0 ? '[whispers]' : tier === 2 ? '[shouting]' : POSITIVE.has(cls) ? '[excited]' : '[sarcastic]';

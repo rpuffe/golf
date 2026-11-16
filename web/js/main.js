@@ -294,7 +294,7 @@ function updatePuttRead() {
   const [tr, airGravity, noTrees] = modTrait();
   const L = launch('putter', puttPower(metres), d.x, d.z, 0, 1, tr);
   miniPutt(L, shotMods(false, 'putter'), 'putter');
-  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase(), airGravity, noTrees }, base, L);
+  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase(), airGravity, noTrees, cupSealed: !G.bossOpen }, base, L);
   const F = sim.frames, n = sim.n;
   // path length, then dots evenly spaced along its first two-thirds
   const cum = [0]; for (let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(F[i * 3] - F[i * 3 - 3], F[i * 3 + 2] - F[i * 3 - 1]));
@@ -426,18 +426,21 @@ function bagHTML() {
     `<div class="ball${b.alive ? '' : ' dead'}${i === G.ballIdx ? ' active' : ''}" title="${esc(b.name)}: ${esc(b.trait.desc)}"><i>${b.alive ? '👀' : '✝'}</i><b>${esc(b.name)}</b>${esc(b.trait.label)}</div>`).join('')}</div>`;
 }
 function renderBag() {
-  const b = bag();
-  $('ballLine').querySelector('b').textContent = b.name;
-  const pips = G.bag.map(x => x.alive ? '●' : '○').join('');
-  $('ballLine').querySelector('span').textContent = `${b.trait.label} ${b.range ? '' : pips}`;
-  ballTag.userData.name = '';   // redraw the floating name tag
+  ballTag.userData.name = '';   // redraw the floating name tag (the scorebug no longer names the ball)
 }
 // one ball-to-pin number for the HUD and the flyover card
 function pinText(b) { const dp = dist2(b, G.cup); return dp.toFixed(dp < 10 ? 1 : 0); }
 function updateHUD() {
   const h = G.holeDef; if (!h) return;
-  $('holeLine').innerHTML = `Hole ${G.holeIdx + 1} <small>Par ${h.par}</small>`;
-  $('roundLine').textContent = `Shot ${G.strokes + 1} · ${pinText(G.ball)} m to pin`;
+  // the scorebug: you and your round to par; the hole, its par, the distance, and this stroke
+  const done = G.holeScores.filter(Number.isInteger), toPar = done.reduce((s, v, i) => s + v - HOLES[i].par, 0);
+  $('bugName').textContent = G.playerName || 'You';
+  const bp = $('bugPar'); bp.textContent = toPar === 0 ? 'E' : toPar > 0 ? `+${toPar}` : String(toPar);
+  bp.classList.toggle('under', toPar < 0); bp.classList.toggle('over', toPar > 0);
+  $('bugHole').textContent = G.holeIdx + 1; $('bugParHole').textContent = `Par ${h.par}`; $('bugDist').textContent = `${pinText(G.ball)} m`;
+  const now = G.strokes + 1, n = Math.max(h.par, now);
+  const dots = Array.from({ length: n }, (_, i) => `<i class="${i + 1 < now ? 'done' : i + 1 === now ? 'now' : ''}">${i + 1}</i>`).join('');
+  if ($('bugStrokes').dataset.h !== dots) { $('bugStrokes').innerHTML = dots; $('bugStrokes').dataset.h = dots; }
   // wind relative to the view: arrow points where the wind blows
   const ws = Math.hypot(G.wind.x, G.wind.z);
   const wAng = Math.atan2(G.wind.x, -G.wind.z) + G.yaw; // screen-space: up = away from camera
@@ -461,7 +464,7 @@ function setRoundSeed() {
 }
 let pbGhost = null;  // { total, name, holes: [[{sx,sy,sz,f:[...],holed,pen}]] }
 // a saved best round only counts if it was played on this course (9 holes since round 7)
-function loadPB() { try { pbGhost = JSON.parse(store.get('ghg3d_pb') || 'null'); } catch { pbGhost = null; } if (pbGhost && pbGhost.holes?.length !== HOLES.length) pbGhost = null; }
+function loadPB() { try { pbGhost = JSON.parse(store.get('ghg3d_pb2') || 'null'); } catch { pbGhost = null; } if (pbGhost && pbGhost.holes?.length !== HOLES.length) pbGhost = null; }
 loadPB();
 const graveyard = () => { try { return JSON.parse(store.get('ghg3d_graveyard') || '[]'); } catch { return []; } };
 
@@ -496,6 +499,7 @@ function startRound(startHole = 0) {
   G.ghostSource = G.room ? 'room' : pbGhost && pbGhost.total <= tomTotal ? 'pb' : 'oldtom';
   if (G.room) resetRivalsForRound();
   renderBag();
+  G.bonkSeen = false; G.strikeDone = false;
   G.powerUp = null; G.scareDone = false; G.usedGimme = false; G.sasqRound = 0; G.lastLoss = null; G.leaderTaxed = false;
   drawWheelOrder();
   loadHole(startHole);
@@ -566,7 +570,8 @@ function loadHole(i) {
   G.knockQ = null; G.teethHole = false; G.teethUsed = false; G.teethTargets = new Set(); G.teethPick = false; G.standMode = false; G.myFan = null; G.putBack = null;
   for (const id of [...fans.keys()]) dropFan(id);
   for (const g of geese) if (g.puppetOf) { if (g.label) scene.remove(g.label); g.puppetOf = null; g.label = null; }
-  G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; G.ballCurse = null; if (chore.active) endChore(true); if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
+  resetBossGate(h);
+  G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; G.ballCurse = null; if (chore.active) { chore.active = false; $('chore').classList.add('hidden'); document.body.classList.remove('choring'); $('choreReady').classList.remove('show'); } if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
   G.finalWait = null; $('finalGroup').classList.add('hidden');
   G.powerUp = null; renderPowerChip(); G.sicPending = null; G.sicFrom = null; G.sabReport = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
@@ -660,10 +665,15 @@ function stepClub(dir) {
   let i = CLUB_ORDER.indexOf(G.club);
   for (let k = 0; k < CLUB_ORDER.length; k++) { i = (i + dir + CLUB_ORDER.length) % CLUB_ORDER.length; if (clubAllowed(CLUB_ORDER[i])) { setClub(CLUB_ORDER[i]); return; } }
 }
+// TV mode: show the whole bar for a moment, then fold to the club in hand
+function unfoldClubs() {
+  $('clubs').classList.remove('folded');
+  clearTimeout(unfoldClubs.t); unfoldClubs.t = setTimeout(() => $('clubs').classList.add('folded'), 2600);
+}
 function setClub(id) {
   if (CLUBS[id] && !clubAllowed(id) && G.mode === 'address') { hud.hint(id === 'driver' ? 'Driver: tee shots only.' : 'Crazy golf: putter only.', 2200); renderClubs(); return; }
   if (!CLUBS[id] || G.club === id) { renderClubs(); return; }
-  G.club = id; renderClubs(); sfx.tick();
+  G.club = id; renderClubs(); sfx.tick(); unfoldClubs();
   for (const [k, m] of Object.entries(club.userData.heads)) m.visible = k === id;
   if (G.mode === 'address' || G.mode === 'goose') snapAddressCam(true);
   G.previewDirty = true;
@@ -810,6 +820,25 @@ function makeGoose(breed = 'embden') {
   const mesh = buildGooseBreed(breed); scene.add(mesh);
   return { mesh, state: 'graze', x: 0, z: 0, yaw: 0, target: null, t: 0, timer: 0, phase: Math.random() * 6, carry: false, frozen: false, home: null, carryT: 0, radius: 9 };
 }
+// (owner) on the Lookers windmill hole every goose wears the red Lookers tee
+let lookersTex = null;
+function dressGoose(g, on) {
+  if (g.shirt && (!on || g.shirt.parent !== g.mesh.userData.body)) { g.shirt.parent?.remove(g.shirt); g.shirt = null; }
+  if (!on || g.shirt) return;
+  lookersTex ??= new THREE.TextureLoader().load('/media/lookers-logo.png', t => { t.colorSpace = THREE.SRGBColorSpace; });
+  const tee = new THREE.Group();
+  const cloth = new THREE.Mesh(new THREE.SphereGeometry(0.34, 18, 12), new THREE.MeshStandardMaterial({ color: 0xd8202a, roughness: 0.85 }));
+  cloth.scale.set(1.07, 0.86, 1.18); cloth.position.set(0, -0.02, 0.06);
+  tee.add(cloth);
+  const logoMat = new THREE.MeshBasicMaterial({ map: lookersTex, transparent: true, color: 0xffffff });
+  for (const side of [-1, 1]) {
+    const back = new THREE.Mesh(new THREE.PlaneGeometry(0.38, 0.25), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    const logo = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.22), logoMat);
+    for (const [m, o] of [[back, 0.355], [logo, 0.362]]) { m.position.set(side * o, 0.0, 0.06); m.rotation.y = side * Math.PI / 2; tee.add(m); }
+  }
+  g.mesh.userData.body.add(tee);
+  g.shirt = tee;
+}
 function spawnGeese() {
   const h = G.holeDef;
   const defs = h.geese ?? (h.goose ? [h.goose] : []);
@@ -843,6 +872,7 @@ function spawnGeese() {
     if (!g.boss && g.crown) {   // last round's boss is an ordinary goose again (a restart after the finale)
       g.crown.crown.parent?.remove(g.crown.crown); g.crown.aura.parent?.remove(g.crown.aura); g.crown = null;
     }
+    dressGoose(g, !!h.windmill?.sign && !g.gosling);
     if (g.boss && !g.crown) {
       // the boss wears a crown and stands in its own purple aura
       g.crown = buildBossCrown();
@@ -880,7 +910,7 @@ function gooseCollider() {
   const out = [];
   liveGeese().forEach((g, k) => {
     if (g.carry || g.state === 'flee' || g.fly > 0) return;
-    const [dy, r] = g.boss ? [0.75, 0.8] : g.gosling ? [0.18, 0.2] : [0.42, 0.46];
+    const [dy, r] = g.boss ? [0.75, G.bonk ? (G.holeDef.bossGate?.hitR ?? 0.8) : 0.8] : g.gosling ? [0.18, 0.2] : [0.42, 0.46];
     out.push({ kind: 'sphere', x: g.x, y: G.course.h(g.x, g.z) + dy, z: g.z, r, e: 0.35, tag: 'goose:' + k });
   });
   return out;
@@ -920,7 +950,7 @@ function updateGoose(g, dt) {
   };
   // the theft lasts exactly one performance of the goose's song, then it's a tug-of-war
   if (g === goose && g.carry && g.state === 'carry' && g.carryT > GOOSE_SONG_SECS) startTug();
-  if (g.frozen) {
+  if (g.frozen && !g.guard) {
     const look = G.shot ? shotPos() : G.ball;
     const want = Math.atan2(look.x - g.x, look.z - g.z);
     let dy = want - g.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy));
@@ -976,12 +1006,17 @@ function updateGoose(g, dt) {
     if (g.target && moveTo(g.target.x, g.target.z, 7)) g.target = null;
   } else if (g.state === 'tug') {
     // planted, leaning back, head thrashing (driven by the tug state)
+  } else if (g.state === 'guard') {
+    // on the cup, wings half out, glaring at your ball
+    const w = Math.atan2(G.ball.x - g.x, G.ball.z - g.z); let dy = w - g.yaw; dy = Math.atan2(Math.sin(dy), Math.cos(dy)); g.yaw += clamp(dy, -3 * dt, 3 * dt);
+    if ((g.honkT -= dt) <= 0) { sfx.honk(1); g.honkT = 3; }
   } else if (g.state === 'fly') {
     if (g.ceremony) {   // a V over the mesa, in front of the camera, then off toward the moon
       const c = g.ceremony, t = c.passed ? c.to : c.via;
       if (!c.passed && Math.hypot(t.x - g.x, t.z - g.z) < 3) c.passed = true;
       g.climb = (g.climb ?? 0) + dt * 3.6; moveTo(t.x, t.z, 24);
     }
+    else if (g.guard) { if (moveTo(g.target.x, g.target.z, 16)) { g.state = 'guard'; g.fly = 0; g.honkT = 1.5; bossLanded(g); } }
     else if (moveTo(g.target.x, g.target.z, 16)) landGooseFlight(g);
     speed = 0;
   } else if (g.state === 'flee') {
@@ -1010,7 +1045,7 @@ function updateGoose(g, dt) {
   u.neckPivot.rotation.x = (staring || g.perk > 0 ? 0 : peck * 1.4) + strut + skyward + (g.state === 'fetch' ? 0.6 : 0) + (g.state === 'alert' || staring || g.perk > 0 ? -0.2 : 0) + (g.state === 'tug' ? -0.35 : 0);
   u.neckPivot.rotation.y = thrash;
   g.mesh.rotation.x = g.state === 'tug' ? -0.18 * (1 - tug.p / 100) + 0.1 : 0;   // leans back while it's winning
-  const flap = g.state === 'flee' || g.state === 'fetch' || g.state === 'fly' || g.state === 'relay' || (g.state === 'tug' && tug.yank > 0.3) ? Math.sin(g.phase * 22) * 0.9 : 0;
+  const flap = g.state === 'guard' ? 0.55 + Math.sin(g.phase * 2) * 0.1 : g.state === 'flee' || g.state === 'fetch' || g.state === 'fly' || g.state === 'relay' || (g.state === 'tug' && tug.yank > 0.3) ? Math.sin(g.phase * 22) * 0.9 : 0;
   u.wingL.rotation.z = -Math.abs(flap); u.wingR.rotation.z = Math.abs(flap);
   if (g.crown) { animateBossCrown(g.crown, g.phase); g.crown.aura.visible = !g.fly; }
   if (g.puppetOf && g.label) scaleLabel(g.label, g.mesh.position, 1.7, 0.04);
@@ -1019,6 +1054,7 @@ function updateGoose(g, dt) {
 // Fairness: at most two thefts per hole, never on the stroke right after one,
 // never near the cup, and every drop is a playable lie with no stroke added.
 function maybeGooseSteal() {
+  if (G.honkStrike && G.honkStrike.phase !== 'done') return false;
   if (G.thefts >= 2 || G.strokes === G.lastTheftStroke + 1) { G.sicPending = null; return false; }
   const s = G.course.surf(G.ball.x, G.ball.z);
   if (s === 'green' || s === 'fringe') return false;   // a sent goose waits for a better moment
@@ -1063,6 +1099,7 @@ function startTheft(g, alertT = 0.7) {
 }
 // A curious goose that reaches your ball while you're lining up takes it.
 function canSnatch({ teeth = false } = {}) {
+  if (G.honkStrike && G.honkStrike.phase !== 'done') return false;
   const s = G.course.surf(G.ball.x, G.ball.z);
   return G.thefts < 2 && G.strokes !== G.lastTheftStroke + 1 && G.strokes !== G.lastTheftStroke && G.strokes > 0 && (teeth || ((G.snatches ?? 0) < 1 && !disruptionSpent()))
     && s !== 'green' && s !== 'fringe' && !(G.holeDef.spotlight === 'scare' && !G.scareDone) && !G.powerUp?.immune;
@@ -1196,6 +1233,12 @@ function readyCard(id, big, verb, hand) {
 function startTug() {
   if (tug.active || !goose) return;
   if (swing.active) cancelSwing();   // a theft mid-backswing must not leave the swing live
+  // (owner) the goose's plan is decided now; if it's going to brood your ball
+  // into a potato, there's no tug: straight to the peeling
+  if (!goose.puppetOf) {
+    goose.preLoss = pickLoss(goose);
+    if (goose.preLoss === 'brood') { G.stopGooseSong?.(); G.stopGooseSong = null; goose.state = 'tug'; tug.active = true; G.mode = 'tug'; endTug(false, { skipped: true }); return; }
+  }
   G.stopGooseSong?.(); G.stopGooseSong = null;
   goose.state = 'tug'; goose.target = null;
   // every goose is different: some barely hold on, some are built like a fridge
@@ -1246,7 +1289,7 @@ function updateTug(dt) {
   if (tug.p >= 100) endTug(true);
   else if (tug.p <= 0 || tug.t >= TUG_SECS) endTug(false);
 }
-function endTug(won) {
+function endTug(won, { skipped = false } = {}) {
   tug.active = false; $('tugReady').classList.remove('show');
   $('tug').classList.add('hidden'); document.body.classList.remove('tugging');
   const g = goose;
@@ -1267,10 +1310,10 @@ function endTug(won) {
     placeBall(G.gooseLie.x, G.gooseLie.z, 2.0);
     return;
   }
-  G.stats.tugLosses = (G.stats.tugLosses ?? 0) + 1;
+  if (!skipped) G.stats.tugLosses = (G.stats.tugLosses ?? 0) + 1;
   // the goose wins, and it is not gracious about it
   tomLater('goose', 4200);
-  const outcome = pickLoss(g);
+  const outcome = g.preLoss ?? pickLoss(g); g.preLoss = null;
   if (sender) {
     // the result goes back once the ball has a new lie (placeBall), or after 15 s regardless
     const rep = G.sabReport = { to: sender, outcome, at: { ...G.gooseLie } };
@@ -1287,7 +1330,8 @@ function endTug(won) {
 // ------------------------------------------------------------ what the goose does when it wins
 // (council round 6, §11.1) A weighted table, never the same outcome twice in a
 // row. Every outcome: no stroke, never closer to the pin, always a playable lie.
-const LOSSES = [['punt', 22], ['relay', 18], ['brood', 30], ['pond', 12], ['stash', 13], ['bunker', 10], ['swallow', 10]];
+// (owner) no more 'swallow': a goose just eating the ball was the boring one
+const LOSSES = [['punt', 22], ['relay', 18], ['brood', 30], ['pond', 12], ['stash', 13], ['bunker', 10]];
 function lossSpot(p) {
   const s = G.course.surf(p.x, p.z);
   const ok = validLand(p.x, p.z) && s !== 'green' && s !== 'fringe' && Math.hypot(p.x - G.cup.x, p.z - G.cup.z) >= Math.hypot(G.gooseLie.x - G.cup.x, G.gooseLie.z - G.cup.z) - 0.01;
@@ -1407,14 +1451,14 @@ function updateBrood(dt) {
   if (Math.random() < dt * 4 && B.t < 1.8) burst(g.x, G.course.h(g.x, g.z) + 1.0, g.z, 1, 0xff7fa0, { speed: 0.3, up: 0.8, life: 1.2, grav: -0.3 });
   if (B.t >= 1.8) {
     G.brood = null;
-    const at = lossSpot(g);
+    // (owner) the potato is wherever the goose sat on it (any playable spot off the green)
+    const sg = G.course.surf(g.x, g.z);
+    const at = validLand(g.x, g.z) && sg !== 'green' && sg !== 'fringe' ? { x: g.x, z: g.z } : lossSpot(g);
     g.state = 'graze'; g.target = { x: g.x + (g.x - at.x) * 3 + 6, z: g.z + 4 }; g.timer = 3;
     endGooseCam();
-    // (owner's inside joke) the goose hands it back in one of two states:
-    // caked in goose muck (power-wash it) or hard-boiled into a potato (peel it)
-    const kind = Math.random() < 0.5 ? 'wash' : 'peel';
+    // (owner's inside joke) the goose hands it back hard-boiled into a potato: peel it
     placeBall(at.x, at.z, 1.4);
-    G.linger.then = () => startChore(kind);
+    G.linger.then = () => startChore('peel');
   }
 }
 // ---- the chores: power-wash the muck off, or peel the potato. Never fatal:
@@ -1422,21 +1466,30 @@ function updateBrood(dt) {
 const BALL_CURSES = { muck: { speed: 0.93, roll: 1.25 }, potato: { speed: 0.86, bounce: 0.3, roll: 1.6, side: 1.4 } };
 const chore = { active: false };
 const CH = { W: 240, R: 96, CELL: 12 };
-function startChore(kind) {
+// (owner playtest) a ball in a bunker is full of sand: power-wash it before you hit
+function maybeSandWash() {
+  if (G.mode !== 'address' || G.holeDef?.mini || G.course.surf(G.ball.x, G.ball.z) !== 'sand') return false;
+  const key = `${G.holeIdx}:${G.strokes}`;
+  if (G.washedAt === key) return false;
+  G.washedAt = key;
+  startChore('wash', { sand: true, then: () => { G.mode = 'address'; G.previewDirty = true; } });
+  return true;
+}
+function startChore(kind, { sand = false, then = startWalk } = {}) {
   const n = CH.W / CH.CELL, cells = new Float32Array(n * n);
   let dirty = 0;
   for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
     const x = (i + 0.5) * CH.CELL - CH.W / 2, y = (j + 0.5) * CH.CELL - CH.W / 2;
     if (Math.hypot(x, y) < CH.R) { cells[j * n + i] = 1; dirty++; }
   }
-  Object.assign(chore, { active: true, kind, t: 0, ready: READY_SECS, limit: kind === 'wash' ? 7.5 : 6.5, cells, n, dirty, prog: 0,
+  Object.assign(chore, { active: true, kind, sand, then, t: 0, ready: READY_SECS, limit: 10,   // (owner) a quiet 10 s, never shown cells, n, dirty, prog: 0,
     strips: Array(8).fill(0), peeled: 0, drag: null, cur: { x: CH.W / 2, y: CH.W / 2 }, spraying: false, padDown: false, keyAt: 0 });
   G.mode = 'chore'; document.body.classList.add('choring');
   $('choreTitle').textContent = kind === 'wash' ? '🚿 POWER WASH IT!' : '🥔 PEEL THE POTATO!';
   $('choreHow').textContent = kind === 'wash' ? W3('Drag all over the ball.', 'Drag to spray it clean.', 'Left stick aims · hold Ⓐ sprays') : W3('Swipe down to peel strips.', 'Drag down to peel strips.', 'Flick Ⓡ down to peel.');
-  readyCard('choreReady', kind === 'wash' ? '🪿 GOOSE MUCK. EVERYWHERE.' : '🥔 IT HARD-BOILED INTO A POTATO', kind === 'wash' ? W3('SCRUB IT: DRAG ALL OVER', 'DRAG TO SPRAY', 'AIM Ⓛ · HOLD Ⓐ') : W3('SWIPE DOWN TO PEEL', 'DRAG DOWN TO PEEL', 'FLICK Ⓡ DOWN'), kind === 'wash' ? '🚿' : '🔪');
+  readyCard('choreReady', kind === 'wash' ? (sand ? '🏖️ SAND. IN EVERY DIMPLE.' : '🪿 GOOSE MUCK. EVERYWHERE.') : '🥔 IT HARD-BOILED INTO A POTATO', kind === 'wash' ? W3('SCRUB IT: DRAG ALL OVER', 'DRAG TO SPRAY', 'AIM Ⓛ · HOLD Ⓐ') : W3('SWIPE DOWN TO PEEL', 'DRAG DOWN TO PEEL', 'FLICK Ⓡ DOWN'), kind === 'wash' ? '🚿' : '🔪');
   $('chore').classList.remove('hidden');
-  say(kind === 'wash' ? 'broodWash' : 'broodPotato', vars(), { bump: 10 });
+  say(kind === 'wash' ? (sand ? 'sandWash' : 'broodWash') : 'broodPotato', vars(), { bump: sand ? 4 : 10 });
   drawChore();
 }
 function choreAt(x, y) {
@@ -1485,7 +1538,6 @@ function updateChore(dt) {
   chore.t += dt;
   if (chore.spraying) choreAt(chore.cur.x, chore.cur.y);
   $('choreFill').style.width = `${Math.round(chore.prog * 100)}%`;
-  $('choreTimer').textContent = `${Math.max(0, chore.limit - chore.t).toFixed(1)} s`;
   drawChore();
   const goal = chore.kind === 'wash' ? 0.9 : 1;
   if (chore.prog >= goal) endChore(true);
@@ -1500,7 +1552,7 @@ function drawChore() {
     const n = chore.n;
     for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
       const v = chore.cells[j * n + i]; if (v <= 0) continue;
-      x.fillStyle = `rgba(${86 + (i * 7 % 20)}, ${70 + (j * 5 % 16)}, 40, ${0.25 + 0.75 * v})`;
+      x.fillStyle = chore.sand ? `rgba(${206 + (i * 7 % 20)}, ${170 + (j * 5 % 16)}, 100, ${0.3 + 0.7 * v})` : `rgba(${86 + (i * 7 % 20)}, ${70 + (j * 5 % 16)}, 40, ${0.25 + 0.75 * v})`;
       x.fillRect(i * CH.CELL - 1, j * CH.CELL - 1, CH.CELL + 2, CH.CELL + 2);
     }
     if (INPUT === 'pad') { x.strokeStyle = '#5fd3ff'; x.lineWidth = 3; x.beginPath(); x.arc(chore.cur.x, chore.cur.y, 26, 0, 7); x.stroke(); }
@@ -1522,13 +1574,15 @@ function endChore(won) {
   if (won) {
     sfx.catchBall(); say('choreWin', vars(), { bump: -8 });
     hud.banner(chore.kind === 'wash' ? '✨ SPOTLESS!<small>back to golf</small>' : '🥔 PEELED!<small>there was a ball in there</small>', GOOSE_BEAT_MS);
+    if (chore.kind === 'peel') G.stats.peeled = (G.stats.peeled ?? 0) + 1;
   } else {
     G.ballCurse = chore.kind === 'wash' ? 'muck' : 'potato';
     say('choreFail', vars(), { bump: 8 });
-    hud.banner(chore.kind === 'wash' ? '🪿 STILL MUCKY<small>next shot plays heavy</small>' : '🥔 STILL A POTATO<small>next shot: potato</small>', GOOSE_BEAT_MS);
+    hud.banner(chore.kind === 'wash' ? (chore.sand ? '🏖️ STILL SANDY<small>next shot plays heavy</small>' : '🪿 STILL MUCKY<small>next shot plays heavy</small>') : '🥔 STILL A POTATO<small>next shot: potato</small>', GOOSE_BEAT_MS);
   }
   G.previewDirty = true;
-  setTimeout(startWalk, 900);
+  const then = chore.then ?? startWalk;
+  setTimeout(then, 900);
 }
 // the egg hatches on its next landing; a gosling adopts you
 let adoptee = null;
@@ -1630,7 +1684,7 @@ function goosePunt(g) {
   start.y = G.course.h(start.x, start.z) + R;
   const L = launch('wedge', 0.55 + Math.random() * 0.5, Math.cos(a), Math.sin(a), (Math.random() - 0.5) * 1.6, 1, tr);
   const wmP = wmPhase();
-  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, wmPhase: wmP }, start, L);
+  const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, wmPhase: wmP, cupSealed: !G.bossOpen }, start, L);
   G.shot = { sim, t: 0, kind: 'punt', ev: 0, L, start, bullet: null, clubId: 'wedge', landed: false, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false, wmPhase: wmP };
   G.mode = 'flight';
   G.flightCam = { phase: 0, t: 0.3, pos: camera.position.clone(), look: G.camLook.clone() };
@@ -1710,7 +1764,7 @@ function gooseSwallow(g) {
 // ============================================================ swing input
 const swing = { active: false, src: '', phase: 'back', back: 0, peak: 0, fwd: 0, drift: 0, tDown: 0, angle: 0, follow: 0 };
 const SWING_PX = 260;
-function canSwing() { return G.mode === 'address' && !G.shot && !G.walk && !G.finalWait; }
+function canSwing() { return (G.mode === 'address' || (G.mode === 'goose' && !!G.bonk)) && !G.shot && !G.walk && !G.finalWait && !G.bossIntro && G.honkStrike?.phase !== 'card'; }
 function beginSwing(src) {
   if (G.mode === 'address' && !clubAllowed(G.club)) autoClub();   // never a driver off the fairway
   if (G.overview) { toggleOverview(false); snapAddressCam(true); }
@@ -1805,7 +1859,8 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
   const d = aimDir();
   setScope(false);
   const ball = shoo ? { name: 'spare ball', trait: RANGE_BALL.trait } : bag();
-  const mods = shotMods(true, clubId);
+  const mods = shotMods(!shoo, clubId);
+  if (!shoo && G.honkStrike?.phase === 'clock') G.honkStrike.escaped = performance.now();
   const trait = traitOf(ball);
   for (const k of ['speed', 'bounce', 'roll', 'wind', 'side', 'capture']) if (mods[k]) trait[k] *= mods[k];
   // putter: the pull-back is metres of flat-green roll (full pull = the tier's range)
@@ -1816,7 +1871,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
   const start = { ...(shoo ? G.gooseLie : G.ball) };
   const strokeNo = G.strokes + 1;
   const world = {
-    course: G.course, cup: G.cup, wind: G.wind, trait, colliders: G.colliders,
+    course: G.course, cup: G.cup, wind: G.wind, trait, colliders: G.colliders, cupSealed: !G.bossOpen,
     dynamic: [...gooseCollider(), ...rivalColliders(start), ...(shoo ? [] : galleryColliders(start)), ...(shoo ? [] : pinColliders())],
     ghost: shoo ? null : ghostColliderFor(strokeNo, start), ghostR: GHOST_R,
     cupR: mods.cupR, airGravity: mods.airGravity, noTrees: mods.noTrees, strokeNo, noAura: auraOff(), wmPhase: wmPhase(),
@@ -1970,6 +2025,7 @@ function fireEvent(e, shot) {
         shot.gooseHit = true;
         sfx.gooseBonk(); burst(e.x, e.y + 0.3, e.z, 40, 0xffffff, { speed: 3, up: 3, life: 1.6, grav: 2 });
         const hitG = geese[+e.tag.slice(6)];
+        if (hitG?.boss && !G.bossOpen) shot.bossHit = true;   // (council round 9) a bonk, free or early
         if (shoo || !hitG) break;
         G.stats.gooseHits++; moment(25, `Bonked a goose on hole ${G.holeIdx + 1}`);
         if (hitG.gosling) { sfx.squeak?.(); say('gooseBlock', vars(), { bump: 4 }); }
@@ -1996,6 +2052,7 @@ function fireEvent(e, shot) {
       break;
     case 'oob': sfx.oob(); break;
     case 'holed': break;
+    case 'sealed': if (shot.kind === 'player') { hud.banner('🔒 SEALED<small>Bonk the Boss first.</small>', 1500); sfx.knock?.(0.6); } break;
   }
 }
 
@@ -2055,6 +2112,7 @@ function endShot() {
   $('letterbox').classList.remove('show'); document.body.classList.remove('bullet');
   G.previewHidden = false;
   if (s.kind === 'knock') { endKnock(s); return; }
+  if (s.kind === 'shoo') { endBonk(s); return; }
   if (s.kind === 'punt' || s.kind === 'sasquack') {
     // where the goose's drop-kick ended up. No stroke for the kick itself.
     const end = s.sim.end;
@@ -2085,7 +2143,9 @@ function endShot() {
     G.ghostGlide = { from: { ...G.ghost.override }, to: ghostRestAfter(s.strokeNo), t: 0 };
   } else if (G.ghost.deferred) { G.ghostSolo = { shot: G.ghost.deferred, t: 0, strokeNo: s.strokeNo }; G.ghost.deferred = null; ghostTrail.geometry.setDrawRange(0, 0); tomSwingNow(); }
   else placeGhostMesh(ghostRestAfter(s.strokeNo));
+  maybeGhostBonk(ghostRestAfter(s.strokeNo));
   for (const g of liveGeese()) if (g.state !== 'flee') g.frozen = false;
+  if (s.bossHit && !G.bossOpen) bossBonk({ early: true });
   // keep a faint trail of this stroke
   const tl = makeTrail(oldTrailMat, s.sim.n); fillTrail(tl, s.sim, s.sim.n); G.trails.push(tl);
   liveTrail.geometry.setDrawRange(0, 0);
@@ -2246,6 +2306,10 @@ function updateWalk(dt) {
     G.mode = 'address';
     snapAddressCam();
     if (!maybeTomNudge()) checkStymie();
+    // a supply drop gets its moment; the Boss's business waits for the next shot
+    const looted = maybeLoot();
+    if (!looted && (maybeBossGuard() || maybeHonkStrike())) return;
+    if (maybeSandWash()) return;
     const s = G.course.surf(G.ball.x, G.ball.z);
     if (G.holeIdx === 0 && G.strokes === 1 && !G.hintsShown.scopeTip && G.mode === 'address') { G.hintsShown.scopeTip = true; hud.hint(W3('Tap 🔭 to zoom.', '<b>Right-click</b> to zoom.', 'Hold <b>LT</b> to zoom.'), 6000); }
     if (G.aura && !G.auraTip && !auraOff() && Math.hypot(G.ball.x - G.holeDef.bossAura.at[0], G.ball.z - G.holeDef.bossAura.at[1]) < 160) { G.auraTip = true; hud.toast('🌀 Right of the Boss slings. Left stalls.'); }
@@ -2330,8 +2394,10 @@ function computeDocks(course, h) {
       let tip = 0;
       for (let d = 0.5; d < 30; d += 0.5) { const x = c.x + ux / L * d, z = c.z + uz / L * d; if (course.surf(x, z) === 'water') { tip = d + 3; break; } }
       if (!tip) continue;
+      // (owner) the ball goes down to the right of the dock (facing the water), not behind it
+      const rx2 = -uz / L, rz2 = ux / L, side = s => ({ x: c.x + rx2 * 2.6 * s - ux / L * 1.0, z: c.z + rz2 * 2.6 * s - uz / L * 1.0 });
       const back = { x: c.x - ux / L * 2.2, z: c.z - uz / L * 2.2 };
-      const drop = dryLand(back.x, back.z, 0.6) ? back : { x: c.x, z: c.z };
+      const drop = [side(1), side(-1), back].find(p => dryLand(p.x, p.z, 0.6)) ?? { x: c.x, z: c.z };
       docks.push({ pond: p, a: c.a, land: { x: c.x, z: c.z }, tip: { x: c.x + ux / L * tip, z: c.z + uz / L * tip }, stand: { x: c.x + ux / L * (tip - 1.2), z: c.z + uz / L * (tip - 1.2) }, drop, level: p.level });
       if (docks.filter(d => d.pond === p).length >= (rx * rz > 300 ? 2 : 1)) break;
     }
@@ -2497,6 +2563,7 @@ function holeOut(s, afterScare) {
   const from = dist2(s.start, G.cup);
   if (!s.gimme) moment(from * (G.strokes === 1 ? 4 : 1) + (s.wasBullet ? 10 : 0), `${G.strokes === 1 ? 'Ace' : 'Holed'} from ${from.toFixed(from < 10 ? 1 : 0)} m on hole ${G.holeIdx + 1}`);
   ballMesh.visible = false;
+  if (s.clubId === 'putter' && s.start && !s.gimme) G.stats.longestPutt = Math.max(G.stats.longestPutt ?? 0, dist2(s.start, G.cup));
   const n = G.strokes, par = G.holeDef.par;
   G.holeScores[G.holeIdx] = n;
   const diff = n - par;
@@ -2763,7 +2830,7 @@ function shotMods(consume, clubId = G.club) {
   if (!c) return m0;
   const m = { ...m0 };
   for (const [k, v] of Object.entries(c)) m[k] = (m[k] ?? 1) * v;
-  if (consume) { const was = G.ballCurse; G.ballCurse = null; setTimeout(() => hud.toast(was === 'potato' ? '🥔 The potato is mash. Ball is back.' : '🚿 The muck flew off. Ball is back.'), 2600); }
+  if (consume) { const was = G.ballCurse; G.ballCurse = null; setTimeout(() => hud.toast(was === 'potato' ? '🥔 The potato is mash. Ball is back.' : '🚿 The grit flew off. Ball is back.'), 2600); }
   return m;
 }
 function shotModsPU(consume, clubId = G.club) {
@@ -3388,6 +3455,329 @@ function updateRivalAvatar(r, p, dt) {
   }
 }
 
+// a hole's song (the Lookers windmill): louder as you, your ball or the camera get near
+function updateBillboardSong() {
+  const h = G.holeDef, S = h?.song;
+  if (!S || G.mode === 'title' || G.mode === 'end') { AUDIO.proximityMusic(null, 0); return; }
+  let d = Infinity;
+  for (const [x, z] of S.points) for (const p of [camera.position, G.ball, G.playerAt]) if (p) d = Math.min(d, Math.hypot(p.x - x, p.z - z));
+  AUDIO.proximityMusic(S.url, 1 - (d - S.near) / (S.far - S.near));
+}
+
+// ============================================================ the Boss fight (council round 9)
+// Hole 9: the cup is sealed until you bonk the Boss. Inside 30 m it flies over
+// and sits on the cup; you get three free bonk shots (the spare ball, no
+// stroke), then it yields out of pity. Any real stroke that bonks it on its
+// throne opens the cup early and kills the Honk Hole. On the approach, once a
+// round, the Boss calls a Honk Strike on your ball: swing before it lands.
+let cupLid = null;
+const bossOf = () => liveGeese().find(g => g.boss);
+function resetBossGate(h) {
+  if (cupLid) { scene.remove(cupLid); cupLid = null; }
+  G.bossOpen = !h.bossGate; G.bossBonked = false; G.bonk = null; G.bossIntro = false; G.ghostBonked = false; G.bossGuarded = false;
+  if (G.honkStrike) endHonkStrike(true);
+  if (!h.bossGate) return;
+  cupLid = new THREE.Mesh(new THREE.CircleGeometry(CUP_R + 0.06, 28).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0x7a2fb0, emissive: 0x5a1a90, emissiveIntensity: 0.9, roughness: 0.5 }));
+  cupLid.renderOrder = 5;
+  setTimeout(() => { if (cupLid && G.course) { cupLid.position.set(h.pin[0], G.course.h(h.pin[0], h.pin[1]) + 0.012, h.pin[1]); scene.add(cupLid); } }, 0);
+  tintFlag(true);
+}
+function tintFlag(sealed) {
+  const b = G.flag?.userData?.beacon; if (!b) return;
+  b.userData.c0 ??= b.material.color.getHex();
+  b.material.color.setHex(sealed ? 0xb04dff : b.userData.c0);
+}
+function popCupLid() {
+  const lid = cupLid; cupLid = null; tintFlag(false);
+  if (!lid) return;
+  const t0 = performance.now(), y0 = lid.position.y;
+  lid.material.transparent = true;
+  const step = () => {
+    const k = (performance.now() - t0) / 600;
+    if (k >= 1) { scene.remove(lid); return; }
+    lid.position.y = y0 + k * 2.2; lid.rotation.y += 0.4; lid.material.opacity = 1 - k;
+    requestAnimationFrame(step);
+  };
+  step();
+}
+function maybeBossGuard() {
+  const gate = G.holeDef?.bossGate;
+  if (!gate || G.bossOpen || G.bossGuarded || G.mode !== 'address' || G.strokes < 1 || dist2(G.ball, G.cup) > gate.r) return false;
+  const boss = bossOf();
+  if (!boss) { G.bossOpen = true; popCupLid(); return false; }   // never a softlock
+  G.bossGuarded = true;
+  if (boss.carry || boss.state === 'tug') { G.bossOpen = true; popCupLid(); return false; }
+  boss.state = 'graze'; boss.target = null; boss.frozen = false; boss.ceremony = null;
+  // it lands on the cup, or just beyond it if your ball is already close
+  const d = dist2(G.ball, G.cup), ux = (G.cup.x - G.ball.x) / (d || 1), uz = (G.cup.z - G.ball.z) / (d || 1);
+  const spot = d < 2.5 ? { x: G.cup.x + ux * 2.0, z: G.cup.z + uz * 2.0 } : { x: G.cup.x, z: G.cup.z };
+  burst(boss.x, G.course.h(boss.x, boss.z) + 1.2, boss.z, 30, 0xb04dff, { speed: 2.5, up: 2, life: 1.2, grav: 1.5 });
+  boss.state = 'fly'; boss.guard = true; boss.fly = 1; boss.target = spot;
+  G.bossIntro = true;
+  hud.banner('👑 THE BOSS GUARDS THE CUP', 2200);
+  say('bossGuard', vars(), { bump: 12 });
+  sfx.honk(3);
+  // never a softlock: whatever the Boss is doing after 4 s, it's on the cup
+  clearTimeout(maybeBossGuard.t); maybeBossGuard.t = setTimeout(() => { if (G.bossIntro) { boss.x = spot.x; boss.z = spot.z; boss.state = 'guard'; boss.fly = 0; boss.frozen = false; bossLanded(boss); } }, 4000);
+  return true;
+}
+function bossLanded(boss) {
+  boss.guard = false;
+  G.bossIntro = false;
+  burst(boss.x, G.course.h(boss.x, boss.z) + 0.6, boss.z, 24, 0xffffff, { speed: 2, up: 2, life: 1, grav: 2 });
+  sfx.thump?.();
+  enterBonk(boss);
+}
+function enterBonk(boss) {
+  goose = boss;
+  G.gooseLie = { ...G.ball };
+  G.bonk = { tries: G.bonk?.tries ?? 0 };
+  G.mode = 'goose';
+  G.ball = { ...G.gooseLie };
+  aimAtPoint(boss.x, boss.z);
+  const s = G.course.surf(G.ball.x, G.ball.z);
+  G.club = null; setClub(s === 'green' || s === 'fringe' ? 'putter' : 'wedge');
+  shooMesh.material.color.setHex(0xffd34d);
+  snapAddressCam();
+  bonkHint();
+}
+function bonkHint() {
+  const n = (G.bonk?.tries ?? 0) + 1, max = G.holeDef.bossGate.tries;
+  hud.hint(`👑 Bonk ${n} of ${max} · ${W3('Flick at the Boss. Free shot.', 'Swing at the Boss. Free shot.', 'Swing at the Boss. Free shot.')}`, 0, { stay: true });
+}
+function endBonk(s) {
+  shooMesh.visible = false; ballMesh.visible = true;
+  const boss = bossOf(), max = G.holeDef.bossGate?.tries ?? 3;
+  if (s.bossHit) { bossBonk({ early: false }); leaveBonk(); return; }
+  G.bonk.tries++;
+  if (G.bonk.tries >= max) { bossYield(); leaveBonk(); return; }
+  sfx.honk(2);
+  hud.banner(G.bonk.tries === max - 1 ? '👑 Missed!<small>Last bonk.</small>' : `👑 Missed!<small>${max - G.bonk.tries} bonks left.</small>`, 1600);
+  if (boss) { boss.perk = 1.2; burst(boss.x, G.course.h(boss.x, boss.z) + 1.4, boss.z, 10, 0xb04dff, { speed: 1.2, up: 1.5, life: 0.8 }); }
+  G.mode = 'goose';
+  G.ball = { ...G.gooseLie };
+  if (boss) aimAtPoint(boss.x, boss.z);
+  bonkHint();
+}
+function leaveBonk() {
+  G.ball = { ...G.gooseLie }; G.bonk = null; goose = null;
+  shooMesh.material.color.setHex(0xc8c0b0);
+  G.mode = 'address'; hud.hint('');
+  aimAtPoint(G.cup.x, G.cup.z); autoClub(); snapAddressCam(); updateHUD();
+}
+function bossBonk({ early = false } = {}) {
+  if (G.bossOpen) return;
+  G.bossOpen = G.bossBonked = true;
+  popCupLid();
+  const boss = bossOf();
+  G.hitstop = Math.max(G.hitstop, 0.12);
+  sfx.gooseBonk(); setTimeout(() => sfx.honk(3), 120);
+  if (boss) {
+    const y = G.course.h(boss.x, boss.z);
+    burst(boss.x, y + 1.4, boss.z, 60, 0xb04dff, { speed: 3, up: 3, life: 1.4, grav: 2 });
+    burst(boss.x, y + 1.4, boss.z, 30, 0xffffff, { speed: 2.5, up: 2.5, life: 1.2, grav: 2 });
+    // the crown pops off; the Boss sulks off the green, toward its throne
+    if (boss.crown) { boss.crown.crown.parent?.remove(boss.crown.crown); boss.crown.aura.parent?.remove(boss.crown.aura); boss.crown = null; burst(boss.x, y + 2.6, boss.z, 24, 0xffd34d, { speed: 2, up: 4, life: 1.4, grav: 4 }); }
+    const ba = G.holeDef.bossAura, hx = ba ? ba.at[0] : boss.home.x, hz = ba ? ba.at[1] : boss.home.z;
+    const dx = hx - G.cup.x, dz = hz - G.cup.z, L = Math.hypot(dx, dz) || 1;
+    let tx = G.cup.x + dx / L * (Math.max(G.course.green[2], G.course.green[3]) + 6), tz = G.cup.z + dz / L * (Math.max(G.course.green[2], G.course.green[3]) + 6);
+    if (!validLand(tx, tz)) { tx = boss.home.x; tz = boss.home.z; }
+    boss.state = 'flee'; boss.t = 6; boss.target = { x: tx, z: tz }; boss.home = { x: tx, z: tz, r: 2 };
+  }
+  hud.banner(early ? '👑 BOSS BONKED!<small>The Honk Hole dies.</small>' : '👑 BOSS BONKED!<small>the cup is open</small>', 2200);
+  say('bossBonk', vars(), { bump: -12 });
+  moment(40, `Bonked the Boss on hole ${G.holeIdx + 1}`);
+  G.stats.bossBonks = (G.stats.bossBonks ?? 0) + 1;
+  if (G.room) { const first = !G.bonkSeen; G.bonkSeen = true; sendEmote('bossbonk', '', String(myHole()), { state: true }); if (first) setTimeout(() => hud.toast('👑 You bonked it first!'), 1600); }
+}
+function bossYield() {
+  G.bossOpen = true;
+  popCupLid();
+  const boss = bossOf(), ba = G.holeDef.bossAura;
+  if (boss) { boss.state = 'flee'; boss.t = 8; boss.target = ba ? { x: ba.at[0], z: ba.at[1] } : { x: boss.home.x, z: boss.home.z }; }
+  hud.banner('👑 The Boss pities you.<small>Cup open.</small>', 2200);
+  say('bossYield', vars(), { bump: 6 });
+}
+// solo: Old Tom's ghost (or yours) bonks the Boss too, so you see him obey the same rule
+function maybeGhostBonk(rest) {
+  const gate = G.holeDef?.bossGate;
+  if (!gate || G.room || G.ghostBonked || !rest || rest.holed || Math.hypot(rest.x - G.cup.x, rest.z - G.cup.z) > gate.r) return;
+  G.ghostBonked = true;
+  setTimeout(() => {
+    const boss = bossOf(); if (!boss || G.mode === 'end') return;
+    const y = G.course.h(boss.x, boss.z);
+    burst(boss.x, y + 1.6, boss.z, 30, 0x7ff6ff, { speed: 2.2, up: 2, life: 1.2, grav: 1 });
+    burst(boss.x, y + 1.2, boss.z, 20, 0xffffff, { speed: 1.5, up: 1.5, life: 1, grav: 2 });
+    boss.perk = 1; sfx.honk(2); sfx.ghostHit?.();
+    hud.toast(G.ghostSource === 'pb' ? '👻 Your ghost bonked the Boss.' : '👻 Old Tom bonked the Boss.');
+    if (G.ghostSource !== 'pb') tomSay('bonk');
+  }, 600);
+}
+// ---- the Honk Strike
+let strikeVis = null;
+function maybeHonkStrike() {
+  const hs = G.holeDef?.honkStrike;
+  if (!hs || G.strikeDone || G.honkStrike || G.mode !== 'address' || G.strokes < 1 || G.bossBonked || auraOff() || G.finalWait || G.wheel) return false;
+  const d = dist2(G.ball, G.cup), s = G.course.surf(G.ball.x, G.ball.z);
+  if (d < hs.band[0] || d > hs.band[1] || s === 'green' || s === 'fringe') return false;
+  G.strikeDone = true;
+  G.honkStrike = { phase: 'card', t: 0, at: { x: G.ball.x, z: G.ball.z }, clock: hs.clock, r: hs.r, tick: hs.clock + 1 };
+  hud.banner(`📻 HONK STRIKE!<small>${W3('Flick before they land!', 'Swing before they land!', 'Swing before they land!')}</small>`, 1600);
+  sfx.honk(3); setTimeout(() => sfx.honk(2), 250);
+  say('honkStrike', vars(), { bump: 12 });
+  sendEmote('honkstrike', '', String(myHole()), { state: true });
+  return false;   // the card plays over address; the swing unlocks when it ends
+}
+function buildStrikeVis(S) {
+  const g = new THREE.Group();
+  const ring = new THREE.Mesh(new THREE.RingGeometry(S.r - 0.5, S.r, 56).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xff4040, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6 }));
+  const cross = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.8, 24).rotateX(-Math.PI / 2), ring.material);
+  const y = G.course.h(S.at.x, S.at.z) + 0.25;
+  ring.position.set(S.at.x, y, S.at.z); cross.position.copy(ring.position);
+  g.add(ring, cross);
+  // Gander Squadron: five geese in a V, coming in high from the far side of the green
+  const away = Math.atan2(S.at.z - G.cup.z, S.at.x - G.cup.x) + Math.PI;
+  const from = { x: S.at.x + Math.cos(away) * 260, z: S.at.z + Math.sin(away) * 260 };
+  const squad = [];
+  for (let k = 0; k < 5; k++) {
+    const m = buildGooseBreed(k === 0 ? 'toulouse' : 'embden'); m.scale.setScalar(2.6);
+    const side = k === 0 ? 0 : (k % 2 ? 1 : -1) * Math.ceil(k / 2);
+    squad.push({ m, side, row: Math.abs(side) }); g.add(m);
+  }
+  scene.add(g);
+  return { g, ring, squad, from, dirx: Math.cos(away + Math.PI), dirz: Math.sin(away + Math.PI) };
+}
+function updateHonkStrike(dt) {
+  const S = G.honkStrike; if (!S || !G.course) return;
+  const paused = !$('help').classList.contains('hidden') || document.hidden;
+  if (S.phase === 'card') {
+    if (!paused) S.t += dt;
+    if (S.t >= READY_SECS) {
+      S.phase = 'clock'; S.t = 0; strikeVis = buildStrikeVis(S);
+      $('strikeClock').classList.remove('hidden');
+      hud.toast('📻 Gander Squadron, honk on target.');
+    }
+    return;
+  }
+  const V = strikeVis;
+  if (S.phase === 'clock') {
+    // the clock runs while you're standing over it (it waits out a swing in progress)
+    if (!paused && !S.escaped && (G.mode === 'address' || swing.active)) S.t += dt;
+    const left = Math.max(0, S.clock - S.t);
+    const n = Math.ceil(left);
+    if (n !== S.tick && n > 0) { S.tick = n; $('strikeClock').textContent = `📻 ${n}`; sfx.tick(); if (n <= 3) sfx.honk(1); }
+    V.ring.material.opacity = 0.55 + 0.4 * Math.abs(Math.sin(performance.now() / 180));
+    // the squadron arrives over the zone as the clock ends
+    const k = clamp(S.t / S.clock, 0, 1);
+    placeSquad(V, S, k);
+    if (S.escaped && performance.now() - S.escaped > 600) { strikeImpact(S, false); return; }
+    if (S.t >= S.clock && !swing.active) strikeImpact(S, true);
+    return;
+  }
+  if (S.phase === 'after') {
+    S.t += dt;
+    placeSquad(V, S, 1 + S.t / 3);
+    for (const c of S.chutes ?? []) {
+      if (c.down) continue;
+      const k = clamp((S.t - c.delay) / 2.6, 0, 1), gy = G.course.h(c.to.x, c.to.z);
+      c.m.position.set(lerp(c.from.x, c.to.x, k), lerp(c.from.y, gy, k) + Math.sin(S.t * 2 + c.delay * 5) * 0.4 * (1 - k), lerp(c.from.z, c.to.z, k));
+      c.m.rotation.z = Math.sin(S.t * 1.7 + c.delay * 3) * 0.18 * (1 - k);
+      if (k >= 1) {
+        c.down = true; S.landed++;
+        burst(c.to.x, gy + 0.3, c.to.z, 24, 0xffffff, { speed: 3, up: 3, life: 1, grav: 3 });
+        burst(c.to.x, gy + 0.3, c.to.z, 14, 0xffd84a, { speed: 2.5, up: 2.5, life: 1, grav: 3 });
+        sfx.thump?.(); sfx.honk(1);
+        if (!reduceMotion) G.shake = Math.max(G.shake, 0.25);
+      }
+    }
+    const allDown = (S.chutes ?? []).every(c => c.down);
+    if (allDown && S.caught && !S.blasted) { S.blasted = true; G.mode = 'address'; strikeBlast(); }
+    if (S.t > (allDown ? 0 : 99) && S.t > 6) endHonkStrike();
+  }
+}
+function placeSquad(V, S, k) {
+  const tx = S.at.x, tz = S.at.z;
+  for (const q of V.squad) {
+    const bx = lerp(V.from.x, tx, k), bz = lerp(V.from.z, tz, k);
+    const x = bx - V.dirx * q.row * 5 + -V.dirz * q.side * 5, z = bz - V.dirz * q.row * 5 + V.dirx * q.side * 5;
+    q.m.position.set(x, Math.max(G.course.h(x, z), 0) + 20 + q.row * 0.8, z);
+    q.m.rotation.y = Math.atan2(V.dirx, V.dirz);
+    const u = q.m.userData; if (u.wingL) { const f = Math.sin(performance.now() / 70 + q.side) * 0.9; u.wingL.rotation.z = -Math.abs(f); u.wingR.rotation.z = Math.abs(f); }
+  }
+}
+// (owner) the strike lands as a little film: the camera tilts up to watch the
+// squadron pass over, and four paratrooper geese float down onto the zone.
+// Eggs burst where they touch down; if your ball is still in there, it's blown off.
+function strikeImpact(S, caughtCheck) {
+  S.phase = 'after'; S.t = 0; S.landed = 0;
+  $('strikeClock').classList.add('hidden');
+  if (strikeVis) strikeVis.ring.visible = false;
+  S.caught = caughtCheck && G.mode === 'address' && !G.shot && Math.hypot(G.ball.x - S.at.x, G.ball.z - S.at.z) <= S.r;
+  // paratroopers drop from the squadron's line
+  const V = strikeVis, n = reduceMotion ? 2 : 4;
+  S.chutes = [];
+  for (let k = 0; k < n; k++) {
+    const q = V.squad[k % V.squad.length], m = buildParatrooper();
+    const a = (k / n) * Math.PI * 2 + 0.4, r = S.r * (0.25 + 0.5 * ((k * 37) % 10) / 10);
+    const to = { x: S.at.x + Math.cos(a) * r, z: S.at.z + Math.sin(a) * r };
+    m.position.copy(q.m.position); scene.add(m); V.g.add(m);
+    S.chutes.push({ m, from: q.m.position.clone(), to, delay: 0.5 + k * 0.25, down: false });
+  }
+  if (S.caught) { G.mode = 'strikeCam'; S.camPos = camera.position.clone(); hud.banner('🪂 PARATROOPERS!', 1600); }
+  else setTimeout(() => hud.banner('😎 Never look back at explosions.', 1800), 900);
+}
+function buildParatrooper() {
+  const g = new THREE.Group();
+  const goose = buildGooseBreed('embden'); goose.scale.setScalar(1.8); g.add(goose);
+  const canopy = new THREE.Mesh(new THREE.SphereGeometry(2.4, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xff5a4a, roughness: 0.7, side: THREE.DoubleSide }));
+  canopy.position.y = 4.6; canopy.scale.y = 0.55; g.add(canopy);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0x2a2020 });
+  for (const [x, z] of [[-2, 0], [2, 0], [0, -2], [0, 2]]) g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(x, 4.6, z), new THREE.Vector3(0, 1.6, 0)]), lineMat));
+  return g;
+}
+function updateStrikeCam(dt) {
+  const S = G.honkStrike; if (!S || !strikeVis) { G.mode = 'address'; return; }
+  // look up at the V first, then follow the paratroopers down
+  const t = S.t, V = strikeVis;
+  const sq = new THREE.Vector3(); for (const q of V.squad) sq.add(q.m.position); sq.multiplyScalar(1 / V.squad.length);
+  const cs = new THREE.Vector3(); let n = 0; for (const c of S.chutes ?? []) { if (!c.down) { cs.add(c.m.position); n++; } } if (n) cs.multiplyScalar(1 / n); else cs.set(S.at.x, G.course.h(S.at.x, S.at.z), S.at.z);
+  const want = t < 1.3 ? sq : cs;
+  camera.position.lerp(S.camPos, 1 - Math.exp(-dt * 4));
+  G.camLook.lerp(want, 1 - Math.exp(-dt * (t < 1.3 ? 3 : 2.5)));
+  camera.lookAt(G.camLook);
+}
+function strikeBlast() {
+  if (G.mode !== 'address' || G.shot) return;
+  const tr = traitOf(bag()), wmP = wmPhase();
+  const away = Math.atan2(G.ball.z - G.cup.z, G.ball.x - G.cup.x);
+  const start = { ...G.ball };
+  let best = null;
+  for (let k = 0; k < 10; k++) {
+    const a = away + (Math.random() - 0.5) * 2.4;   // within ±70°: never toward the pin
+    for (const p of [0.04, 0.06, 0.08, 0.11, 0.15, 0.2, 0.28, 0.38]) {
+      const L = launch('wedge', p, Math.cos(a), Math.sin(a), 0, 1, tr);
+      const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, wmPhase: wmP, cupSealed: !G.bossOpen }, start, L);
+      const c = Math.hypot(sim.end.x - start.x, sim.end.z - start.z);   // where it stops (moon gravity rolls far)
+      const sc = Math.abs(c - 18) + (sim.result === 'water' ? 6 : 0);
+      if (!best || sc < best.sc) best = { sc, sim, L };
+    }
+    if (best && best.sc < 3) break;
+  }
+  hud.banner('💥 EGGED!<small>blown off your lie</small>', GOOSE_BEAT_MS);
+  sfx.gooseBonk(); if (!G.room) tomLater('goose', 2600);
+  G.shot = { sim: best.sim, t: 0, kind: 'punt', ev: 0, L: best.L, start, bullet: null, clubId: 'wedge', landed: false, strokeNo: G.strokes + 1, ball: bag(), wasBullet: false, called: false, wmPhase: wmP };
+  G.mode = 'flight';
+  G.flightCam = { phase: 0, t: 0.3, pos: camera.position.clone(), look: G.camLook.clone() };
+  ballMesh.visible = true;
+}
+function endHonkStrike(silent = false) {
+  if (strikeVis) { scene.remove(strikeVis.g); strikeVis = null; }
+  $('strikeClock').classList.add('hidden');
+  if (G.honkStrike) G.honkStrike.phase = 'done';
+  G.honkStrike = null;
+  void silent;
+}
+
 // ------------------------------------------------------------ the Honk Hole (the finale boss)
 function buildAura(course, ba) {
   const g = new THREE.Group();
@@ -3439,6 +3829,7 @@ function updateAura(dt) {
 // the aura only works while the boss sits on its throne
 function auraOff() {
   const ba = G.holeDef.bossAura; if (!ba) return true;
+  if (G.bossBonked) return true;
   const boss = liveGeese().find(g => g.boss);
   return !boss || Math.hypot(boss.x - ba.at[0], boss.z - ba.at[1]) > 3;
 }
@@ -3463,6 +3854,7 @@ function nearestTrunk(p, within) {
   return best?.c ?? null;
 }
 function maybeSasquack() {
+  if (G.honkStrike && G.honkStrike.phase !== 'done') return false;
   if (!sasquackReady() || G.powerUp?.noTrees || disruptionSpent()) return false;
   const s = G.course.surf(G.ball.x, G.ball.z);
   if (s === 'green' || s === 'fringe') return false;
@@ -3669,7 +4061,47 @@ function gooseStash(g) {
 
 // ============================================================ hole extras
 // The windmill and turnstile, crazy golf, the bowling pins, and the graveyard.
+// (owner) hole 9's supply crates (an original crate, no game's art): rest
+// your ball within reach and one pops open with a random power-up
+function buildChests(h, group) {
+  G.chests = [];
+  for (const [x, z] of h.lootChests ?? []) {
+    const y = G.course.h(x, z), c = new THREE.Group();
+    const olive = new THREE.MeshStandardMaterial({ color: 0x55602e, roughness: 0.8 }), stripe = new THREE.MeshStandardMaterial({ color: 0xffc72c, emissive: 0x403000, roughness: 0.6 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.8, 0.9), olive); box.position.y = 0.4;
+    const band = new THREE.Mesh(new THREE.BoxGeometry(1.44, 0.14, 0.94), stripe); band.position.y = 0.5;
+    const lid = new THREE.Group(); lid.position.set(0, 0.8, -0.45);
+    const lidBox = new THREE.Mesh(new THREE.BoxGeometry(1.46, 0.16, 0.94), olive); lidBox.position.set(0, 0.08, 0.45); lid.add(lidBox);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.0, depthWrite: false })); glow.position.y = 0.9;
+    c.add(box, band, lid, glow); c.position.set(x, y, z); c.rotation.y = Math.atan2(G.holeDef.tee[0] - x, G.holeDef.tee[1] - z);
+    c.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    group.add(c);
+    G.chests.push({ x, z, open: false, lid, glow });
+  }
+}
+function maybeLoot() {
+  if (G.mode !== 'address') return;
+  for (const ch of G.chests ?? []) {
+    if (ch.open || Math.hypot(G.ball.x - ch.x, G.ball.z - ch.z) > 6) continue;
+    ch.open = true;
+    const picks = POWERUPS.filter(p => ['moon', 'pogo', 'ghost', 'bucket', 'ring'].includes(p.id));
+    const p = picks[Math.floor(Math.random() * picks.length)];
+    applyPowerUp(p);
+    const t0 = performance.now();
+    const anim = () => { const k = Math.min(1, (performance.now() - t0) / 500); ch.lid.rotation.x = -k * 1.9; ch.glow.material.opacity = 0.7 * (1 - Math.abs(k * 2 - 1)) + 0.25 * k; if (k < 1) requestAnimationFrame(anim); };
+    anim();
+    const y = G.course.h(ch.x, ch.z);
+    burst(ch.x, y + 1, ch.z, 50, 0xffd34d, { speed: 3, up: 4, life: 1.4, grav: 3 });
+    burst(ch.x, y + 1, ch.z, 30, 0x9ae07a, { speed: 2.5, up: 3, life: 1.2, grav: 3 });
+    sfx.catchBall(); sfx.wheelLand?.(true);
+    hud.banner(`🎁 SUPPLY DROP!<small>${p.emoji} ${esc(p.name)}</small>`, 2200);
+    return true;
+  }
+  return false;
+}
 function setupHoleExtras(h, group) {
+  buildChests(h, group);
+  if (h.billboards) group.add(W.buildBillboards(G.course, h.billboards));
   G.windmill = null; G.aura = null; G.auraTold = false; G.auraTip = false; G.auraGrowTold = false; G.crown = null;
   if (h.bossAura) { G.aura = buildAura(G.course, h.bossAura); group.add(G.aura); }
   if (h.windmill) {
@@ -3729,7 +4161,7 @@ function rackPins(h) {
   let k = 0;
   for (let r = 0; r < b.rows; r++) for (let i = 0; i <= r; i++, k++) {
     const x = b.at[0] + (i - r / 2) * b.gap, z = b.at[1] - r * b.row, y = G.course.h(x, z);
-    const mesh = buildGooseBreed(k === b.kingpin ? 'toulouse' : 'embden');
+    const mesh = buildGooseBreed(k === b.kingpin ? 'toulouse' : 'embden'); if (b.scale) mesh.scale.multiplyScalar(b.scale);
     mesh.position.set(x, y, z); mesh.rotation.order = 'YXZ'; mesh.rotation.y = (Math.random() - 0.5) * 0.3;   // facing the tee, give or take
     scene.add(mesh);
     PINS.list.push({ k, x, z, y, mesh, down: false, fall: 0, yaw: 0 });
@@ -3737,7 +4169,8 @@ function rackPins(h) {
 }
 const pinsUp = () => PINS.list.filter(p => !p.down).length;
 function pinColliders() {
-  return PINS.list.filter(p => !p.down).map(p => ({ kind: 'sphere', x: p.x, y: p.y + 0.42, z: p.z, r: 0.46, e: 0.35, plow: true, tag: 'pin:' + p.k }));
+  const r = PINS.def?.r ?? 0.46;
+  return PINS.list.filter(p => !p.down).map(p => ({ kind: 'sphere', x: p.x, y: p.y + r * 0.92, z: p.z, r, e: 0.35, plow: true, tag: 'pin:' + p.k }));
 }
 function topple(k, e, dx = 0, dz = -1) {
   const p = PINS.list[k]; if (!p || p.down) return;
@@ -3748,7 +4181,7 @@ function topple(k, e, dx = 0, dz = -1) {
   const e2 = e * 0.8;   // tuned in playtests: a centred hit at roll-out speed (~5 m/s) clears the rack
   if (e2 <= 1.8) return;
   for (const q of PINS.list) {
-    if (q.down || Math.hypot(q.x - p.x, q.z - p.z) > 1.3 || q.z > p.z + 0.1) continue;
+    if (q.down || Math.hypot(q.x - p.x, q.z - p.z) > (PINS.def?.gap ?? 1.15) * 1.15 || q.z > p.z + 0.1) continue;
     PINS.pending++;
     setTimeout(() => { PINS.pending--; topple(q.k, e2, q.x - p.x, q.z - p.z); }, 120);
   }
@@ -3776,6 +4209,12 @@ function bowlingVerdict() {
     say('strike', vars(), { bump: strike ? -20 : -8 });
     if (strike) moment(40, `Bowled a strike with ten geese on hole ${G.holeIdx + 1}`);
     return true;
+  }
+  // (owner) a call for however many geese went down this shot
+  const down = PINS.before - up;
+  if (down > 0) {
+    hud.banner(`🎳 ${down} ${down === 1 ? 'GOOSE' : 'GEESE'} DOWN`, 1600);
+    say(down >= 7 ? 'pinsMost' : down >= 4 ? 'pinsHalf' : down >= 2 ? 'pinsFew' : 'pinsOne', vars(), { bump: down >= 7 ? -8 : -3 });
   }
   PINS.before = up;
   return false;
@@ -4026,6 +4465,8 @@ function onEmote(ev) {
   if (ev.kind === 'scared') { hud.toast(`👻 Old Tom got ${esc(r.name)}.`); return; }
   if (ev.kind === 'sasquack') { hud.toast(`🦶 ${esc(r.name)} met the Sasquack.`); return; }
   if (ev.kind === 'finale') { hud.toast(`🎆 ${esc(r.name)} has finished.`); return; }
+  if (ev.kind === 'bossbonk') { const first = !G.bonkSeen; G.bonkSeen = true; hud.toast(first ? `👑 ${esc(r.name)} bonked it first!` : `👑 ${esc(r.name)} bonked the Boss.`); return; }
+  if (ev.kind === 'honkstrike') { hud.toast(`📻 Honk strike on ${esc(r.name)}!`); return; }
   // (round 8, S4) reactions and quick chat land from any hole; everything else is hole-local
   if (hole !== myHole() && !['react', 'chat', 'sabx', 'regroup'].includes(ev.kind)) return;
   if (ev.kind === 'chat') {
@@ -4209,6 +4650,7 @@ function dropPuppet(id) {
 }
 // ---- gimme
 function offerGimme(r) {
+  if (!G.bossOpen) return;   // (council round 9) no gimmes through a sealed cup
   G.gimmeFrom = r.id;
   const el = $('gimme');
   el.innerHTML = `🤝 <b>${esc(r.name)}</b>: gimme? <button id="gimmeYes">Take it ${W3('', '(G)', 'Ⓧ')}</button>`;
@@ -4220,6 +4662,7 @@ function offerGimme(r) {
   clearTimeout(offerGimme.t); offerGimme.t = setTimeout(() => { el.classList.add('hidden'); G.gimmeOffer = null; }, 8000);
 }
 function acceptGimme() {
+  if (!G.bossOpen) { G.gimmeOffer = null; $('gimme').classList.add('hidden'); return; }
   G.gimmeOffer = null; $('gimme').classList.add('hidden');
   if (G.gimmeFrom) { reportSabotage(G.gimmeFrom, 'gimme'); G.gimmeFrom = null; }
   G.strokes++; G.usedGimme = true;
@@ -4660,8 +5103,8 @@ function applyInputCopy() {
   $('breathTxt').innerHTML = W3('', 'HOLD <b>SHIFT</b> TO STEADY', 'HOLD <b>RT</b> TO STEADY');
   $('breath').style.display = INPUT === 'touch' ? 'none' : '';
   $('helpRows').innerHTML = HELP_ROWS[INPUT].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
-  $('titleHow').innerHTML = W3('<b>Drag down, flick up</b> to swing.', '<b>Drag down, flick up</b> to swing.', '<b>Right stick: pull back, push</b> to swing.');
   if (G.mode === 'flyover') $('flySkip').textContent = W3('Tap to skip', 'Click to skip', 'Ⓐ to skip');
+  $('ovBtn').querySelector('.k').textContent = W3('', 'O', 'Ⓨ');
   if (G.overview) $('ovLbl').textContent = W3('🛰 Overview · tap 🛰 to return', '🛰 Overview · O to return', '🛰 Overview · Ⓨ to return');
 }
 applyInputCopy(); applyTV();
@@ -4753,7 +5196,7 @@ canvas.addEventListener('wheel', e => {
   stepClub(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 function look(dx, dy) {
-  if (!(G.mode === 'address' || G.mode === 'wheel')) return;
+  if (!(G.mode === 'address' || G.mode === 'wheel' || (G.mode === 'goose' && G.bonk && !G.shot))) return;
   const sens = 0.0022 * (G.scoped ? 0.16 : 1);
   G.yaw -= dx * sens;
   G.pitch = clamp(G.pitch - dy * sens, -0.75, 0.5);
@@ -4818,7 +5261,7 @@ addEventListener('keyup', e => {
   if (e.code === 'KeyZ') setScope(false);
 });
 function keyAim(dt) {
-  if (!(G.mode === 'address' || G.mode === 'wheel') || swing.active && swing.src !== 'key') return;
+  if (!(G.mode === 'address' || G.mode === 'wheel' || (G.mode === 'goose' && G.bonk && !G.shot)) || swing.active && swing.src !== 'key') return;
   const s = (G.scoped ? 0.06 : 0.9) * dt;
   if (keys.KeyA || keys.ArrowLeft) G.yaw += s;
   if (keys.KeyD || keys.ArrowRight) G.yaw -= s;
@@ -4897,7 +5340,7 @@ function navRoot() {
 }
 function defaultFocus(root, targets) {
   const pick = id => targets.find(el => el.id === id);
-  if (root.id === 'title') return (!$('name').value.trim() && pick('name')) || pick('roomStart') || pick('play') || targets[0];
+  if (root.id === 'title') return (!$('name').value.trim() && pick('name')) || pick('roomStart') || pick('play') || pick('soloBtn') || pick($('roomCode').value.trim() ? 'roomJoinBtn' : 'roomCode') || targets[0];
   if (root.id === 'between') return pick('betweenGo') || targets[0];
   if (root.id === 'help') return pick('helpClose') || targets[0];
   if (root.id === 'lb') return pick('lbClose') || targets[0];
@@ -4941,7 +5384,7 @@ function padBack(root) {
   else if (root.id === 'reactBar') root.classList.remove('open');
   else if (root.id === 'moneyStrip') endMoney();
   else if (root.id === 'between') { G.possess = false; G.standMode = false; G.chatPick = false; G.teethPick = false; renderEmoteButtons(); padFocus($('betweenGo')); }
-  else if (root.id === 'title' && !$('roomPanel').classList.contains('hidden') && !G.room) { $('roomPanel').classList.add('hidden'); padFocus($('roomBtn')); }
+  else if (root.id === 'title') { const b = [...root.querySelectorAll('.tstep:not(.hidden) .tback')][0]; if (b) b.click(); }
 }
 // in play: what the sticks and buttons do in each mode
 function padGame(p, dt) {
@@ -4978,14 +5421,18 @@ function padGame(p, dt) {
   if (P('Y')) toggleOverview();
   if (P('B') && G.overview) { toggleOverview(false); return; }
   if (P('B') && swing.active) { userCancel(); Object.assign(stickSw, newStickSwing()); padLockSwing = true; }
-  const aimable = (m === 'address' || m === 'wheel') && !swing.active;
+  const aimable = (m === 'address' || m === 'wheel' || (m === 'goose' && G.bonk && !G.shot)) && !swing.active;
   if (aimable) {
     if (P('LB') || P('RB')) stepClub(P('RB') ? 1 : -1);
     const k = (G.scoped ? 0.07 : 1) * dt, ex = v => Math.sign(v) * v * v;   // squared: fine near the centre, fast at the rim
     G.yaw -= ex(p.lx) * 1.5 * k;
     G.pitch = clamp(G.pitch - ex(p.ly) * 0.9 * k, -0.75, 0.5);
     if (H('LEFT')) G.yaw += 0.12 * k; if (H('RIGHT')) G.yaw -= 0.12 * k;
-    if (H('UP')) G.pitch = clamp(G.pitch + 0.1 * k, -0.75, 0.5); if (H('DOWN')) G.pitch = clamp(G.pitch - 0.1 * k, -0.75, 0.5);
+    if (!$('ballChoose').classList.contains('hidden') && (P('UP') || P('DOWN'))) {
+      // on the tee, the D-pad picks the ball
+      const alive = G.bag.map((b, i) => b.alive ? i : -1).filter(i => i >= 0), j = alive.indexOf(G.ballIdx);
+      $('ballChoose').querySelector(`.bc[data-i="${alive[(j + (P('DOWN') ? 1 : -1) + alive.length) % alive.length]}"]`)?.click();
+    } else { if (H('UP')) G.pitch = clamp(G.pitch + 0.1 * k, -0.75, 0.5); if (H('DOWN')) G.pitch = clamp(G.pitch - 0.1 * k, -0.75, 0.5); }
   }
   if (p.pressed[BTN.LT] && (m === 'address' || m === 'wheel')) setScope(true);
   if (p.released[BTN.LT]) setScope(false);
@@ -5033,7 +5480,7 @@ function closePadKeys(done = false) {
   $('padKeys').classList.add('hidden');
   if (!input) return;
   if (input.id === 'name') store.set('ghg_name', input.value.trim());
-  padFocus(done ? (input.id === 'roomCode' ? $('roomJoinBtn') : G.room ? $('roomStart') : $('play')) : input);
+  padFocus(done ? (input.id === 'roomCode' ? $('roomJoinBtn') : $('soloBtn')) : input);
 }
 $('padKeysGrid').addEventListener('click', e => { const b = e.target.closest('button'); if (b) padKeyType(b.dataset.k); });
 
@@ -5057,7 +5504,7 @@ renderCharPick();
 setTimeout(() => { try { for (const g of GOLFERS) portraits[g.id] = buildGolferPortrait(g.id); } catch { /* emoji fallback */ } renderCharPick(); }, 300);
 // ---- tee chooser: which living ball plays this hole (no switching mid-hole, like real golf)
 function renderBallChoose() {
-  const show = G.mode === 'address' && G.strokes === 0 && G.bag.filter(b => b.alive).length > 1 && !swing.active;
+  const show = G.mode === 'address' && G.strokes === 0 && G.bag.filter(b => b.alive).length > 1 && !swing.active && G.ballPickedHole !== G.holeIdx;
   $('ballChoose').classList.toggle('hidden', !show);
   if (!show) return;
   const html = G.bag.map((b, i) => `<button class="bc${i === G.ballIdx ? ' active' : ''}${b.alive ? '' : ' dead'}" data-i="${i}" ${b.alive ? '' : 'disabled'}><i>${b.alive ? '👀' : '✝'}</i>${esc(b.name.split(' ').at(-1))}</button>`).join('');
@@ -5066,6 +5513,8 @@ function renderBallChoose() {
 $('ballChoose').addEventListener('click', e => {
   const b = e.target.closest('.bc'); if (!b || b.disabled || G.strokes !== 0) return;
   G.ballIdx = +b.dataset.i; renderBag(); G.previewDirty = true;
+  // (owner playtest) chosen: fold the picker away so the ball underneath shows
+  clearTimeout(renderBallChoose.t); renderBallChoose.t = setTimeout(() => { G.ballPickedHole = G.holeIdx; renderBallChoose(); }, 700);
   G.ballTagFull = true; G.ballTagT = 3; sfx.newBall?.();
   roomSendProgress();
 });
@@ -5083,8 +5532,23 @@ function beginPlay(startHole = 0) {
   makeAvatar();
   startRound(startHole);
 }
-$('play').addEventListener('click', () => { if (G.room) leaveRoom(); beginPlay(); });
-$('name').addEventListener('keydown', e => { if (e.key === 'Enter') (G.room ? $('roomStart') : $('play')).click(); });
+// ---- the title card, one step at a time (owner): Single player -> golfer and balls -> tee off;
+// Multiplayer -> room code (or create) -> golfer and balls -> join -> the lobby
+let titleRoom = null;   // { code } to join, { create: true }, or null for solo
+function showStep(step) {
+  for (const el of document.querySelectorAll('#title .tstep')) el.classList.toggle('hidden', el.dataset.step !== step);
+  G.titleStep = step;
+  if (step === 'pick') $('play').textContent = titleRoom ? (titleRoom.create ? 'Create the room ⛳' : `Join room ${titleRoom.code} ⛳`) : 'Tee off ⛳';
+  if (step !== 'lobby') roomErr('');
+}
+$('soloBtn').addEventListener('click', () => { unlockAudio(); if (G.room) leaveRoom(); titleRoom = null; showStep('pick'); });
+$('play').addEventListener('click', () => {
+  if (!titleRoom) { if (G.room) leaveRoom(); beginPlay(); return; }
+  const r = titleRoom;
+  roomAction((c, name) => r.create ? c.create(name) : c.join(r.code, name));
+});
+for (const b of document.querySelectorAll('#title .tback')) b.addEventListener('click', () => showStep(b.dataset.back || (titleRoom ? 'room' : 'mode')));
+$('name').addEventListener('keydown', e => { if (e.key === 'Enter') $('soloBtn').click(); });
 
 async function endRound() {
   G.mode = 'end';
@@ -5099,7 +5563,7 @@ async function endRound() {
   if (!G.usedGimme && (!pbGhost || total < pbGhost.total)) {
     try {
       const holes = G.roundRec.map(hs => hs.map(r => r.pen ? r : { sx: r.sx, sy: r.sy, sz: r.sz, holed: r.holed, res: r.res, f: r.f }));
-      store.set('ghg3d_pb', JSON.stringify({ total, name: G.playerName, holes, decks: HOLES.map((_, i) => holeAt(i).deckIdx ?? null) }));
+      store.set('ghg3d_pb2', JSON.stringify({ total, name: G.playerName, holes, decks: HOLES.map((_, i) => holeAt(i).deckIdx ?? null) }));
       newGhost = true;
     } catch { /* storage full or unavailable */ }
   }
@@ -5140,7 +5604,7 @@ async function endRound() {
     <div class="big">${total}</div>
     <div class="sub">${diff === 0 ? 'E' : diff > 0 ? '+' + diff : diff} · ${esc(beat)}${ghostNote}</div>
     ${moment}
-    ${G.room ? '<h4 style="margin-top:12px">Room standings</h4><ol class="standings" id="roomFinal"></ol><div class="sub" id="roomFinalNote"></div>' : ''}
+    ${G.room ? '<h4 style="margin-top:12px">Room standings</h4><ol class="standings" id="roomFinal"></ol><div class="sub" id="roomFinalNote"></div><div id="roomAwards"></div>' : ''}
     <table class="sc"><tr><th>Hole</th><th>Par</th><th>You</th>${G.room ? '' : '<th>👻</th>'}</tr>${rows}
     <tr><th>Total</th><th>${TOTAL_PAR}</th><th>${total}</th>${G.room ? '' : `<th>${ghostTotal}</th>`}</tr></table>
     ${tiles.length ? `<div class="stats">${tiles.map(t => `<div><b>${t[1]}</b>${t[2]}</div>`).join('')}</div>` : ''}
@@ -5281,11 +5745,13 @@ function frame() {
       updateTug(dt);
     } else if (G.mode === 'chore') {
       updateChore(dt);
+    } else if (G.mode === 'strikeCam') {
+      updateStrikeCam(dt);
     } else if (G.mode === 'gooseFetch') {
       const gp = new THREE.Vector3(goose.x, G.course.h(goose.x, goose.z) + 0.6, goose.z);
       const a = addressCam(); camera.position.lerp(a.pos, 1 - Math.exp(-dt * 3));
       G.camLook.lerp(gp, 1 - Math.exp(-dt * 4)); camera.lookAt(G.camLook);
-    } else if (G.mode === 'address' || G.mode === 'wheel' || G.mode === 'title') updateAddressCam(dt);
+    } else if (G.mode === 'address' || G.mode === 'wheel' || G.mode === 'title' || (G.mode === 'goose' && G.bonk && !G.shot)) updateAddressCam(dt);
     updateWheel(dt);
     updateIdleHint(dt);
     if (!G.shot || G.shot.kind === 'shoo') ballMesh.position.set(G.ball.x, G.ball.y, G.ball.z);
@@ -5301,6 +5767,9 @@ function frame() {
     updateAura(dt);
     updatePins(dt);
     updateFinalGroup();
+    updateHonkStrike(dt);
+    updateBillboardSong();
+    if (document.body.classList.contains('striking') !== (G.mode === 'strikeCam')) document.body.classList.toggle('striking', G.mode === 'strikeCam');
     updatePuppets(dt);
     updateFans(dt);
     applyKnockQ();
@@ -5544,6 +6013,7 @@ function updateRoomRace() {
 }
 function renderRoomFinal() {
   const el = $('roomFinal'); if (!el || !G.room) return;
+  renderAwards();
   const rows = standings();
   el.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}">${whoHTML(x.color, x.char)}${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${x.done ? `${x.total} strokes` : thruTxt(x)}</small></li>`).join('');
   const waiting = rows.filter(x => !x.done && x.online).length, out = rows.filter(x => !x.done).length;
@@ -5556,12 +6026,28 @@ function renderRoomFinal() {
 }
 
 // ---- sending
+// (owner playtest) end-card awards: longest holed putt, times goosed, potatoes peeled, Boss bonks
+function myAwards() {
+  const st = G.stats ?? {};
+  return { putt: Math.round((st.longestPutt ?? 0) * 10) / 10, goosed: st.gooseThefts ?? 0, peeled: st.peeled ?? 0, bonk: st.bossBonks ?? 0 };
+}
+function renderAwards() {
+  const el = $('roomAwards'); if (!el || !G.room) return;
+  const people = [{ name: 'You', aw: myAwards() }, ...[...rivals.values()].filter(r => r.prog?.aw).map(r => ({ name: r.name, aw: r.prog.aw }))];
+  const best = (k, min = 0.0001) => { let top = null; for (const p of people) { const v = p.aw?.[k] ?? 0; if (v >= min && (!top || v > top.v)) top = { v, names: [p.name] }; else if (top && v === top.v && v >= min) top.names.push(p.name); } return top; };
+  const lines = [];
+  const pu = best('putt'); if (pu) lines.push(`🏌️ <b>Longest putt</b> ${pu.names.map(esc).join(', ')} · ${pu.v.toFixed(1)} m`);
+  const go = best('goosed', 1); if (go) lines.push(`🪿 <b>Most goosed</b> ${go.names.map(esc).join(', ')} · ×${go.v}`);
+  const pe = best('peeled', 1); if (pe) lines.push(`🥔 <b>Potato peeler</b> ${pe.names.map(esc).join(', ')} · ×${pe.v}`);
+  const bo = people.filter(p => (p.aw?.bonk ?? 0) > 0).map(p => p.name); if (bo.length) lines.push(`👑 <b>Bonked the Boss</b> ${bo.map(esc).join(', ')}`);
+  el.innerHTML = lines.length ? `<h4 style="margin-top:10px">Awards</h4>${lines.map(l => `<div class="award">${l}</div>`).join('')}` : '';
+}
 function roomProgress(extra = {}) {
   if (!G.room?.inRound || !sameRound()) return null;
   const holed = G.mode === 'holed' || G.mode === 'end';
   return {
     hole: G.holeIdx + 1, strokes: G.strokes, scores: G.holeScores.filter(Number.isInteger),
-    rest: holed ? null : { x: G.ball.x, y: G.ball.y, z: G.ball.z }, holed, done: G.mode === 'end', ball: bag().name, char: charId(), ...extra,
+    rest: holed ? null : { x: G.ball.x, y: G.ball.y, z: G.ball.z }, holed, done: G.mode === 'end', ball: bag().name, char: charId(), aw: myAwards(), ...extra,
   };
 }
 function roomSendProgress() {
@@ -5650,16 +6136,13 @@ function showTitle() {
 }
 function roomErr(t, info = false) { $('roomErr').textContent = t || ''; $('roomErr').classList.toggle('info', info); }
 function openRoomPanel() {
-  $('roomPanel').classList.remove('hidden'); $('roomBtn').classList.add('hidden');
+  showStep(G.room ? 'lobby' : 'room');
   renderLobby();
 }
 function renderLobby() {
   const inRoom = !!G.room;
-  $('roomJoin').classList.toggle('hidden', inRoom);
-  $('roomLobby').classList.toggle('hidden', !inRoom);
-  $('play').textContent = inRoom ? 'Leave and play solo' : 'Tee off ⛳';
-  $('play').classList.toggle('go', !inRoom); $('play').classList.toggle('alt', inRoom);
-  if (!inRoom) return;
+  if (inRoom && G.mode === 'title' && G.titleStep !== 'lobby') showStep('lobby');
+  if (!inRoom) { if (G.titleStep === 'lobby') showStep('mode'); return; }
   $('roomCodeShow').textContent = G.room.code;
   $('roomMembers').innerHTML = (G.room.members ?? []).map(m => {
     const look = m.id === G.room.me ? myLook() : m.look ?? {}, golfer = GOLFERS.find(g => g.id === look.char);
@@ -5729,12 +6212,13 @@ function leaveRoom() {
   try { history.replaceState(null, '', location.pathname); } catch { /* sandboxed */ }
   renderLobby();
 }
-$('roomBtn').addEventListener('click', () => { unlockAudio(); openRoomPanel(); $('roomCode').focus(); });
-$('roomCreate').addEventListener('click', () => roomAction((c, name) => c.create(name)));
+$('roomBtn').addEventListener('click', () => { unlockAudio(); if (!needName()) return; titleRoom = null; showStep('room'); if (INPUT !== 'pad') $('roomCode').focus(); });
+$('roomCreate').addEventListener('click', () => { if (!needName()) return; titleRoom = { create: true }; showStep('pick'); });
 $('roomJoinBtn').addEventListener('click', () => {
   const code = $('roomCode').value.trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) { roomErr('Room codes are four letters.'); return; }
-  roomAction((c, name) => c.join(code, name));
+  if (!needName()) return;
+  titleRoom = { code }; showStep('pick');
 });
 $('roomCode').addEventListener('keydown', e => { if (e.key === 'Enter') $('roomJoinBtn').click(); });
 $('roomCode').addEventListener('input', e => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
@@ -5754,16 +6238,16 @@ $('roomStart').addEventListener('click', async () => {
   if (!res) { btn.disabled = false; roomErr("Couldn't start the round. Check your connection and try again."); renderLobby(); return; }
   onRoomStart(res);   // normally the SSE start event already did this
 });
-$('roomLeave').addEventListener('click', () => { leaveRoom(); $('roomCode').value = ''; });
+$('roomLeave').addEventListener('click', () => { leaveRoom(); $('roomCode').value = ''; titleRoom = null; showStep('mode'); });
 // ?room=CODE: rejoin silently after a reload, or prefill the code for a new invitee
 (function roomFromURL() {
   const code = new URLSearchParams(location.search).get('room')?.toUpperCase();
   if (!code || !/^[A-Z]{4}$/.test(code)) return;
   $('roomCode').value = code;
-  openRoomPanel();
   const saved = RoomClient.saved();
-  if (saved?.code === code && $('name').value.trim()) roomAction((c, name) => c.join(code, name));
-  else roomErr($('name').value.trim() ? 'You were invited to this room. Press Join.' : 'You were invited to this room. Enter your name, then press Join.', true);
+  if (saved?.code === code && $('name').value.trim()) { titleRoom = { code }; roomAction((c, name) => c.join(code, name)); return; }
+  if ($('name').value.trim()) { showStep('room'); roomErr(`You were invited to room ${code}. Press Join.`, true); }
+  else { showStep('mode'); roomErr(`Invited to room ${code}: your name, then Multiplayer.`, true); }
 })();
 
 // ============================================================ automation hook (QA + fun council)
@@ -5780,7 +6264,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, chore: chore.active ? { kind: chore.kind, prog: chore.prog, t: chore.t, ready: chore.ready } : null, ballCurse: G.ballCurse ?? null, overview: !!G.overview, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, padLock: padLockSwing, canSwing: canSwing(), moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, song: AUDIO.songState?.(), boss: G.holeDef?.bossGate ? { open: !!G.bossOpen, bonked: !!G.bossBonked, tries: G.bonk?.tries ?? null, guard: liveGeese().some(g => g.boss && g.state === 'guard'), intro: !!G.bossIntro, bossState: bossOf()?.state ?? null, frozen: !!bossOf()?.frozen } : null, honkStrike: G.honkStrike?.phase ?? (G.strikeDone ? 'done' : null), honkT: G.honkStrike?.t ?? null, chore: chore.active ? { kind: chore.kind, prog: chore.prog, t: chore.t, ready: chore.ready } : null, ballCurse: G.ballCurse ?? null, overview: !!G.overview, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, padLock: padLockSwing, canSwing: canSwing(), moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
@@ -5817,7 +6301,7 @@ window.golf = {
   docks: () => (G.docks ?? []).map(d => ({ stand: d.stand, drop: d.drop })),
   lieCheck: () => ({ surf: G.course.surf(G.ball.x, G.ball.z), aboveWater: +(G.course.h(G.ball.x, G.ball.z) - G.course.waterLevelAt(G.ball.x, G.ball.z)).toFixed(2), strokes: G.strokes }),
   forceLoss(k) { G.forceLoss = k; },
-  choreTest(kind) { startChore(kind); },
+  choreTest(kind, sand = false) { startChore(kind, { sand, then: sand ? () => { G.mode = 'address'; } : startWalk }); },
   chorePeel() { peelStrip(); },
   choreWash(x, y) { choreAt(x, y); },
   // where the shot line at the playing distance lands on screen (0,0 = dead centre)

@@ -99,7 +99,7 @@ export function simulate(world, start, L) {
   let vx = L.vx, vy = L.vy, vz = L.vz;
   let side = L.side, lift = L.lift;
   let air = !L.rolling;
-  let bounces = 0, lipping = false, inCanopy = new Set(), touchedGhost = false;
+  let bounces = 0, lipping = false, sealTold = false, inCanopy = new Set(), touchedGhost = false;
   const knocked = new Set();   // rival balls this shot has knocked away (they're rolling now, not here)
   let fi = 0, step = 0, result = 'rest', apex = y, carry = null;
   const n = { x: 0, y: 1, z: 0 };
@@ -362,7 +362,10 @@ export function simulate(world, start, L) {
 
     // ----------------------------------------------------------------- cup
     const cdx = x - cup.x, cdz = z - cup.z, cd = Math.hypot(cdx, cdz);
-    if (cd < CR) {
+    if (cd < CR && world.cupSealed) {
+      // (council round 9) the Boss has sealed the cup: the ball rolls over the lid
+      if (!sealTold && !air && cd < CR - R * 0.4 && Math.hypot(vx, vy, vz) < 1.0 * trait.capture) { sealTold = true; ev('sealed', {}); }
+    } else if (cd < CR) {
       const sp = Math.hypot(vx, vy, vz);
       if (!air && cd < CR - R * 0.4) {
         if (sp < 1.0 * trait.capture) { result = 'holed'; ev('holed', { speed: sp }); x = cup.x; z = cup.z; y = cupY - 0.05; break outer; }

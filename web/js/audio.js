@@ -408,28 +408,54 @@ export const swingTone = {
   },
 };
 
+// ---------------------------------------------------------------- a song by the billboards
+// One looped track whose volume follows how close you are (0..1). It starts on
+// first approach and stops once you've walked well away.
+const song = { url: null, buf: null, src: null, gain: null, loading: false, vol: 0 };
+export function proximityMusic(url, vol) {
+  if (!ctx) return;
+  if (url !== song.url) { stopSong(); song.url = url; song.buf = null; }
+  if (!url) return;
+  vol = Math.max(0, Math.min(1, vol));
+  if (!song.buf && !song.loading && vol > 0) {
+    song.loading = true;
+    fetch(url).then(r => r.arrayBuffer()).then(a => ctx.decodeAudioData(a)).then(b => { if (song.url === url) song.buf = b; }).catch(() => {}).finally(() => { song.loading = false; });
+  }
+  if (song.buf && !song.src && vol > 0.01 && !muted) {
+    song.gain = ctx.createGain(); song.gain.gain.value = 0; song.gain.connect(master);
+    song.src = ctx.createBufferSource(); song.src.buffer = song.buf; song.src.loop = true; song.src.connect(song.gain); song.src.start();
+  }
+  if (song.gain) song.gain.gain.setTargetAtTime(muted ? 0 : vol * 0.85, ctx.currentTime, 0.25);
+  if (song.src && vol <= 0.001 && song.vol <= 0.001) stopSong();
+  song.vol = vol;
+}
+export const songState = () => ({ url: song.url, playing: !!song.src, vol: song.vol });
+function stopSong() { try { song.src?.stop(); } catch { /* already stopped */ } song.src = null; song.gain?.disconnect(); song.gain = null; }
+
 // ---------------------------------------------------------------- voice clips
-// Pre-generated commentator lines (web/voice/*.mp3). One at a time: a new
-// line cuts off the last, like a broadcaster talking over themselves.
+// Pre-generated commentator lines (web/voice/*.mp3). The commentator queues
+// them (never two at once); playVoice resolves with the clip's length so the
+// next line waits for this one to finish.
 const voiceCache = new Map();
 let voiceSrc = null, voiceGain = null, voiceSeq = 0;
 export async function playVoice(url) {
-  if (!ok()) return;
+  if (!ok()) return 0;
   const seq = ++voiceSeq;
   try {
     let buf = voiceCache.get(url);
     if (!buf) {
-      const r = await fetch(url); if (!r.ok) return;
+      const r = await fetch(url); if (!r.ok) return 0;
       buf = await ctx.decodeAudioData(await r.arrayBuffer());
       voiceCache.set(url, buf);
       if (voiceCache.size > 80) voiceCache.delete(voiceCache.keys().next().value);
     }
-    if (seq !== voiceSeq) return;   // a newer line arrived while this one loaded
+    if (seq !== voiceSeq) return 0;   // a newer line arrived while this one loaded
     if (ctx.state !== 'running') { try { await ctx.resume(); } catch { /* still locked */ } }
     stopVoice();
     if (!voiceGain) { voiceGain = ctx.createGain(); voiceGain.gain.value = 1.0; voiceGain.connect(master); }
     const src = ctx.createBufferSource(); src.buffer = buf; src.connect(voiceGain); src.start();
     voiceSrc = src;
-  } catch { /* the caption already said it */ }
+    return buf.duration;
+  } catch { return 0; /* the caption already said it */ }
 }
 export function stopVoice() { try { voiceSrc?.stop(); } catch { /* already ended */ } voiceSrc = null; }

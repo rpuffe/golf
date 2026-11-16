@@ -4,7 +4,7 @@ A first-person 3D golf game for the browser, played at sunset, with a live
 leaderboard and real-time social toasts. It is deployed on
 [flightdeck](./CLAUDE.md).
 
-Nine holes (par 34) are played from behind the ball in first person. One
+Nine holes (par 35) are played from behind the ball in first person. One
 gesture swings on every device: drag down, then flick up. On top of real
 golf, five odd features came out of a design council (see
 [design/council.md](design/council.md)), and a second council round added
@@ -36,19 +36,29 @@ Also in the game:
   2. Gerald's Lake (par 3): carry the water, or fish for your ball.
   3. Old Tom's Stymie (par 4): his ghost parks on your putting line.
   4. Sunset Strip (par 5): wind, and the scope over a long carry.
-  5. The Bowling Green (par 4): ten geese racked like pins where a pure
-     drive stops, with gutter bunkers either side. Strike, spare, gutter ball.
-  6. The Windmill of Spite (par 4): its sails never stop; every shot starts
-     from where the blades are, and rooms share that phase.
+  5. The Bowling Green (par 4): ten big geese racked like pins where drives
+     are still rolling, with gutter bunkers either side. Strike, spare, gutter
+     ball.
+  6. The Windmill of Spite (par 4): the Lookers windmill. Its sails never
+     stop (every shot starts from where the blades are, and rooms share that
+     phase), the geese wear Lookers tees, and "Lookers, Lookers" plays as you
+     get near it.
   7. Old Tom's Plot (par 3): a foggy graveyard, and a jumpscare when you hole
      out (a gentle version for reduced motion or "Scares off").
-  8. Crazy Golf (par 2): a felt lane between rails. Each round draws one of
-     three layouts (The Turnstile, Pinball, The Camel), the same for everyone
-     in a room. Moon Boots and Pogo turn a putt into a hop; Banana curls it.
+  8. Crazy Golf (par 3): a three-leg felt lane between rails, putter only.
+     Each round draws one of three layouts (The Turnstile, Pinball, The Camel)
+     and a fresh Block Party of toy-voxel cubes on the last leg, the same for
+     everyone in a room. Moon Boots and Pogo turn a putt into a hop; Banana
+     curls it.
   9. The Last Moonshot (par 5): a launch-pad tee, moon gravity, a moat round
-     a mesa green, and the Boss's Honk Hole, which grows stronger every stroke
-     from the third. A clear leader gets taxed by the Boss, and the round ends
-     with fireworks as the geese fly off across the moon.
+     a gentle mesa green with a big sand trap where the moat was, two supply
+     crates (land within reach for a random power-up), and the Boss's Honk
+     Hole. On the approach the Boss calls a **Honk Strike**: swing before the
+     paratrooper geese land. The cup is **sealed** until
+     you bonk the Boss: inside 30 m it sits on the cup and you get three free
+     bonk shots (or bonk it early on its throne). Old Tom obeys the same seal.
+     The round ends with fireworks as the geese fly off across the moon. See
+     [design/council-round9.md](design/council-round9.md).
 - **🦶 The Sasquack.** Leave your ball by a tree trunk and a 3 m goose-yeti
   drops out of the canopy, roars at a low hero camera (trees in the shot are
   hidden), pulls out a pine tree and chips you out.
@@ -103,9 +113,15 @@ Also in the game:
   calm carries at full power: 126 / 111 / 80 / 44 m.
 - **🛰 Overview:** a sky view of the shot from address (O, the 🛰 button, or
   Ⓨ on a controller). Aim still works up there.
-- **🥚 Brooded:** a goose that broods your ball hands it back either caked in
-  goose muck (power-wash it clean) or hard-boiled into a potato (peel it).
-  Unfinished, your next shot plays heavy, or as a potato. At
+- **🥚 Brooded:** a goose that's going to brood your ball skips the tug
+  and hands it back, where it sat, hard-boiled into a potato: peel it.
+  Unfinished, your next shot is played as a potato. (Geese no longer just
+  eat the ball.)
+- **🏖️ Sandy:** a ball in a bunker is full of sand: power-wash it before you
+  hit (a quiet 10 s). Unfinished, the next shot plays heavy.
+- **🪧 Billboards:** hole 4 (Sunset Strip) has two of them.
+- **🏆 Room awards:** the room's end card names the longest holed putt, the
+  most goosed, and who peeled the potato. At
   rest, gold dots read the first two-thirds of a dead-weight putt, break
   included. While you pull back they run the whole roll to a stop ring,
   coloured green (it drops), gold (short) or red (well past), and the cup's
@@ -202,9 +218,10 @@ used by the headless QA and fun-council playtests.
 
 Every finished round is written **append-only**, one object per round, so
 concurrent players never overwrite each other. The leaderboard shows each
-player's best (fewest) strokes. Rounds on the 9-hole course are stored under
-`scores-3d9/`. Older rounds stay untouched under `scores/` (the 2D course),
-`scores-3d/` (the 4-hole course) and `scores-3d7/` (the 7-hole course) but
+player's best (fewest) strokes. Rounds on the par-35 course are stored under
+`scores-3d9b/`. Older rounds stay untouched under `scores/` (the 2D course),
+`scores-3d/` (the 4-hole course), `scores-3d7/` (the 7-hole course) and
+`scores-3d9/` (par 34) but
 are no longer read. With no bucket (local dev, `make preflight`), scores go to an
 in-memory store. The healthcheck never touches S3.
 

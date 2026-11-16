@@ -39,6 +39,8 @@ export function placeTrees(course, holeDef) {
       out.push(makeTree(course, px, pz, rng));
     }
   }
+  // (owner) clearings round the billboards, so they read from the fairway
+  for (const b of holeDef.billboards ?? []) for (let k = out.length - 1; k >= 0; k--) if (Math.hypot(out[k].x - b.at[0], out[k].z - b.at[1]) < 10) out.splice(k, 1);
   return out;
 }
 function makeTree(course, x, z, rng) {
@@ -127,5 +129,11 @@ function miniColliders(course, holeDef) {
     cs.push({ kind: 'wall', x1, z1, x2, z2, x: (x1 + x2) / 2, z: (z1 + z2) / 2, br: Math.hypot(x2 - x1, z2 - z1) / 2, r: M.rail, y0: bot - 0.2, y1: top + M.railH, e: 0.7, tag: 'rail' });
   }
   for (const [x, z, r] of holeDef.bumpers ?? []) { const h = course.h(x, z); cs.push({ kind: 'cyl', x, z, r, y0: h - 0.5, y1: h + 0.5, e: 1.3, tag: 'bumper' }); }
+  // Block Party cubes: four thin walls each
+  for (const [x, z, s] of holeDef.blocks ?? []) {
+    const h = course.h(x, z), d = s / 2;
+    for (const [x1, z1, x2, z2] of [[x - d, z - d, x + d, z - d], [x + d, z - d, x + d, z + d], [x + d, z + d, x - d, z + d], [x - d, z + d, x - d, z - d]])
+      cs.push({ kind: 'wall', x1, z1, x2, z2, x: (x1 + x2) / 2, z: (z1 + z2) / 2, br: s / 2, r: 0.04, y0: h - 0.2, y1: h + s, e: 0.6, tag: 'rail' });
+  }
   return cs;
 }

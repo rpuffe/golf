@@ -66,6 +66,11 @@ const L = {
   tugGooseHoled: [['The goose has holed it. For you. Unbelievable.', 'THE GOOSE PUNTED IT IN! The goose should turn pro!', 'THE GOOSE HOLED IT! SIGN THE GOOSE! SIGN THE GOOSE!']],
   // round 7: the Bowling Green, crazy golf, and the finale
   strike: [['A strike. Ten geese, all down.', 'STRIKE! All ten! The geese are furious!', 'STRIKE! TEN GEESE! I HAVE NEVER BEEN SO PROUD!']],
+  // (owner) bowling calls by the count
+  pinsOne: [['One goose down. A start.', 'ONE goose! The other nine are laughing!', 'ONE GOOSE! I WILL TAKE IT! I WILL TAKE ONE GOOSE!']],
+  pinsFew: [['A few geese down. Polite applause.', 'Some geese down! The rest are furious!', 'GEESE DOWN! NOT ALL OF THEM, BUT GEESE!']],
+  pinsHalf: [['Half the flock is down.', 'Half the geese down! The other half is livid!', 'HALF THE GEESE! THAT IS SO MANY GEESE!']],
+  pinsMost: [['Nearly all of them. So close.', 'So close! The last goose is standing smugly!', 'ALMOST ALL OF THEM! THE LAST ONE IS LAUGHING AT US!']],
   gutter: [['Into the gutter. Unlucky.', 'Gutter ball! In golf! That is a first.', 'GUTTER BALL! WRONG SPORT! WRONG SPORT ENTIRELY!']],
   crazy: [['Off the woodwork. Classic crazy golf.', 'It is a pinball machine in there!', 'IT HIT EVERYTHING! THIS IS NOT GOLF, IT IS AN ARCADE!']],
   bossAngry: [['The Honk Hole is getting stronger.', 'The whirlpool is growing! Hurry, {name}!', 'IT IS GROWING! THE HONK HOLE IS HUNGRY!']],
@@ -77,6 +82,12 @@ const L = {
   // (owner's inside joke) the brood hands the ball back mucky, or as a potato
   broodWash: [['It brooded on it. It is... sticky.', 'Goose muck! Somebody fetch the pressure washer!', 'IT IS COVERED IN GOOSE! POWER WASH IT! POWER WASH IT NOW!']],
   broodPotato: [['The egg has hard-boiled. Into a potato.', 'It is a potato now! Peel it! Peel it!', 'A POTATO! SHE SAT ON IT AND MADE A POTATO! PEEL FOR YOUR LIFE!']],
+  sandWash: [['Sand in every dimple. Give it a wash.', 'Sandy ball! Fetch the pressure washer!', 'IT IS FULL OF SAND! POWER WASH IT! POWER WASH IT NOW!']],
+  // (council round 9) the Boss fight and the Honk Strike
+  bossGuard: [['The Boss is sitting on the cup.', 'It is ON the cup! Bonk it!', 'THE BOSS HAS THE CUP! BONK IT!']],
+  bossBonk: [['A clean bonk. The crown is off.', 'BONK! Right on the crown, {name}!', 'YOU BONKED THE BOSS! LONG LIVE {name}!']],
+  bossYield: [['The Boss steps aside. Out of pity.', 'It just... let you in. Embarrassing.', 'IT FELT SORRY FOR YOU! SORRY!']],
+  honkStrike: [['The Boss has called in air support.', 'Geese inbound! Swing, {name}, swing!', 'INCOMING! IT IS RAINING GEESE!']],
   choreWin: [['Spotless. Back to golf.', 'Good as new! Better than new!', 'SPARKLING! I CAN SEE MY FACE IN IT!']],
   choreFail: [['Not quite done. That will play heavy.', 'Half a job! That will cost you some distance!', 'HALF DONE! THE NEXT SHOT IS GOING TO BE UGLY!']],
   // the scare on a hole that wasn't a par: the gag, without a wrong score
@@ -132,14 +143,13 @@ let clipsFailed = false;
 fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { broodWash: 3, broodPotato: 3, choreWin: 2, choreFail: 2, greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
-let lastPrio = 0, lastAt = 0, pending = null, busyUntil = 0;
+const PRIO = { pinsOne: 2, pinsFew: 2, pinsHalf: 3, pinsMost: 3, bossGuard: 4, bossBonk: 4, bossYield: 3, honkStrike: 3, sandWash: 2, broodWash: 3, broodPotato: 3, choreWin: 2, choreFail: 2, greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+let busyUntil = 0;
 // (round 8, S11) one line at a time: a line has the floor for about as long as
 // it takes to say. Anything smaller waits in a single pending slot and is
 // dropped if it would come out more than ~2 s late (no narrating the last
 // shot). Only a bigger line, or a top-priority one, takes the floor early.
 const talkMs = line => 900 + line.length * 55;
-const STALE_MS = 2000;
 let voice = null, enabled = true, captionEl = null, captionTimer = 0;
 export const commentator = { hysteria: 0, lastLine: '', lastClass: '', history: [] };
 
@@ -179,23 +189,68 @@ export function voiceEnabled() { return enabled; }
 export function tier() { return commentator.hysteria < 34 ? 0 : commentator.hysteria < 67 ? 1 : 2; }
 export function bumpHysteria(d) { commentator.hysteria = Math.max(0, Math.min(100, commentator.hysteria + (d > 0 ? d * 1.5 : d))); }
 
+// (owner playtest) "the voice lines keep talking over each other": one voice
+// at a time, never cut off. While a line plays, one slot holds the best line
+// waiting (funny and rare beat routine), and a line that would come out stale
+// is dropped. The everyday calls (stepping up, fairway, green...) go quiet
+// after you've heard them a couple of times; the gags always get their turn.
+const COMMON = new Set(['tee', 'fairway', 'green', 'greenBirdie', 'rough', 'sand', 'holed', 'close', 'bulletcam', 'overtake', 'fallBehind',
+  'roomOvertake', 'roomFallBehind', 'roomLevel', 'rivalHoled', 'lipIn', 'gallery', 'whiff', 'overswing', 'calledIt', 'pure']);
+const FUNNY = new Set(['gooseTheft', 'tugStart', 'tugPunt', 'tugSwallow', 'tugBunker', 'tugWin', 'tugRelay', 'tugBrood', 'tugPond', 'tugStash', 'tugGooseHoled',
+  'scared', 'scaredOff', 'windmill', 'snap', 'junk', 'sasquack', 'strike', 'gutter', 'crazy', 'bossAngry', 'finale', 'broodPotato', 'broodWash', 'sandWash',
+  'pinsOne', 'pinsFew', 'pinsHalf', 'pinsMost', 'choreWin', 'choreFail', 'bossGuard', 'bossBonk', 'bossYield', 'honkStrike', 'teeth', 'knockIn', 'rangeBall', 'ace', 'tomb', 'ghostHit', 'stymie', 'gooseBlock', 'water', 'oob', 'rivalHit', 'roomStymie']);
+const voicedN = {};
+let voicePending = null, drainTimer = 0;
+function lineValue(cls, tr) {
+  const n = voicedN[cls] ?? 0;
+  let v = (PRIO[cls] ?? 1) * 10 + (tr === 2 ? 3 : 0);
+  if (FUNNY.has(cls)) v += 8;
+  if (COMMON.has(cls)) v -= 6 + 4 * Math.min(3, n); else v += Math.max(0, 6 - 3 * n);
+  return v;
+}
+function scheduleDrain() {
+  clearTimeout(drainTimer);
+  drainTimer = setTimeout(drain, Math.max(0, busyUntil - performance.now()) + 40);
+}
+function drain() {
+  const it = voicePending; voicePending = null;
+  if (!it) return;
+  if (performance.now() < busyUntil) { voicePending = it; scheduleDrain(); return; }
+  if (performance.now() - it.at > (it.tom ? 9000 : it.value >= 40 ? 5000 : 2500)) return;   // too late to be about this moment
+  playLine(it);
+}
+function enqueue(it) {
+  const now = performance.now();
+  if (now < busyUntil || voicePending) {
+    if (COMMON.has(it.cls) && it.value < 20) return;   // chatter never waits in line
+    // Old Tom's lines are rare and personal: once waiting, a commentator line never bumps him
+    if (!voicePending || (it.value >= voicePending.value && !(voicePending.tom && !it.tom))) voicePending = it;
+    scheduleDrain();
+    return;
+  }
+  playLine(it);
+}
+function playLine(it) {
+  const now = performance.now();
+  if (it.tom) { showTomCaption(it.text); busyUntil = now + talkMs(it.text); if (enabled && clips.has(it.key)) startVoice(`/voice/${it.key}.mp3`, now); scheduleDrain(); return; }
+  commentator.lastLine = it.line; commentator.lastClass = it.cls;
+  commentator.history.push({ cls: it.cls, line: it.line, tier: it.tr });
+  showCaption(it.line, it.tr);
+  // an everyday call you've heard twice: mostly a caption, and it doesn't hold the floor
+  const quiet = COMMON.has(it.cls) && (voicedN[it.cls] ?? 0) >= 2 && Math.random() > 0.35;
+  busyUntil = now + (quiet ? 900 : talkMs(it.line));
+  if (!quiet && speak(it.line, it.tr, it.cls, it.tpl, it.vars, now)) voicedN[it.cls] = (voicedN[it.cls] ?? 0) + 1;
+  scheduleDrain();
+}
+// a clip's real length decides when the next line may start
+function startVoice(url, at) {
+  playVoice(url).then(d => { if (d > 0) { busyUntil = Math.max(busyUntil, at + d * 1000 + 250); scheduleDrain(); } });
+}
+
 export function say(cls, vars = {}, { bump = 0 } = {}) {
   if (bump) bumpHysteria(bump);
   const sets = L[cls];
   if (!sets) return;
-  const prio = PRIO[cls] ?? 1, now = performance.now();
-  if (now < busyUntil && prio <= lastPrio && prio < 4) {
-    if (pending && pending.prio > prio) return;   // the slot holds something bigger
-    const p = pending = { cls, vars, prio, at: now };
-    setTimeout(() => {
-      if (pending !== p) return;
-      pending = null;
-      if (performance.now() - p.at <= STALE_MS) say(p.cls, p.vars);
-    }, busyUntil - now + 60);
-    return;
-  }
-  if (pending && (pending.cls === cls || pending.prio <= prio)) pending = null;
-  lastPrio = prio; lastAt = now;
   const tr = tier();
   // choose a variant set, never repeating the exact same line twice in a row
   const key = cls;
@@ -205,17 +260,12 @@ export function say(cls, vars = {}, { bump = 0 } = {}) {
   let tpl = sets[i][tr];
   let line = tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   if (line === commentator.lastLine) {
-    // never say the exact same thing twice in a row: try the other variants
     const alt = sets.map(s => s[tr]).find(l => l !== sets[i][tr]);
     if (!alt) return;
     tpl = alt;
     line = alt.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   }
-  commentator.lastLine = line; commentator.lastClass = cls;
-  busyUntil = now + talkMs(line);
-  commentator.history.push({ cls, line, tier: tr });
-  showCaption(line, tr);
-  speak(line, tr, cls, tpl, vars);
+  enqueue({ cls, vars, tpl, line, tr, at: performance.now(), value: lineValue(cls, tr) });
 }
 
 function showCaption(text, tr) {
@@ -227,9 +277,17 @@ function showCaption(text, tr) {
   clearTimeout(captionTimer);
   captionTimer = setTimeout(() => captionEl.classList.remove('show'), 2600 + text.length * 45);
 }
+function showTomCaption(text) {
+  if (!captionEl) return;
+  captionEl.textContent = text; captionEl.dataset.tier = 0; captionEl.dataset.who = 'tom';
+  captionEl.classList.remove('show'); void captionEl.offsetWidth; captionEl.classList.add('show');
+  clearTimeout(captionTimer);
+  captionTimer = setTimeout(() => { captionEl.classList.remove('show'); delete captionEl.dataset.who; }, 2600 + text.length * 45);
+}
 
-function speak(text, tr, cls, tpl, vars) {
-  if (!enabled) return;
+// returns true when a recorded clip (or the browser voice) is speaking the line
+function speak(text, tr, cls, tpl, vars, at = performance.now()) {
+  if (!enabled) return false;
   // a real voice actor (pre-generated) when we have the clip, else the browser's voice
   if (tpl) {
     const tag = voiceTag(cls, tr);
@@ -237,13 +295,13 @@ function speak(text, tr, cls, tpl, vars) {
     for (const vt of [voiceText(tpl, vars), tpl.includes('{ball}') ? voiceText(tpl, vars, true) : null]) {
       if (!vt) continue;
       const key = voiceKey(vt, tag);
-      if (clips.has(key)) { playVoice(`/voice/${key}.mp3`); return; }
+      if (clips.has(key)) { startVoice(`/voice/${key}.mp3`, at); return true; }
     }
   }
-  if (!clipsFailed) return;   // recorded voice only: a missing clip stays caption-only
+  if (!clipsFailed) return false;   // recorded voice only: a missing clip stays caption-only
   try {
     const ss = window.speechSynthesis;
-    if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return;
+    if (!ss || typeof SpeechSynthesisUtterance === 'undefined') return false;
     ss.cancel();
     const u = new SpeechSynthesisUtterance(tr === 2 ? text : text.toLowerCase().replace(/^./, c => c.toUpperCase()));
     if (voice) u.voice = voice;
@@ -251,7 +309,8 @@ function speak(text, tr, cls, tpl, vars) {
     u.rate = [0.88, 1.08, 1.3][tr];
     u.volume = [0.55, 0.8, 1][tr];
     ss.speak(u);
-  } catch { /* captions already shown */ }
+    return true;
+  } catch { return false; }
 }
 
 // Old Tom talks for himself (in his own voice, a Scot from 1882). His line
@@ -261,7 +320,7 @@ let tomAt = -1e9;
 // line is dealt from a shuffled deck, so nothing repeats until every line has
 // had its turn (and never twice running across a reshuffle), and each kind
 // waits its own while before it comes round again.
-const TOM_GAP = { holed: 75000, goose: 40000, ahead: 45000, behind: 45000, stymie: 35000 };
+const TOM_GAP = { holed: 75000, goose: 25000, ahead: 45000, behind: 45000, stymie: 35000 };
 const tomDeck = {}, tomLast = {}, tomKindAt = {};
 function dealTom(cls, lines) {
   let deck = tomDeck[cls];
@@ -274,17 +333,12 @@ function dealTom(cls, lines) {
 export function tomSay(cls, { force = false } = {}) {
   const lines = TOM_LINES[cls]; if (!lines) return false;
   const now = performance.now();
-  if (!force && (now - tomAt < 20000 || now - (tomKindAt[cls] ?? -1e9) < (TOM_GAP[cls] ?? 0))) return false;
+  if (!force && (now - tomAt < 12000 || now - (tomKindAt[cls] ?? -1e9) < (TOM_GAP[cls] ?? 0))) return false;
   tomAt = now; tomKindAt[cls] = now;
   const line = dealTom(cls, lines);
-  const text = line.replace(/\[[^\]]*\]\s*/g, '').trim();
-  if (captionEl) {
-    captionEl.textContent = text; captionEl.dataset.tier = 0; captionEl.dataset.who = 'tom';
-    captionEl.classList.remove('show'); void captionEl.offsetWidth; captionEl.classList.add('show');
-    clearTimeout(captionTimer);
-    captionTimer = setTimeout(() => { captionEl.classList.remove('show'); delete captionEl.dataset.who; }, 2600 + text.length * 45);
-  }
-  const key = tomKey(line);
-  if (enabled && clips.has(key)) playVoice(`/voice/${key}.mp3`);
+  const text = line.replace(/\[[^\]]*\]\s*/g, '').trim(), key = tomKey(line);
+  const it = { tom: true, cls: 'tom:' + cls, text, key, at: now, value: 70 };
+  if (force) { stopVoice(); busyUntil = 0; voicePending = null; playLine(it); }   // the scare's whisper and laugh are timed to the jump
+  else enqueue(it);
   return clips.has(key);
 }

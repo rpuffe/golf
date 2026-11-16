@@ -98,6 +98,9 @@ type Progress struct {
 	Done    bool   `json:"done"`
 	Ball    string `json:"ball,omitempty"`
 	Char    string `json:"char,omitempty"` // chosen golfer model, cosmetic
+	// Awards: a few round stats for the room's end card (longest putt, times
+	// goosed, potatoes peeled, Boss bonks). Small, bounded, cosmetic.
+	Awards map[string]float64 `json:"aw,omitempty"`
 }
 
 // Look is what a member picked on the title card, shown in the lobby before
@@ -301,7 +304,11 @@ func (r *Room) removeLocked(id string) {
 	if !ok {
 		return
 	}
+	// Forget each stream as it closes, so its own cleanup in serveEvents
+	// doesn't close it a second time (a panic that used to leave the room's
+	// lock held, and with it every room creation behind the janitor).
 	for ch := range m.conns {
+		delete(m.conns, ch)
 		close(ch)
 	}
 	delete(r.members, id)
@@ -372,9 +379,9 @@ func (r *Room) auth(id, token string) *Member {
 // ---- HTTP ----
 
 type joinReq struct {
-	Name     string `json:"name"`
-	ID       string `json:"id"`       // rejoin with an existing identity (page reload)
-	Token    string `json:"token"`    //
+	Name     string   `json:"name"`
+	ID       string   `json:"id"`       // rejoin with an existing identity (page reload)
+	Token    string   `json:"token"`    //
 	Takeover bool     `json:"takeover"` // "that's me": take over the seat of a member with this name
 	Char     string   `json:"char"`     // the golfer and balls picked on the title card
 	Balls    []string `json:"balls"`    //
@@ -507,6 +514,7 @@ func (rs *Rooms) serveEvents(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		room.mu.Lock()
+		defer room.mu.Unlock() // released even if anything below panics
 		if _, live := m.conns[ch]; live {
 			delete(m.conns, ch)
 			close(ch)
@@ -515,7 +523,6 @@ func (rs *Rooms) serveEvents(w http.ResponseWriter, r *http.Request) {
 		if room.members[m.ID] == m && len(m.conns) == 0 {
 			room.broadcastLocked("roster", room.stateLocked(), m.ID)
 		}
-		room.mu.Unlock()
 	}()
 
 	h := w.Header()
@@ -616,6 +623,19 @@ func validProgress(p *Progress) bool {
 	for _, s := range p.Scores {
 		if s < 1 || s > 99 {
 			return false
+		}
+	}
+	if len(p.Awards) > 8 {
+		return false
+	}
+	for k, v := range p.Awards {
+		if len(k) < 1 || len(k) > 12 || v < 0 || v > 100000 || v != v {
+			return false
+		}
+		for i := 0; i < len(k); i++ {
+			if k[i] < 'a' || k[i] > 'z' {
+				return false
+			}
 		}
 	}
 	return true

@@ -24,7 +24,23 @@
   /* ---------- HUD ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; }
   .panel { background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; box-shadow: 0 6px 24px rgba(0,0,0,0.25); }
-  #topLeft { position: absolute; left: 14px; top: 14px; padding: 8px 14px; }
+  /* (owner playtest) a broadcast-style scorebug: name and to-par on top; hole, par, distance and stroke dots below */
+  #topLeft.bug { position: absolute; left: 14px; top: 14px; min-width: 250px; border-radius: 6px; overflow: hidden; box-shadow: 0 6px 18px rgba(0,0,0,.35); font-family: inherit; }
+  .bugTop { display: flex; align-items: stretch; background: linear-gradient(180deg, #2f5fae, #24498c); }
+  .bugTop b { flex: 1; padding: 6px 12px; font-size: 20px; font-weight: 900; letter-spacing: .04em; text-transform: uppercase; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  #bugPar { min-width: 54px; display: grid; place-items: center; padding: 0 10px; font-size: 22px; font-weight: 900; color: #fff; background: #3a3f52; }
+  #bugPar.under { background: #d2353a; } #bugPar.over { background: #2b2b33; }
+  .bugBot { display: flex; align-items: center; gap: 12px; padding: 5px 12px; background: rgba(250,247,240,.96); color: #24304a; font-weight: 800; font-size: 14px; border-bottom: 3px solid #2f5fae; }
+  #bugHole { font-size: 16px; font-weight: 900; }
+  #bugStrokes { display: flex; gap: 4px; margin-left: auto; }
+  #bugStrokes i { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-size: 11px; font-weight: 900; background: #d9dbe0; color: #fff; }
+  #bugStrokes i.done { background: #9aa1ad; } #bugStrokes i.now { background: #d2353a; }
+  /* the menus get out of the way while the ball is in the air */
+  body.inflight #bottom, body.inflight #ballChoose, body.inflight #reactBar { opacity: 0; pointer-events: none; transition: opacity .25s; }
+  body.striking #hint, body.striking #bottom, body.striking #ballChoose, body.striking #reactBar, body.striking #crosshair { opacity: 0; pointer-events: none; }
+  /* TV mode: the club bar folds to the club in hand (LB/RB still shown) a moment after it changes */
+  body.tv #clubs.folded .club:not(.active) { display: none; }
+  #clubs .club { transition: opacity .2s; }
   #holeLine { font-size: 18px; font-weight: 900; letter-spacing: -0.3px; }
   #holeLine small { font-size: 13px; color: var(--muted); font-weight: 700; margin-left: 6px; }
   #roundLine { font-size: 13px; color: var(--muted); margin-top: 1px; }
@@ -76,10 +92,14 @@
   body.tv :is(#tug, #angler, #moneyStrip, #flyTitle) { zoom: 1.3; }
   body.pad #betweenGo::before, body.pad #finalGroup button::before, body.pad #reelBtn::before { content: "Ⓐ "; }
   /* the overview: a sky view of the shot */
+  #strikeClock { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 6px 16px; border-radius: 12px; background: rgba(150, 20, 30, .88); color: #fff; font-weight: 900; font-size: 22px; letter-spacing: .05em; box-shadow: 0 0 0 2px #ff6b6b; }
   #ovLbl { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); padding: 6px 14px; border-radius: 12px; background: rgba(20,12,36,.72); font-weight: 900; font-size: 15px; display: none; }
   body.overview #ovLbl { display: block; }
   body.overview #crosshair, body.overview #holeCard, body.overview #hint { opacity: 0; }
   body.overview #ovBtn { background: var(--sun); color: var(--plum); }
+  #ovBtn { position: relative; }
+  #ovBtn .k { position: absolute; right: -5px; bottom: -6px; min-width: 16px; padding: 0 3px; border-radius: 6px; background: var(--plum); color: var(--sun); font: 900 11px/16px ui-monospace, Menlo, monospace; }
+  #ovBtn .k:empty { display: none; }
   body.pad #chatToggle::after { content: "⧉"; position: absolute; right: -4px; bottom: -6px; font-size: 12px; color: var(--sun); }
   body.pad #chatToggle { position: relative; }
   body.pad #clubs::before, body.pad #clubs::after { align-self: center; padding: 0 6px; font: 900 12px ui-monospace, Menlo, monospace; color: var(--sun); }
@@ -169,7 +189,8 @@
   .club b { display: block; font-size: 16px; font-weight: 900; }
   .club span { font-size: 10px; color: var(--muted); }
   .club.active { background: var(--sun); color: var(--plum); box-shadow: 0 0 0 2px #fff6; }
-  .club.off { opacity: .32; }   /* the driver off the tee, anything but the putter on crazy golf */
+  .club.off { opacity: .32; }
+  #roomAwards .award { font-size: 14px; padding: 3px 0; border-bottom: 1px dashed #e8d5b5; }   /* the driver off the tee, anything but the putter on crazy golf */
   .club.active span { color: var(--plum2); }
   .club kbd { font: 700 9px var(--font); opacity: .55; }
   .balls { display: flex; gap: 6px; justify-content: center; margin: 6px 0; }
@@ -282,7 +303,7 @@
   #choreCanvas { width: min(240px, 64vw); aspect-ratio: 1; touch-action: none; border-radius: 50%; background: rgba(255,255,255,.06); }
   #chore .meter { height: 14px; margin-top: 8px; background: rgba(255,255,255,.14); }
   #choreFill { height: 100%; width: 0; background: linear-gradient(90deg, var(--sun), var(--mint)); }
-  #choreTimer { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  #choreTimer { display: none; }
   body.choring #touchSwing, body.choring #touchScope, body.choring #reactBar { opacity: 0; pointer-events: none; }
   body.tv #chore { zoom: 1.3; }
   #tugMid { position: absolute; right: 0; top: -2px; bottom: -2px; width: 6px; background: #fff; }
@@ -345,7 +366,8 @@
   #roomNet { font-size: 12px; color: #7a6a90; margin-top: 6px; }
   @media (max-width: 760px) {
     #topLeft { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
-    #holeLine { font-size: 15px; } #roundLine { font-size: 12px; } #ballLine { font-size: 12px; }
+    #topLeft.bug { min-width: 0; max-width: 62vw; padding: 0; background: none; border: 0; } .bugTop b { font-size: 15px; padding: 4px 8px; } #bugPar { min-width: 40px; font-size: 16px; }
+    .bugBot { gap: 8px; padding: 4px 8px; font-size: 12px; } #bugStrokes i { width: 16px; height: 16px; font-size: 9px; }
     #topRight { right: 8px; top: 50px; }
     #windBox { min-width: 0; padding: 6px 8px; } #windArrow { font-size: 18px; }
     #iconBtns { position: fixed; right: 8px; top: 8px; flex-direction: row; }
@@ -372,6 +394,9 @@
     #tempoChip { right: auto; left: 40px; top: calc(50% + 40px); }
     #touchSwing { right: calc(10px + env(safe-area-inset-right)); bottom: calc(112px + env(safe-area-inset-bottom)); width: 100px; height: 130px; }
     #touchScope { right: calc(10px + env(safe-area-inset-right)); bottom: calc(252px + env(safe-area-inset-bottom)); width: 50px; height: 50px; }
+    /* (owner) the overview sits bottom right on a phone, beside the 🔭 */
+    #iconBtns #ovBtn { position: fixed; right: calc(70px + env(safe-area-inset-right)); bottom: calc(252px + env(safe-area-inset-bottom)); width: 50px; height: 50px; border-radius: 50%; font-size: 22px; background: var(--panel); border: 0; color: #fff; pointer-events: auto; }
+    body.inflight #ovBtn, body.between #ovBtn, body.flying #ovBtn, body.bullet #ovBtn { opacity: 0; pointer-events: none; }
     #banner { font-size: 32px; top: 34%; } #banner small { font-size: 14px; }
     #angler { top: auto; bottom: 74px; transform: translateX(-50%); }
   }
@@ -385,10 +410,10 @@
 <div id="hud" class="hidden">
   <div id="crosshair"></div>
   <div id="ovLbl" aria-live="polite"></div>
-  <div id="topLeft" class="panel">
-    <div id="holeLine">Hole 1 <small>Par 4</small></div>
-    <div id="roundLine">Shot 1 · 0 m to pin</div>
-    <div id="ballLine"><i></i><b>—</b> <span></span></div>
+  <div id="strikeClock" class="hidden" aria-live="assertive">📻 7</div>
+  <div id="topLeft" class="bug" aria-live="polite">
+    <div class="bugTop"><b id="bugName">—</b><span id="bugPar">E</span></div>
+    <div class="bugBot"><span id="bugHole">1</span><span id="bugParHole">Par 4</span><span id="bugDist">0 m</span><span id="bugStrokes"></span></div>
   </div>
   <div id="topRight">
     <div id="windBox" class="panel">
@@ -399,7 +424,7 @@
     <div id="iconBtns">
       <button id="muteBtn" title="Sound (M)" aria-label="Toggle sound">🔊</button>
       <button id="voiceBtn" title="Commentator voice (V)" aria-label="Toggle commentator voice">🎙</button>
-      <button id="ovBtn" title="Overview (O)" aria-label="Overview of the shot">🛰</button>
+      <button id="ovBtn" title="Overview (O)" aria-label="Overview of the shot">🛰<span class="k" aria-hidden="true"></span></button>
       <button id="helpBtn" title="Controls (H)" aria-label="Show controls">?</button>
     </div>
   </div>
@@ -491,21 +516,33 @@
 <div id="title" class="overlay">
   <div class="card">
     <h1>Golden Hour <span>Golf</span></h1>
-    <div class="sub">First-person golf with geese and a ghost.<br>Four named balls. One life each.</div>
-    <input id="name" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your name">
-    <div class="pickLbl">Pick your golfer</div>
-    <div id="charPick" role="group" aria-label="Pick a golfer"></div>
-    <div id="charBlurb"></div>
-    <div class="pickLbl">Pick your four balls</div>
-    <div id="ballPick" role="group" aria-label="Pick four balls"></div>
-    <button id="play" class="go">Tee off ⛳</button>
-    <button id="roomBtn" class="go2">👥 Play with friends</button>
-    <div id="roomPanel" class="hidden">
+    <!-- (owner) one step at a time: mode, then (multiplayer) the room, then golfer and balls, then the lobby -->
+    <div class="tstep" data-step="mode">
+      <input id="name" maxlength="20" placeholder="Your name" autocomplete="nickname" aria-label="Your name">
+      <button id="soloBtn" class="go">🏌️ Single player</button>
+      <button id="roomBtn" class="go2">👥 Multiplayer</button>
+      <button id="lbBtn" class="alt">Leaderboard</button>
+    </div>
+    <div class="tstep hidden" data-step="room" id="roomPanel">
       <div id="roomJoin">
-        <button id="roomCreate" class="go2">Create a room</button>
+        <div class="pickLbl">Got a code?</div>
         <div class="row"><input id="roomCode" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" aria-label="Room code"><button id="roomJoinBtn" class="go2">Join</button></div>
+        <div class="pickLbl">Or start one</div>
+        <button id="roomCreate" class="go2">Create a room</button>
       </div>
-      <div id="roomLobby" class="hidden">
+      <button class="alt tback" type="button" data-back="mode">‹ Back</button>
+    </div>
+    <div class="tstep hidden" data-step="pick">
+      <div class="pickLbl">Pick your golfer</div>
+      <div id="charPick" role="group" aria-label="Pick a golfer"></div>
+      <div id="charBlurb"></div>
+      <div class="pickLbl">Pick your four balls</div>
+      <div id="ballPick" role="group" aria-label="Pick four balls"></div>
+      <button id="play" class="go">Tee off ⛳</button>
+      <button class="alt tback" type="button" data-back="">‹ Back</button>
+    </div>
+    <div class="tstep hidden" data-step="lobby">
+      <div id="roomLobby">
         <div class="sub" style="margin:0">Room code</div>
         <b id="roomCodeShow">----</b>
         <button id="roomCopy" class="alt">Copy invite link</button>
@@ -515,11 +552,8 @@
         <div id="roomNet"></div>
         <button id="roomLeave" class="alt">Leave room</button>
       </div>
-      <div id="roomErr" role="status"></div>
     </div>
-    <div class="how" id="titleHow"><b>Drag down, flick up</b> to swing.</div>
-    <div class="feat"><span>🪿 Geese</span><span>👻 Old Tom</span><span>🎡 Power-ups</span><span>🎣 Four Balls, One Life</span></div>
-    <button id="lbBtn" class="alt">Leaderboard</button>
+    <div id="roomErr" role="status"></div>
   </div>
 </div>
 

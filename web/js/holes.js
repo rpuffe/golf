@@ -71,6 +71,11 @@ export const HOLES = [
     hills: [[-35, -110, 28, 4], [48, -210, 28, 3.5], [14, -400, 22, 1.0]],
     bunkers: [[14, -366, 4, 2.5], [40, -388, 3.5, 4.5], [-22, -175, 6, 4]],
     ponds: [[10, -262, 34, 14]],
+    // (owner) billboards in the rough, facing the tee
+    billboards: [
+      { img: '/media/crew.jpg', at: [-24, -70], w: 8, h: 6 },
+      { img: '/media/flagpants.jpg', at: [20, -150], w: 4.8, h: 6.4 },
+    ],
     trees: { density: 0.8 },
     geese: [{ area: [4, -330, 12], radius: 14 }, { area: [-12, -150, 12], radius: 14 }, { area: [38, -370, 5], radius: 14, breed: 'canada' }],
     wind: 6.5,
@@ -90,7 +95,9 @@ export const HOLES = [
     ponds: [],
     trees: { density: 0.8 },
     // ten geese racked like pins where a pure drive stops; the 5-pin is the Toulouse kingpin
-    bowling: { at: [0, -132], gap: 1.15, row: 1.0, rows: 4, kingpin: 4, gutters: [0, 1] },
+    // (owner playtest: "never hit the geese") big geese in a wide triangle where drives are still rolling:
+    // about 4 in 10 sloppy drives plough into them (was 1 in 20); simulated headless
+    bowling: { at: [0, -114], gap: 3.4, row: 3.4, rows: 4, kingpin: 4, gutters: [0, 1], r: 0.9, scale: 1.45 },
     geese: [{ area: [-14, -250, 6], radius: 14 }, { area: [14, -228, 6], radius: 14 }],   // lane attendants
     wind: 2,
     hint: 'Ten geese. One ball. Bowl.',
@@ -108,7 +115,9 @@ export const HOLES = [
     bunkers: [[14, -168, 6, 4], [-26, -276, 4, 3], [2, -306, 5, 2.5]],
     ponds: [],
     trees: { density: 0.8 },
-    windmill: { at: [0, -100], hubH: 9, len: 8.5, blades: 4, period: 5, step: 0.9, tower: 2.4, towerH: 12, face: 2.6 },
+    windmill: { at: [0, -100], hubH: 9, len: 8.5, blades: 4, period: 5, step: 0.9, tower: 2.4, towerH: 12, face: 2.6, sign: '/media/lookers-logo.png' },
+    // (owner) it's the Lookers windmill: walk near it and the song plays
+    song: { url: '/media/lookers.mp3', points: [[0, -100]], near: 22, far: 85 },
     geese: [{ area: [-6, -175, 14], radius: 14 }, { area: [10, -205, 10], radius: 14 }, { area: [-14, -268, 8], radius: 14 }],
     wind: 3.5,
     hint: 'It only spins when you swing.',
@@ -133,17 +142,20 @@ export const HOLES = [
   },
   {
     name: 'Crazy Golf',
-    par: 2, seed: 131,
+    // (owner playtest) longer, par 3: a third leg ends in the Block Party
+    par: 3, seed: 131,
     spotlight: 'mini',
-    tee: [0, 0], pin: [2.2, -16],
-    path: [[0, 0], [0, -8], [2.2, -16]],
+    tee: [0, 0], pin: [2.2, -26],
+    path: [[0, 0], [0, -8], [2.2, -16], [2.2, -26.5]],
     fairwayWidth: 40, roll: 0, banking: 0, teeLift: 0,
     bounds: [-30, -40, 30, 12],
-    greenSize: [8, 13], greenCenter: [1, -8], greenTilt: [0, 0], greenBumps: 0,
+    greenSize: [8, 19], greenCenter: [1.2, -13], greenTilt: [0, 0], greenBumps: 0,
     hills: [], bunkers: [], ponds: [],
     trees: { density: 0.5 },
     // a felt lane between rails; one of three obstacle decks is drawn per round (resolveHole)
     mini: {
+      // the Block Party: toy-voxel cubes on the last leg, a fresh layout every round (always a way through)
+      blockParty: { x: 2.2, rows: [-18.6, -20.9, -23.2], size: 0.56 },
       w: 2.8, rail: 0.09, railH: 0.22, oobPad: 0.6, decks: [
         { deck: 'The Turnstile', windmill: { axis: 'y', at: [0.7, -11.6], hubH: 0.14, len: 1.25, blades: 3, period: 2.8, step: 1.3, bladeR: 0.11, tower: 0.12, towerH: 0.5, face: 0 } },
         { deck: 'Pinball', bumpers: [[0.5, -4, 0.28], [-0.6, -6, 0.28], [0.9, -7, 0.28], [0.0, -13.5, 0.28], [2.4, -13.0, 0.28]] },
@@ -163,9 +175,11 @@ export const HOLES = [
     fairwayWidth: 30,
     bounds: [-75, -452, 85, 14],
     greenSize: [16, 13], greenTilt: [0.008, 0.01], greenBumps: 0.2,
-    hills: [[0, 6, 26, 12], [24, -420, 34, 9], [-36, -300, 24, 3], [62, -250, 26, 4]],   // a 12 m launch pad, a 9 m mesa
-    bunkers: [[6, -404, 4, 3], [44, -412, 3.5, 4], [-26, -292, 6, 4]],
-    ponds: [[-6, -168, 34, 13], [8, -372, 30, 9]],   // the crater lake, the moat
+    // (owner playtest) a gentler mesa (was 9 m: too hard to get up and to see)
+    hills: [[0, 6, 26, 12], [24, -420, 34, 4], [-36, -300, 24, 3], [62, -250, 26, 4]],   // a 12 m launch pad, a 4 m mesa
+    // (owner playtest) the moat by the Boss is now a big sand trap (a better trade than water)
+    bunkers: [[6, -404, 4, 3], [44, -412, 3.5, 4], [-26, -292, 6, 4], [8, -370, 22, 6]],
+    ponds: [[-6, -168, 34, 13]],   // the crater lake
     trees: { density: 0.6 },
     airGravity: 0.5,
     // the Honk Hole: stronger every stroke from the third (x1.3, x1.6 ... capped at x2.2)
@@ -174,7 +188,12 @@ export const HOLES = [
       { area: [-14, -210, 12], radius: 14, breed: 'canada' }, { area: [10, -240, 12], radius: 14 }, { area: [-30, -300, 10], radius: 14 }],
     goslings: 3,
     wind: 4,
-    hint: 'Last hole. The Honk Hole grows.',
+    hint: 'Bonk the Boss to open the cup.',
+    // (council round 9) the Boss guards the cup: bonk it open (3 free tries); a Honk Strike on the approach
+    bossGate: { r: 30, tries: 3, hitR: 1.3 },
+    // (owner) supply crates by the Boss's sand: reach one and it pops open with a power-up
+    lootChests: [[-19, -368], [35, -372]],
+    honkStrike: { band: [40, 250], r: 8, clock: 7 },
   },
 ];
 
@@ -185,5 +204,21 @@ export const TOTAL_PAR = HOLES.reduce((s, h) => s + h.par, 0);
 export function resolveHole(h, seed) {
   const d = h.mini?.decks; if (!d) return h;
   const k = Math.floor(mulberry32(((seed ?? 0) ^ 0x51ed27) >>> 0)() * d.length);
-  return { ...h, ...d[k], deckIdx: k };
+  return { ...h, ...d[k], deckIdx: k, blocks: blockParty(h.mini.blockParty, seed) };
+}
+// Each row blocks one or two of three lane slots, never the slot the last row
+// left open twice running, so there is always a zig-zag through.
+function blockParty(bp, seed) {
+  if (!bp) return [];
+  const rng = mulberry32(((seed ?? 0) ^ 0xb10c5) >>> 0), out = [];
+  let open = 1;
+  for (const z of bp.rows) {
+    const choices = [0, 1, 2].filter(s => s !== open);
+    open = choices[Math.floor(rng() * choices.length)];
+    for (const s of [0, 1, 2]) {
+      if (s === open || (rng() < 0.3 && Math.abs(s - open) === 2)) continue;   // sometimes a second gap
+      out.push([bp.x + (s - 1) * 0.86, z + (rng() - 0.5) * 0.3, bp.size]);
+    }
+  }
+  return out;
 }

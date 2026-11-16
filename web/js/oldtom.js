@@ -6,7 +6,7 @@
 import { simulate, launch, prepColliders } from './physics.js';
 
 // Tom's human error: [power, line] as fractions / radians, putts and full swings
-export const ERR = { putt: [0.22, 0.04], full: [0.13, 0.08] };
+export const ERR = { putt: [0.42, 0.06], full: [0.13, 0.08] };
 const PEN = { water: 400, oob: 400, sand: 14, rough: 7, green: -4, fringe: 0, fairway: 0, tee: 0 };
 
 function score(course, cup, shot, lie, mode) {
@@ -35,8 +35,9 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
   const dx = cup.x - lie.x, dz = cup.z - lie.z, dist = Math.hypot(dx, dz);
   const surf = course.surf(lie.x, lie.z);
   const base = Math.atan2(dz, dx);
-  const world = { course, cup, colliders, wind, strokeNo };
-  const putting = (surf === 'green' || surf === 'fringe') && dist < 24;
+  // (council round 9) on hole 9 the Boss seals the cup until you're within its guard range
+  const world = { course, cup, colliders, wind, strokeNo, cupSealed: !!holeDef.bossGate && dist > holeDef.bossGate.r };
+  const putting = !!holeDef.mini || ((surf === 'green' || surf === 'fringe') && dist < 24);   // crazy golf is all putts
   const mode = holeDef.spotlight === 'stymie' && !putting && dist < 140 ? 'stymie' : 'normal';
   const cands = [];
   const tryShot = (club, power, ang) => {
@@ -67,7 +68,8 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
   let best = null;
   for (const c of cands.slice(0, 10)) {
     let worst = c.s;
-    const dp = c.club === 'putter' ? 0.06 : 0.07, da = c.club === 'putter' ? 0.012 : 0.04;
+    // full shots are tested against his real power error, so a mishit never finds the water
+    const dp = c.club === 'putter' ? 0.06 : ERR.full[0], da = c.club === 'putter' ? 0.012 : ERR.full[1];
     for (const [ep, ea] of [[dp, 0], [-dp, 0], [0, da], [0, -da]]) {
       const L = launch(c.club, c.power * (1 + ep), Math.cos(c.ang + ea), Math.sin(c.ang + ea), 0, 1);
       worst = Math.max(worst, score(course, cup, simulate(world, lie, L), lie, mode));
@@ -79,7 +81,7 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
   // power and line. Deterministic (seeded), so his ghost is the same for all.
   const putt = best.club === 'putter';
   const e1 = rng() * 2 - 1, e2 = rng() * 2 - 1;
-  const sharp = mode === 'stymie' ? 0.3 : 1;                 // he means it on hole 3
+  const sharp = mode === 'stymie' ? 0.3 : holeDef.mini ? 0.45 : 1;   // he means it on hole 3; steady hands on the felt
   // tuned so he shoots a few over par (playtest: "make the ghost easier to beat")
   const ep = e1 * (putt ? ERR.putt[0] : ERR.full[0]) * sharp, ea = e2 * (putt ? ERR.putt[1] : ERR.full[1]) * sharp;
   const L = launch(best.club, best.power * (1 + ep), Math.cos(best.ang + ea), Math.sin(best.ang + ea), 0, 1);

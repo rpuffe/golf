@@ -452,6 +452,17 @@ export function buildWindmill(course, wm) {
   const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.2, 0.2), wood);
   door.position.set(0, 1.1, wm.tower * 1.0);
   g.add(tower, cap, door);
+  if (wm.sign) {
+    // a sign on the tower's face, between the door and the sails (owner: the Lookers windmill)
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true });
+    new THREE.TextureLoader().load(wm.sign, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; mat.map = t; mat.needsUpdate = true; });
+    const w = wm.tower * 2.1, hgt = w / 1.575, y = wm.towerH * 0.42;
+    const back = new THREE.Mesh(new THREE.BoxGeometry(w + 0.3, hgt + 0.3, 0.2), new THREE.MeshStandardMaterial({ color: 0xfaf3e6, emissive: 0x2a2620, roughness: 0.6 }));
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(w, hgt), mat);
+    const zf = wm.tower * 0.98 + 0.25;
+    back.position.set(0, y, zf); pic.position.set(0, y, zf + 0.11);
+    g.add(back, pic);
+  }
   const rotor = new THREE.Group();
   rotor.position.set(0, wm.hubH, wm.face);
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.8, 12), red);
@@ -465,6 +476,34 @@ export function buildWindmill(course, wm) {
   }
   g.add(rotor);
   g.userData.rotor = rotor;
+  return g;
+}
+
+// ------------------------------------------------------------- billboards (hole 5)
+// Two posts, a frame, and the picture, turned to face the fairway back toward
+// the tee. Textures load in the background; the frame shows until they arrive.
+export function buildBillboards(course, list) {
+  const g = new THREE.Group(), loader = new THREE.TextureLoader();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x4a3426, roughness: 0.85 });
+  for (const b of list ?? []) {
+    const [x, z] = b.at, y = course.h(x, z), lift = 2.6;
+    const board = new THREE.Group();
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
+    loader.load(b.img, t => { t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; mat.map = t; mat.needsUpdate = true; });
+    const pic = new THREE.Mesh(new THREE.PlaneGeometry(b.w, b.h), mat);
+    pic.position.y = lift + b.h / 2;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.5, b.h + 0.5, 0.25), new THREE.MeshStandardMaterial({ color: b.light ? 0xf4efe4 : 0x2b2230, roughness: 0.6 }));
+    frame.position.set(0, lift + b.h / 2, -0.15);
+    board.add(frame, pic);
+    for (const sx of [-1, 1]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, lift + b.h * 0.6, 0.35), wood);
+      post.position.set(sx * b.w * 0.32, (lift + b.h * 0.6) / 2 - 0.3, -0.35); post.castShadow = true; board.add(post);
+    }
+    board.position.set(x, y, z);
+    board.rotation.y = Math.atan2(0 - x, (z + 60) - z);   // face a point down the fairway toward the tee
+    board.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    g.add(board);
+  }
   return g;
 }
 
@@ -498,6 +537,18 @@ export function buildCrazyGolf(course, h) {
     const top = new THREE.Mesh(new THREE.SphereGeometry(r * 0.55, 14, 10), new THREE.MeshStandardMaterial({ color: 0xffe066, emissive: 0xffc030, emissiveIntensity: 0.8 }));
     top.position.set(x, y + 0.32, z); g.add(top);
   }
+  // the Block Party: chunky toy-voxel cubes, a pixel pattern on every face
+  const pix = (base) => {
+    const c = document.createElement('canvas'); c.width = c.height = 8;
+    const x = c.getContext('2d'), rng = mulberry32(base);
+    for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { const k = 0.82 + rng() * 0.3; x.fillStyle = `rgb(${Math.min(255, ((base >> 16) & 255) * k) | 0},${Math.min(255, ((base >> 8) & 255) * k) | 0},${Math.min(255, (base & 255) * k) | 0})`; x.fillRect(i, j, 1, 1); }
+    const t = new THREE.CanvasTexture(c); t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter; t.colorSpace = THREE.SRGBColorSpace; return t;
+  };
+  const blockCols = [0xff6b5a, 0xffc93c, 0x4fb6ff, 0x7bd96b, 0xc58bff];
+  (h.blocks ?? []).forEach(([x, z, s], i) => {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(s, s, s), new THREE.MeshStandardMaterial({ map: pix(blockCols[i % blockCols.length]), roughness: 0.7, emissive: 0x181818 }));
+    m.position.set(x, course.h(x, z) + s / 2, z); m.castShadow = m.receiveShadow = true; g.add(m);
+  });
   // string lights on posts down both sides of the lane
   const bulbCols = [0xff5a7a, 0xffd34a, 0x5ad1ff, 0x8aff7a];
   const bulbGeo = new THREE.SphereGeometry(0.06, 8, 6), postMat = new THREE.MeshStandardMaterial({ color: 0x3a3030 });

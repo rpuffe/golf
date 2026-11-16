@@ -427,3 +427,36 @@ func TestCleanLook(t *testing.T) {
 		t.Fatal("bad golfer ids must be dropped")
 	}
 }
+
+func TestProgressAwards(t *testing.T) {
+	ok := &Progress{Hole: 9, Scores: []int{4}, Awards: map[string]float64{"putt": 9.5, "goosed": 2, "peeled": 1}}
+	if !validProgress(ok) {
+		t.Fatal("awards should be valid")
+	}
+	for _, bad := range []map[string]float64{{"Putt": 1}, {"putt": -1}, {"putt": 1e9}, {"a": 1, "b": 1, "c": 1, "d": 1, "e": 1, "f": 1, "g": 1, "h": 1, "i": 1}} {
+		if validProgress(&Progress{Awards: bad}) {
+			t.Fatalf("awards %v should be rejected", bad)
+		}
+	}
+}
+
+// A member who leaves while their event stream is still open must not wedge
+// the room: the stream's cleanup used to close the channel a second time.
+func TestLeaveWithOpenStream(t *testing.T) {
+	srv, rs := roomServer(t)
+	_, body := postJSON(t, srv.URL+"/api/rooms", map[string]string{"name": "Host"})
+	var host joinResp
+	json.Unmarshal(body, &host)
+	ev := openStream(t, srv.URL+"/api/rooms/"+host.Code+"/events?id="+host.You+"&token="+host.Token)
+	waitEvent(t, ev, "roster")
+	postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/send", map[string]any{"id": host.You, "token": host.Token, "seq": 1, "type": "leave"})
+	time.Sleep(150 * time.Millisecond) // the stream notices and runs its cleanup
+	// the janitor's sweep takes every room's lock: it must not block on this one
+	done := make(chan struct{})
+	go func() { rs.sweep(time.Now()); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the room's lock was left held after a member left with an open stream")
+	}
+}
