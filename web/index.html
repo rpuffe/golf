@@ -58,6 +58,8 @@
   #powerChip b { color: var(--sun); }
   #powerChip { pointer-events: auto; transition: font-size .3s, padding .3s; }
   #powerChip.mini { font-size: 0; padding: 4px 8px; }
+  #powerChip.curse { background: rgba(90, 16, 52, .9); box-shadow: 0 0 0 2px #ff5a8a; }
+  #wheelOut.curse b { color: #ff7a9a; }
   #powerChip.mini .e { font-size: 20px; }
   #between { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); width: min(440px, 94vw); padding: 14px 16px; pointer-events: auto; text-align: center; }
   #betweenHead { font-size: 22px; font-weight: 900; }
@@ -71,6 +73,14 @@
   #betweenWait { font-size: 13px; color: var(--muted); min-height: 1em; }
   #between .go { margin-top: 10px; width: 100%; padding: 11px; border: 0; border-radius: 14px; background: linear-gradient(180deg, #ffcf5c, #ff9a3c); color: var(--plum); font-size: 17px; font-weight: 900; }
   #between .go:disabled { opacity: .5; }
+  /* (round 8, S5) while you wait: a bottom strip, the course stays in view; tap the title for the card */
+  body.waiting #between:not(.open) { top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); padding: 8px 12px; }
+  body.waiting #between:not(.open) :is(#betweenScores, #betweenBag, #betweenStand) { display: none; }
+  body.waiting #between:not(.open) #betweenHead { font-size: 15px; cursor: pointer; }
+  body.waiting #between:not(.open) #betweenHead small { display: inline; margin-left: 6px; }
+  body.waiting #between:not(.open) #betweenHead::after { content: " ▴"; color: var(--muted); }
+  body.waiting #between:not(.open) .go { margin-top: 6px; padding: 8px; font-size: 15px; }
+  body.waiting #between:not(.open) #emotes { margin-top: 6px; }
   #emotes { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
   #emotes button { border: 0; border-radius: 12px; padding: 8px 10px; background: rgba(255,255,255,.12); color: var(--cream); font-size: 14px; font-weight: 800; }
   #emotes button:disabled { opacity: .4; }
@@ -83,8 +93,12 @@
   #finalGroup { position: absolute; left: 50%; top: 210px; transform: translateX(-50%); padding: 10px 14px; pointer-events: auto; font-size: 15px; white-space: nowrap; }
   #finalGroup button { margin-left: 8px; border: 0; border-radius: 10px; padding: 6px 10px; background: var(--sun); color: var(--plum); font-weight: 900; }
   #gimme button { margin-left: 8px; border: 0; border-radius: 10px; padding: 6px 10px; background: var(--mint); color: var(--plum); font-weight: 900; }
-  #reactBar { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
-  #reactBar button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: var(--panel); font-size: 18px; }
+  #reactBar { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); pointer-events: auto; }
+  #reactBar button { width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.15); background: var(--panel); font-size: 18px; color: var(--cream); }
+  /* (round 8, S4) one 💬 button; the menu opens to its left, clear of the swing pad */
+  #chatMenu { display: none; position: absolute; right: calc(100% + 8px); bottom: 0; width: max-content; max-width: 62vw; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+  #reactBar.open #chatMenu { display: flex; }
+  #chatMenu .phrase { width: auto; height: auto; padding: 7px 10px; font-size: 13px; font-weight: 800; white-space: nowrap; }
   body.scare #hud > *:not(#banner):not(#flash):not(#caption) { opacity: 0 !important; }
   .toggles { display: flex; gap: 14px; justify-content: center; margin-top: 10px; font-size: 13px; color: #6a5a80; }
   .toggles input { width: auto; margin-right: 4px; }
@@ -190,7 +204,7 @@
   #letterbox::before, #letterbox::after { content: ""; position: fixed; left: 0; right: 0; height: 0; background: #000; transition: height .3s; z-index: 2; }
   #letterbox::before { top: 0; } #letterbox::after { bottom: 0; }
   #letterbox.show::before, #letterbox.show::after { height: 11vh; }
-  #bulletLbl { position: fixed; left: 24px; top: calc(11vh + 12px); font: 800 14px ui-monospace, Menlo, monospace; color: #ffdf6b; letter-spacing: .2em; opacity: 0; transition: opacity .3s; z-index: 3; }
+  #bulletLbl { position: fixed; left: 24px; top: calc(11vh + 12px); font: 800 14px ui-monospace, Menlo, monospace; color: #ffdf6b; letter-spacing: .2em; opacity: 0; transition: opacity .3s; z-index: 3; pointer-events: none; }
   #letterbox.show #bulletLbl { opacity: 1; }
   body.bullet #hud { z-index: 4; }
   body.bullet #caption { top: auto; bottom: calc(11vh + 18px); }
@@ -199,6 +213,10 @@
   body.goosecam #caption, body.goosecam #toasts, body.goosecam #emoteFeed, body.goosecam #powerChip { display: none; }
   body.bullet #topLeft, body.bullet #topRight, body.bullet #bottom, body.bullet #hint, body.bullet #crosshair, body.bullet #wheel, body.bullet #reactBar { opacity: 0; transition: opacity .3s; }
   body.angling #touchSwing, body.angling #touchScope, body.tugging #touchSwing, body.tugging #touchScope, body.bullet #touchSwing, body.bullet #touchScope, body.scare #touchSwing, body.between #touchSwing, body.between #touchScope, body.flying #touchSwing { opacity: 0; pointer-events: none; }
+  /* (round 8, S12) nothing floats over Help, the leaderboard or the end card */
+  body:has(#help:not(.hidden)) :is(#touchSwing, #touchScope, #reactBar, #emotes, #powerChip),
+  body:has(#lb:not(.hidden)) :is(#touchSwing, #touchScope, #reactBar, #emotes, #powerChip),
+  body:has(#end:not(.hidden)) :is(#touchSwing, #touchScope, #reactBar, #emotes, #powerChip) { opacity: 0; pointer-events: none; visibility: hidden; }
 
   /* ---------- angler ---------- */
   #angler { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(460px, 92vw); padding: 18px 20px; text-align: center; pointer-events: auto; }
@@ -297,7 +315,8 @@
     /* the ball picker gets its own full-width row above the clubs; the swing pad sits above it */
     #ballChoose { left: calc(8px + env(safe-area-inset-left)); right: auto; bottom: calc(58px + env(safe-area-inset-bottom)); max-width: calc(100vw - 16px); gap: 3px; padding: 3px; } .bp small { display: none; }
     .bc { padding: 3px 6px; font-size: 11px; max-width: 86px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .bc i { font-size: 10px; }
-    #reactBar { right: 8px; top: 60%; } #reactBar button { width: 36px; height: 36px; }   /* below the wheel, above the swing pad */
+    #reactBar { right: calc(10px + env(safe-area-inset-right)); top: auto; transform: none; bottom: calc(312px + env(safe-area-inset-bottom)); } #reactBar button { width: 40px; height: 40px; }   /* just above the 🔭, clear of the swing pad */
+    #reactBar #chatMenu .phrase { height: auto; width: auto; }
     #wheel { left: auto; right: 10px; bottom: auto; top: 300px; width: 84px; height: 84px; } #wheelOut { left: auto; right: 100%; margin: 0 10px 0 0; text-align: right; font-size: 12px; white-space: normal; width: 52vw; } #wheelOut b { font-size: 17px; }
     #emoteFeed { top: 230px; }
     #hint { top: auto; bottom: calc(112px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); transform: none; max-width: calc(100vw - 150px); font-size: 12px; padding: 6px 10px; }
@@ -364,7 +383,7 @@
   <div id="emoteFeed"></div>
   <div id="gimme" class="panel hidden"></div>
   <div id="finalGroup" class="panel hidden"><span></span><button type="button">Tee off now</button></div>
-  <div id="reactBar" class="hidden"><button data-react="honk">📯</button><button data-react="clap">👏</button><button data-react="gasp">😱</button><button data-react="laugh">😂</button></div>
+  <div id="reactBar" class="hidden"><div id="chatMenu"></div><button id="chatToggle" type="button" aria-label="Reactions and quick chat">💬</button></div>
 </div>
 
 <div id="scope">
@@ -383,12 +402,12 @@
   </svg>
   <div id="scopeWind">WIND —</div>
   <div id="rangeBox"><div id="rangeDist">— m</div><div id="rangeElev">ELEV —</div></div>
-  <div id="breath">HOLD <b>SHIFT</b> TO STEADY<div id="breathBar"><div id="breathFill"></div></div></div>
+  <div id="breath" aria-hidden="true">HOLD <b>SHIFT</b> TO STEADY<div id="breathBar"><div id="breathFill"></div></div></div>
 </div>
 
 <div id="scareFlash"></div>
 <div id="scareBlack"></div>
-<div id="letterbox"><div id="bulletLbl">● BULLET CAM — CLICK TO SKIP</div></div>
+<div id="letterbox" aria-hidden="true"><div id="bulletLbl"></div></div>
 
 <div id="angler" class="panel hidden" role="dialog" aria-label="Fishing minigame">
   <h3 id="anglerTitle">🎣 Reel in Gerald!</h3>
@@ -451,16 +470,16 @@
 <div id="help" class="overlay hidden">
   <div class="card">
     <h2>Controls</h2>
-    <table class="sc" style="text-align:left">
+    <table class="sc" style="text-align:left"><tbody id="helpRows">
       <tr><td><b>Aim</b></td><td>Drag sideways. Or A / D.</td></tr>
       <tr><td><b>Swing</b></td><td>Drag down, flick up.</td></tr>
       <tr><td><b>Curve</b></td><td>Flick up at an angle.</td></tr>
-      <tr><td><b>Cancel</b></td><td>Slide onto ✕. Or Esc.</td></tr>
+      <tr><td><b>Cancel</b></td><td>Let go before the flick. Or Esc.</td></tr>
       <tr><td><b>Key swing</b></td><td>Hold Space, release, tap again.</td></tr>
       <tr><td><b>Club</b></td><td>1–4 or scroll wheel.</td></tr>
       <tr><td><b>Zoom</b></td><td>Hold right-click or Z.</td></tr>
       <tr><td><b>Sound</b></td><td>M mutes. V mutes the voice.</td></tr>
-    </table>
+    </tbody></table>
     <div class="how">Geese steal balls. Water drowns them.</div>
     <div class="toggles"><label><input type="checkbox" id="noScare">Scares off</label><label><input type="checkbox" id="muteReact">Mute reactions</label></div>
     <button class="go" id="helpClose">Back to golf</button>

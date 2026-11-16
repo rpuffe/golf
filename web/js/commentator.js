@@ -20,7 +20,9 @@ const L = {
   sand: [['The bunker. A test of nerve.', 'Sand. Of course it is sand.', 'THE BEACH! WE ARE ON HOLIDAY NOW, APPARENTLY!'],
          ['Plugged in the trap.', 'In the trap. The trap was laid and we walked right in.', 'SAND! SAND EVERYWHERE! IN MY SHOES! IN MY SOUL!']],
   green: [['On the dance floor.', 'On the green. Hold your applause, it may not last.', 'THE GREEN! I AM STANDING UP! I AM STANDING ON MY CHAIR!'],
-          ['That will leave a look at birdie.', 'Green in regulation. Mostly in regulation.', 'GREEEEN! SOMEONE GIVE {name} A KNIGHTHOOD!']],
+          ['Safely on the putting surface.', 'On the green. Now the hard part.', 'GREEEEN! SOMEONE GIVE {name} A KNIGHTHOOD!']],
+  // (round 8, S15) only said when the next putt really is for birdie
+  greenBirdie: [['That will leave a look at birdie.', 'Green in regulation. Mostly in regulation.', 'GREEEEN! SOMEONE GIVE {name} A KNIGHTHOOD!']],
   water: [['Oh dear. A splash. {ball} is in the water.', 'Into the drink. {ball} is swimming with the fishes.', 'WATER! {ball} IS DROWNING! GET THE ROD! GET THE ROD!'],
           ['Wet. That is wet.', 'The lake claims another.', 'SPLASH! WHY IS IT ALWAYS THE WATER, JIM? WHY?']],
   oob: [['Out of bounds. Stroke and distance.', 'Out of bounds. {ball} has left the property.', 'IT IS IN THE CAR PARK! {ball} IS ON THE MOTORWAY!'],
@@ -72,6 +74,8 @@ const L = {
     ['Off the sails. Mini golf rules apply.', 'The windmill sends it back. Spiteful thing.', 'IT HIT THE WINDMILL! WHO PUT A WINDMILL ON A GOLF COURSE!']],
   tomb: [['Off a headstone. Respectfully.', 'Clattered a gravestone. Sorry, whoever you were.', 'IT HIT A GRAVE! DO NOT WAKE THEM! DO NOT WAKE ANYONE!']],
   scared: [['What was that. Par, I think.', 'WHAT WAS THAT. Was that Old Tom? Par, I think.', 'WHAT WAS THAT! WHAT WAS THAT! I AM UNDER THE DESK! PAR, I THINK!']],
+  // the scare on a hole that wasn't a par: the gag, without a wrong score
+  scaredOff: [['What was that. I have lost count.', 'WHAT WAS THAT. Was that Old Tom? Somebody else keep score.', 'WHAT WAS THAT! WHAT WAS THAT! I AM UNDER THE DESK! I CANNOT COUNT FROM HERE!']],
   gallery: [['The gallery has opinions.', 'The gallery has opinions, and they are loud.', 'THE GALLERY IS GOING WILD! EVERYONE HAS AN OPINION!']],
   gooseBlock: [['The goose was in the way.', 'Bounced right off the goose. Unbelievable.', 'THE GOOSE BLOCKED IT! THE GOOSE IS PLAYING DEFENCE!'],
     ['The goose stands its ground.', 'Off the goose! It did not even flinch!', 'THE GOOSE IS A WALL! A FEATHERED WALL!']],
@@ -123,8 +127,14 @@ let clipsFailed = false;
 fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
-let lastPrio = 0, lastAt = 0, pending = null;
+const PRIO = { greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+let lastPrio = 0, lastAt = 0, pending = null, busyUntil = 0;
+// (round 8, S11) one line at a time: a line has the floor for about as long as
+// it takes to say. Anything smaller waits in a single pending slot and is
+// dropped if it would come out more than ~2 s late (no narrating the last
+// shot). Only a bigger line, or a top-priority one, takes the floor early.
+const talkMs = line => 900 + line.length * 55;
+const STALE_MS = 2000;
 let voice = null, enabled = true, captionEl = null, captionTimer = 0;
 export const commentator = { hysteria: 0, lastLine: '', lastClass: '', history: [] };
 
@@ -169,13 +179,17 @@ export function say(cls, vars = {}, { bump = 0 } = {}) {
   const sets = L[cls];
   if (!sets) return;
   const prio = PRIO[cls] ?? 1, now = performance.now();
-  if (prio < lastPrio && now - lastAt < 3500) {
-    // queue it (latest wins) for when the bigger line has had its moment
-    const p = pending = { cls, vars };
-    setTimeout(() => { if (pending === p) { pending = null; say(p.cls, p.vars); } }, 3600 - (now - lastAt));
+  if (now < busyUntil && prio <= lastPrio && prio < 4) {
+    if (pending && pending.prio > prio) return;   // the slot holds something bigger
+    const p = pending = { cls, vars, prio, at: now };
+    setTimeout(() => {
+      if (pending !== p) return;
+      pending = null;
+      if (performance.now() - p.at <= STALE_MS) say(p.cls, p.vars);
+    }, busyUntil - now + 60);
     return;
   }
-  if (pending && pending.cls === cls) pending = null;
+  if (pending && (pending.cls === cls || pending.prio <= prio)) pending = null;
   lastPrio = prio; lastAt = now;
   const tr = tier();
   // choose a variant set, never repeating the exact same line twice in a row
@@ -193,6 +207,7 @@ export function say(cls, vars = {}, { bump = 0 } = {}) {
     line = alt.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
   }
   commentator.lastLine = line; commentator.lastClass = cls;
+  busyUntil = now + talkMs(line);
   commentator.history.push({ cls, line, tier: tr });
   showCaption(line, tr);
   speak(line, tr, cls, tpl, vars);

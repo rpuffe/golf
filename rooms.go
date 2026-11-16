@@ -251,6 +251,16 @@ func (r *Room) addLocked(name string) *Member {
 	return m
 }
 
+// byNameLocked finds a member by name, ignoring case.
+func (r *Room) byNameLocked(name string) *Member {
+	for _, id := range r.order {
+		if m := r.members[id]; strings.EqualFold(m.Name, name) {
+			return m
+		}
+	}
+	return nil
+}
+
 func (r *Room) removeLocked(id string) {
 	m, ok := r.members[id]
 	if !ok {
@@ -327,9 +337,10 @@ func (r *Room) auth(id, token string) *Member {
 // ---- HTTP ----
 
 type joinReq struct {
-	Name  string `json:"name"`
-	ID    string `json:"id"`    // rejoin with an existing identity (page reload)
-	Token string `json:"token"` //
+	Name     string `json:"name"`
+	ID       string `json:"id"`       // rejoin with an existing identity (page reload)
+	Token    string `json:"token"`    //
+	Takeover bool   `json:"takeover"` // "that's me": take over the seat of a member with this name
 }
 
 type joinResp struct {
@@ -399,6 +410,20 @@ func (rs *Rooms) serveJoin(w http.ResponseWriter, r *http.Request) {
 	m := room.auth(in.ID, in.Token)
 	if m != nil {
 		m.Name = in.Name // a rejoin may rename
+	} else if dup := room.byNameLocked(in.Name); dup != nil {
+		// One seat per name (council round 8, S5): a second session with the
+		// same name is asked "is that you?". Saying yes takes over the seat,
+		// progress and all, and the old session is cut off (new token).
+		if !in.Takeover {
+			http.Error(w, "name taken", http.StatusConflict)
+			return
+		}
+		m = dup
+		m.token = randToken(16)
+		for ch := range m.conns {
+			delete(m.conns, ch)
+			close(ch)
+		}
 	} else {
 		if len(room.members) >= maxRoomMembers {
 			http.Error(w, "room is full", http.StatusConflict)

@@ -176,7 +176,7 @@ func TestRoomLimitsAndHandOff(t *testing.T) {
 	json.Unmarshal(body, &host)
 	var last joinResp
 	for i := 1; i < maxRoomMembers; i++ {
-		resp, b := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]string{"name": "P"})
+		resp, b := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]string{"name": "P" + string(rune('0'+i))})
 		if resp.StatusCode != 200 {
 			t.Fatalf("join %d: %d", i, resp.StatusCode)
 		}
@@ -380,5 +380,40 @@ func TestRoomEmotes(t *testing.T) {
 	// buckets are per member
 	if c := send(cy, map[string]any{"kind": "honk"}); c != http.StatusNoContent {
 		t.Fatalf("cy unaffected: %d", c)
+	}
+}
+
+// One seat per name: a second "Pat" is refused unless they say it's them,
+// and taking over keeps the seat (id, progress) and cuts off the old session.
+func TestRoomDuplicateName(t *testing.T) {
+	srv, rs := roomServer(t)
+	_, body := postJSON(t, srv.URL+"/api/rooms", map[string]string{"name": "Host"})
+	var host joinResp
+	json.Unmarshal(body, &host)
+	_, b := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]string{"name": "Pat"})
+	var pat joinResp
+	json.Unmarshal(b, &pat)
+	if resp, b := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]string{"name": "pat"}); resp.StatusCode != http.StatusConflict || !strings.Contains(string(b), "name taken") {
+		t.Fatalf("duplicate name: %d %s", resp.StatusCode, b)
+	}
+	resp, b := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]any{"name": "Pat", "takeover": true})
+	if resp.StatusCode != 200 {
+		t.Fatalf("takeover: %d", resp.StatusCode)
+	}
+	var again joinResp
+	json.Unmarshal(b, &again)
+	if again.You != pat.You || again.Token == pat.Token {
+		t.Fatalf("takeover should keep the seat with a new token: %+v vs %+v", again.You, pat.You)
+	}
+	r := rs.get(host.Code)
+	r.mu.Lock()
+	n := len(r.members)
+	r.mu.Unlock()
+	if n != 2 {
+		t.Fatalf("members after takeover: %d", n)
+	}
+	// the old session's credentials no longer work
+	if resp, _ := postJSON(t, srv.URL+"/api/rooms/"+host.Code+"/join", map[string]string{"name": "Pat", "id": pat.You, "token": pat.Token}); resp.StatusCode != http.StatusConflict {
+		t.Fatalf("old session rejoin: %d", resp.StatusCode)
 	}
 }

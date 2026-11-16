@@ -379,8 +379,8 @@ const hud = {
     const b = $('banner'); b.innerHTML = html; b.classList.add('show');
     clearTimeout(hud._bt); hud._bt = setTimeout(() => b.classList.remove('show'), ms);
   },
-  hint(html, ms = 0) {
-    if (html && narrow()) ms = ms ? Math.min(ms, 4500) : 4500;
+  hint(html, ms = 0, { stay = false } = {}) {
+    if (html && narrow() && !stay) ms = ms ? Math.min(ms, 4500) : 4500;
     $('hint').innerHTML = html || '';
     clearTimeout(hud._ht); if (html && ms) hud._ht = setTimeout(() => { if ($('hint').innerHTML === html) $('hint').innerHTML = ''; }, ms);
   },
@@ -551,7 +551,7 @@ function loadHole(i) {
   for (const g of geese) if (g.puppetOf) { if (g.label) scene.remove(g.label); g.puppetOf = null; g.label = null; }
   G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
   G.finalWait = null; $('finalGroup').classList.add('hidden');
-  G.powerUp = null; renderPowerChip(); G.sicPending = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
+  G.powerUp = null; renderPowerChip(); G.sicPending = null; G.sicFrom = null; G.sabReport = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
   G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.scared = G.scared && G.holeIdx > 0;
   pickUnit(); lastPreview = ''; G.previewCarry = null; G.clubCarry = null; G.clubCarries = null;
@@ -581,7 +581,8 @@ function loadHole(i) {
 
 // Control hints: 7 words or fewer, shown on the first shot, then again only
 // if the player stalls at address.
-const CONTROL_HINT = coarse => coarse ? '↔ Drag the course to aim<br>↓↑ On the pad: drag down, flick up' : '↔ Drag sideways to aim<br>↓↑ Drag down, flick up to swing';
+// (round 8, S10) "lift to cancel" replaces S14: letting go before the flick cancels the swing
+const CONTROL_HINT = coarse => coarse ? '↔ Drag the course to aim<br>↓↑ On the pad: drag down, flick up<br>✋ Lift your finger to cancel' : '↔ Drag sideways to aim<br>↓↑ Drag down, flick up to swing<br>✋ Let go to cancel';
 function holeHint() {
   const s = G.holeDef.spotlight;
   if (!G.hintsShown.swing) return CONTROL_HINT(coarse);
@@ -822,8 +823,14 @@ function spawnGeese() {
     }
   }
   goose = null;
-  G.thefts = 0; G.lastTheftStroke = -9; G.snatches = 0;
+  G.thefts = 0; G.lastTheftStroke = -9; G.snatches = 0; G.disrupt = 0;
 }
+// (round 8, S1) the disruption budget: at most one *random* setback per player
+// per hole (a wild goose grab, a curious goose, the Boss, Goose Bait, the
+// Sasquack). A friend's goose (Sic 'Em, Teeth) is outside the cap. Geese stay;
+// once the budget is spent they just graze and stare.
+const disruptionSpent = () => (G.disrupt ?? 0) >= 1;
+function spendDisruption() { G.disrupt = (G.disrupt ?? 0) + 1; }
 // point + left-normal at fraction t along a polyline
 function pathPoint(path, t) {
   const seg = []; let total = 0;
@@ -908,7 +915,7 @@ function updateGoose(g, dt) {
     if (g.approach && G.mode === 'address' && canSnatch()) {
       const d = dist2(g, G.ball);
       if (d < 6 && !g.warned) { g.warned = true; sfx.honk(1); hud.hint('🪿 Hurry. A goose is curious.', 4000); g.mesh.userData.alert.visible = true; setTimeout(() => { if (g.state === 'graze') g.mesh.userData.alert.visible = false; }, 900); }
-      if (d < 1.0 && !swing.active) { G.snatches = (G.snatches ?? 0) + 1; startTheft(g, 0.3); }
+      if (d < 1.0 && !swing.active) { G.snatches = (G.snatches ?? 0) + 1; spendDisruption(); startTheft(g, 0.6); }
       else if (!(swing.active && d < 1.2)) moveTo(G.ball.x, G.ball.z, (g.breed === 'canada' ? 2.0 : g.breed === 'toulouse' ? 1.2 : 1.6));
     } else if (g.target) { if (moveTo(g.target.x, g.target.z, g.curious ? 1.4 : 1.0)) { g.target = null; g.curious = false; } }
     else if (G.mode === 'address' && !g.gosling && dist2(g, G.ball) < 30) {
@@ -983,7 +990,9 @@ function maybeGooseSteal() {
   if (G.thefts >= 2 || G.strokes === G.lastTheftStroke + 1) { G.sicPending = null; return false; }
   const s = G.course.surf(G.ball.x, G.ball.z);
   if (s === 'green' || s === 'fringe') return false;   // a sent goose waits for a better moment
-  const sic = G.sicPending; G.sicPending = null;
+  const friend = !!(G.sicPending && G.sicFrom);
+  if (!friend && disruptionSpent() && !(G.powerUp?.taxi && !G.powerUp.taxiUsed)) return false;
+  const sic = G.sicPending, sicFrom = G.sicFrom; G.sicPending = null; G.sicFrom = null;
   const bait = !!G.baitPending, taxi = !!(G.powerUp?.taxi && !G.powerUp.taxiUsed);
   const forced = !!(sic || bait || taxi);   // a goose that was sent for you ignores its patch
   const mult = 1;
@@ -1003,9 +1012,10 @@ function maybeGooseSteal() {
   }
   if (sic) hud.toast(`🪿 ${esc(sic)} sent a goose.`);
   if (bait) { G.baitPending = false; hud.toast('🍞 It smelled the bread.'); }
-  g.taxi = false;
+  g.taxi = false; g.sentBy = sic && sicFrom ? sicFrom : null;   // (S3) whoever sent it hears how it went
   if (taxi && !sic && !bait) { G.powerUp.taxiUsed = true; g.taxi = true; }
-  startTheft(g, g.boss ? 0.4 : 0.7);
+  if (!g.sentBy && !g.taxi) spendDisruption();
+  startTheft(g, 1.0);   // (S1) a full second of "!" and honk before it moves: you see it coming
   return true;
 }
 function startTheft(g, alertT = 0.7) {
@@ -1022,7 +1032,7 @@ function startTheft(g, alertT = 0.7) {
 // A curious goose that reaches your ball while you're lining up takes it.
 function canSnatch({ teeth = false } = {}) {
   const s = G.course.surf(G.ball.x, G.ball.z);
-  return G.thefts < 2 && G.strokes !== G.lastTheftStroke + 1 && G.strokes !== G.lastTheftStroke && G.strokes > 0 && (teeth || (G.snatches ?? 0) < 1)
+  return G.thefts < 2 && G.strokes !== G.lastTheftStroke + 1 && G.strokes !== G.lastTheftStroke && G.strokes > 0 && (teeth || ((G.snatches ?? 0) < 1 && !disruptionSpent()))
     && s !== 'green' && s !== 'fringe' && !(G.holeDef.spotlight === 'scare' && !G.scareDone) && !G.powerUp?.immune;
 }
 function grabBall(g) {
@@ -1083,7 +1093,7 @@ function endGooseCam() {
   G.stopGooseSong?.(); G.stopGooseSong = null;
   G.gooseCam = null;
   $('letterbox').classList.remove('show'); document.body.classList.remove('bullet', 'goosecam');
-  setTimeout(() => { if (!G.gooseCam) $('bulletLbl').textContent = '● BULLET CAM · CLICK TO SKIP'; }, 400);
+  setTimeout(() => { if (!G.gooseCam) $('bulletLbl').textContent = BULLET_LBL; }, 400);
 }
 // Nature-documentary tracking shot: three-quarters in front of the goose and
 // to one side, so you can see your ball in its beak the whole way.
@@ -1209,8 +1219,10 @@ function endTug(won) {
   $('tug').classList.add('hidden'); document.body.classList.remove('tugging');
   const g = goose;
   g.carry = false; g.mesh.userData.carry.clear(); g.mesh.rotation.x = 0;
+  const sender = g.sentBy ?? g.puppetOf ?? null; g.sentBy = null;
   if (won) {
     endGooseCam();
+    if (sender && !g.puppetOf) reportSabotage(sender, 'won');
     G.stats.tugWins = (G.stats.tugWins ?? 0) + 1;
     if (g.puppetOf) sendEmote('teethx', g.puppetOf, `${myHole()}:tug`, { state: true });
     moment(22, `Won a tug-of-war with a goose on hole ${G.holeIdx + 1}`);
@@ -1227,6 +1239,11 @@ function endTug(won) {
   // the goose wins, and it is not gracious about it
   tomLater('goose', 4200);
   const outcome = pickLoss(g);
+  if (sender) {
+    // the result goes back once the ball has a new lie (placeBall), or after 15 s regardless
+    const rep = G.sabReport = { to: sender, outcome, at: { ...G.gooseLie } };
+    setTimeout(() => { if (G.sabReport === rep) { G.sabReport = null; reportSabotage(rep.to, rep.outcome, -1); } }, 15000);
+  }
   if (outcome === 'relay') gooseRelay(g);
   else if (outcome === 'brood') gooseBrood(g);
   else if (outcome === 'pond') goosePond(g);
@@ -1425,6 +1442,7 @@ function updateHammer(dt) {
 const GOOSE_BEAT_MS = 3000;
 function placeBall(x, z, hold = 2.8) {
   G.ball = { x, z, y: G.course.h(x, z) + R };
+  if (G.sabReport) { const rp = G.sabReport; G.sabReport = null; reportSabotage(rp.to, rp.outcome, Math.hypot(x - rp.at.x, z - rp.at.z)); }
   ballMesh.visible = true;
   roomSendProgress();
   burst(x, G.ball.y + 0.5, z, 30, 0xffffff, { speed: 2.5, up: 2, life: 1.4, grav: 2 });
@@ -1607,7 +1625,11 @@ function finishSwing(power, tempo, drift) {
   swing.active = false; hideCancel(); swingTone.release();
   $('power').classList.remove('show'); $('powerLbl').classList.remove('show');
   if (power < 0.03) { carry.samples = null; return; }
-  if (G.club !== 'putter') showTempoChip(src === 'key' ? 'TIMING' : 'TEMPO', src === 'key' ? 1 - Math.abs(drift) / 0.45 : tempo);
+  if (G.club !== 'putter') {
+    showTempoChip(src === 'key' ? 'TIMING' : 'TEMPO', src === 'key' ? 1 - Math.abs(drift) / 0.45 : tempo);
+    // (S10) what those dots mean, once per device, 7 words or fewer
+    if (store.get('ghg3d_tempoTip') !== '1') { store.set('ghg3d_tempoTip', '1'); setTimeout(() => hud.hint(src === 'key' ? 'TIMING: tap in the green zone.' : 'TEMPO: a smooth, quick flick flies furthest.', 5000), 1200); }
+  }
   doShot({ power, tempo, drift });
 }
 // After impact: how clean was that? (tempo costs up to a third of your carry)
@@ -1948,7 +1970,7 @@ function endShot() {
   const dpin = dist2(G.ball, G.cup);
   if (s.clubId !== 'putter' || !['green', 'fringe'].includes(G.course.surf(s.start.x, s.start.z))) {
     if (dpin < 1.5) { say('close', vars(), { bump: -12 }); hud.banner(`STIFF!<small>${dpin.toFixed(1)} m</small>`, 1400); burst(G.ball.x, G.ball.y + 0.2, G.ball.z, 30, 0xffc84a, { speed: 2, up: 3 }); }
-    else if (surf === 'green' || surf === 'fringe') { say('green', vars(), { bump: -15 }); hud.banner(`ON THE GREEN<small>${dpin.toFixed(1)} m to the pin</small>`, 1400); }
+    else if (surf === 'green' || surf === 'fringe') { say(G.strokes + 1 === G.holeDef.par - 1 && Math.random() < 0.6 ? 'greenBirdie' : 'green', vars(), { bump: -15 }); hud.banner(`ON THE GREEN<small>${dpin.toFixed(1)} m to the pin</small>`, 1400); }
     else if (surf === 'fairway') { say('fairway', vars(), { bump: -12 }); hud.banner(`FAIRWAY<small>${dpin.toFixed(0)} m to go</small>`, 1200); }
     else if (surf === 'rough') { say('rough', vars(), { bump: 9 }); hud.banner(`ROUGH<small>${dpin.toFixed(0)} m to go</small>`, 1200); }
     else if (surf === 'sand' && inGutter(G.ball.x, G.ball.z)) { say('gutter', vars(), { bump: 12 }); hud.banner(`🎳 GUTTER BALL<small>${dpin.toFixed(0)} m to go</small>`, 1400); }
@@ -2531,7 +2553,9 @@ function updateWheel(dt) {
     const p = POWERUPS[w.pick];
     landPowerUp(p);   // first: Sic 'Em may turn into Bodyguard
     const pu = G.powerUp ?? p;
-    $('wheelOut').innerHTML = `<b>${pu.emoji} ${esc(pu.name)}</b>${esc(powerDesc(p))}`;
+    // (S11) the wheel's words and the chip's words come from the same power-up; curses wear a skull
+    $('wheelOut').innerHTML = `<b>${pu.kind === 'cursed' ? '☠️ ' : ''}${pu.emoji} ${esc(pu.name)}</b>${esc(powerDesc(pu))}`;
+    $('wheelOut').classList.toggle('curse', pu.kind === 'cursed');
     sfx.wheelLand ? sfx.wheelLand(p.kind !== 'cursed') : sfx.calledIt();
   }
   if (w.shown && w.t >= w.end) finishWheel();
@@ -2544,6 +2568,8 @@ function finishWheel() {
   $('wheel').classList.add('hidden');
   G.wheel = null;
   renderPowerChip();
+  // (S10) the very first tee: the controls go up once the wheel is done, and stay until you swing
+  if (!G.hintsShown.swing && G.mode === 'address') hud.hint(CONTROL_HINT(coarse), 0, { stay: true });
 }
 const powerDesc = p => p.id === 'banana' && G.holeIdx % 2 === 1 ? 'Next shot swerves hard right.'
   : p.id === 'sic' && G.powerUp?.taxi ? 'A goose relocates your next lie.'
@@ -2570,7 +2596,8 @@ function renderPowerChip() {
   const live = p && p.landed && !G.wheel && (p.hole || p.shotLeft > 0) && !(p.lifeRing === 0);
   el.classList.toggle('hidden', !live);
   if (live) {
-    el.innerHTML = `<span class="e">${p.emoji}</span> <b>${esc(p.name)}</b> · ${esc(powerDesc(p))}`;
+    el.innerHTML = `<span class="e">${p.kind === 'cursed' ? '☠️' : ''}${p.emoji}</span> <b>${esc(p.name)}</b> · ${esc(powerDesc(p))}`;
+    el.classList.toggle('curse', p.kind === 'cursed');
     el.classList.remove('mini'); clearTimeout(renderPowerChip.t);
     if (narrow()) renderPowerChip.t = setTimeout(() => el.classList.add('mini'), 2500);   // shrinks to its emoji; tap to read it again
   }
@@ -2599,10 +2626,17 @@ function setCupVisual(r) {
 }
 
 // ------------------------------------------------------------ between holes
+// (round 8, S5) waiting: a visible countdown to "Go on without them", an idle
+// flag for anyone who has sent nothing for a while, and a bottom strip instead
+// of a half-screen card (tap its title for the full card)
+const WAIT_SECS = 45, IDLE_MS = 45000;
+const isIdle = r => !!r && r.online && !r.prog?.done && performance.now() - (r.activeAt ?? 0) > IDLE_MS;
 function afterHole() {
   if (G.holeIdx + 1 >= HOLES.length) { endRound(); return; }
   G.mode = 'between';
   G.between = { t: 0, render: 0, goAt: 0, watching: null, cam: null };
+  for (const r of rivals.values()) r.activeAt ??= performance.now();
+  $('between').classList.remove('open');
   renderBetween();
   $('between').classList.remove('hidden'); document.body.classList.add('between');
 }
@@ -2626,15 +2660,15 @@ function renderBetween() {
   const st = $('betweenStand');
   if (G.room) {
     const rows = standings();
-    st.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}<b>${fmtPar(x.toPar)}</b><small>${thruTxt(x)}</small></li>`).join('');
+    st.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${thruTxt(x)}</small></li>`).join('');
   } else st.innerHTML = '';
   const wait = waitingFor(), btn = $('betweenGo');
   document.body.classList.toggle('waiting', wait.length > 0);
-  const late = G.between.t > 45;
+  const left = Math.ceil(WAIT_SECS - G.between.t), late = left <= 0 || wait.every(isIdle);
   if (wait.length) {
     const w = G.between.watching;
-    $('betweenWait').textContent = `Waiting for ${wait.map(r => r.name).join(', ')}…${w ? ` 👀 watching ${w.name}` : ''}`;
-    btn.disabled = !late; btn.textContent = late ? 'Go on without them ▶' : 'Waiting…';
+    $('betweenWait').textContent = `Waiting for ${wait.map(r => r.name + (isIdle(r) ? ' 💤' : '')).join(', ')}…${w ? ` 👀 ${w.name}` : ''}`;
+    btn.disabled = !late; btn.textContent = late ? 'Go on without them ▶' : `Go on without them in ${left} s`;
   } else {
     $('betweenWait').textContent = G.room ? 'Everyone is in!' : '';
     btn.disabled = false; btn.textContent = `Hole ${G.holeIdx + 2} ▶`;
@@ -2653,7 +2687,9 @@ function updateBetween(dt) {
   }
   if (!G.room && b.t > 12) { goNextHole(); return; }
   // spectator cam: follow a friend who's still out there, else circle the cup
-  let r = b.watching && wait.includes(b.watching) ? b.watching : wait.find(x => x.playing) ?? wait[0] ?? null;
+  const lively = [...wait].sort((x, y) => isIdle(x) - isIdle(y) || (y.activeAt ?? 0) - (x.activeAt ?? 0));
+  let r = b.watching && wait.includes(b.watching) && !isIdle(b.watching) ? b.watching : wait.find(x => x.playing) ?? lively[0] ?? null;
+  // a ball in the air always wins the camera, and keeps it until it stops
   if (r && !r.playing && wait.some(x => x.playing)) r = wait.find(x => x.playing);
   const snap = r !== b.watching && r;
   b.watching = r;
@@ -2688,6 +2724,7 @@ function goNextHole() {
   G.between = null;
   loadHole(G.holeIdx + 1);
 }
+$('betweenHead').addEventListener('click', () => $('between').classList.toggle('open'));
 $('betweenGo').addEventListener('click', () => {
   if (G.mode !== 'between' || $('betweenGo').disabled) return;
   goNextHole();
@@ -2803,6 +2840,37 @@ function canTeeth(w) {
   const sf = G.course.surf(p.rest.x, p.rest.z); if (sf === 'green' || sf === 'fringe') return false;
   if (myToPar() < theirToPar(w)) return false;   // you're ahead: no teeth for you
   return !!G.possessWp && Math.hypot(G.possessWp.x - p.rest.x, G.possessWp.z - p.rest.z) >= 14;
+}
+// (round 8, S3) sabotage reports back: the sender hears what their goose did,
+// in the commentator's voice, 7 words or fewer. Sent as state so it can't be dropped.
+function reportSabotage(to, outcome, metres = 0) {
+  sendEmote('sabx', to, `${myHole()}:${outcome}:${Math.max(-1, Math.round(metres))}`, { state: true });
+}
+const SAB_LINES = {
+  punt: (n, m) => m > 0 ? `🪿 Your goose punted ${n} ${m} m!` : `🪿 Your goose punted ${n}!`,
+  relay: (n, m) => m > 0 ? `🏉 Your geese ran ${n}'s ball ${m} m!` : `🏉 Your geese ran off with it!`,
+  brood: n => `🥚 Your goose is sitting on ${n}'s ball.`,
+  pond: n => `🎣 Your goose dunked ${n}'s ball!`,
+  stash: n => `🌲 Your goose stashed ${n}'s ball!`,
+  bunker: n => `🏖️ Your goose bunkered ${n}!`,
+  swallow: n => `🪿 Your goose ATE ${n}'s ball!`,
+  won: n => `💪 ${n} won the tug. Rude.`,
+  seen: n => `🪿 ${n} can see your goose.`,
+  honked: n => `📢 ${n} heard that.`,
+  gimme: n => `🤝 ${n} took your gimme.`,
+};
+function onSabotageResult(r, rest) {
+  const [outcome, m] = [rest[0], +rest[1]];
+  const f = SAB_LINES[outcome]; if (!f) return;
+  const line = f(esc(r.name), Number.isFinite(m) ? m : -1);
+  if (outcome === 'honked' || outcome === 'seen') feed(line); else { hud.toast(line); sfx.react?.('laugh'); }
+}
+// one line per spectator tool, the first time you use it this session
+const TOOL_TIPS = { possess: 'Tap their course: your goose walks there.', honk: 'Your goose honks at them.', gimme: 'Concede their short putt.', teeth: 'Your goose goes for their ball.', stand: 'Tap the rough: your umbrella blocks balls.' };
+function toolTip(act) {
+  const seen = (toolTip.seen ??= new Set());
+  if (!TOOL_TIPS[act] || seen.has(act)) return;
+  seen.add(act); hud.hint(TOOL_TIPS[act], 3500);
 }
 function sendTeeth(w, trick) {
   if (!canTeeth(w)) return;
@@ -3035,11 +3103,23 @@ function rivalAvatar(r) {
   }
   return r.avatar;
 }
+// (round 8, S12) while you address or swing, friends' golfers near your ball
+// fade to translucent ghosts; their balls stay solid and fully visible
+function ghostGolfer(a, on) {
+  if ((a.userData.ghosted ?? false) === on) return;
+  a.userData.ghosted = on;
+  a.traverse(o => {
+    if (!o.material) return;
+    if (!o.userData.ownMat) { o.material = Array.isArray(o.material) ? o.material.map(m => m.clone()) : o.material.clone(); o.userData.ownMat = true; }
+    for (const m of [o.material].flat()) { m.userData.op0 ??= m.opacity; m.userData.tr0 ??= m.transparent; m.transparent = on || m.userData.tr0; m.opacity = on ? 0.28 * m.userData.op0 : m.userData.op0; m.depthWrite = !on; m.needsUpdate = true; }
+  });
+}
 function updateRivalAvatar(r, p, dt) {
   if (updateFanAvatar(r, dt)) return;
   const a = rivalAvatar(r);
   if (!p) { a.visible = false; return; }
   a.visible = true;
+  ghostGolfer(a, (G.mode === 'address' || swing.active) && !G.shot && !!r.avatarAt && Math.hypot(r.avatarAt.x - G.ball.x, r.avatarAt.z - G.ball.z) < 6);
   const ball = r.playing ? { x: r.playing.shot.frames[0], z: r.playing.shot.frames[2] } : p;
   const toCup = Math.atan2(G.cup.x - ball.x, G.cup.z - ball.z);
   const want = { x: ball.x - Math.sin(toCup) * 0.9 + Math.cos(toCup) * 0.5, z: ball.z - Math.cos(toCup) * 0.9 - Math.sin(toCup) * 0.5 };
@@ -3136,7 +3216,7 @@ function nearestTrunk(p, within) {
   return best?.c ?? null;
 }
 function maybeSasquack() {
-  if (!sasquackReady() || G.powerUp?.noTrees) return false;
+  if (!sasquackReady() || G.powerUp?.noTrees || disruptionSpent()) return false;
   const s = G.course.surf(G.ball.x, G.ball.z);
   if (s === 'green' || s === 'fringe') return false;
   // generous on purpose (playtest: "I can't set it off"): resting among the trunks, or
@@ -3171,6 +3251,7 @@ function planSasquack() {
 }
 function startSasquack(tree, { fromTheft = false } = {}) {
   G.sasqHole = true; G.sasqRound = (G.sasqRound ?? 0) + 1;
+  if (!fromTheft) spendDisruption();
   if (swing.active) cancelSwing();
   G.mode = 'sasquack';
   const top = tree.y1 ?? G.course.h(tree.x, tree.z) + 5;
@@ -3620,7 +3701,8 @@ function endScare() {
   try { holeOut(sc?.s ?? { start: { ...G.ball }, wasBullet: false, gimme: true }, true); }
   catch (e) { console.warn('holeOut after scare', e); G.mode = 'holed'; G.celebrate = 2.7; }   // the hole still ends
   if (G.mode === 'scare') { G.mode = 'holed'; G.celebrate = 2.7; }
-  safe(() => say('scared', vars(), {}));
+  // the "Par, I think" gag only when it was a par; otherwise the desk line without a score
+  safe(() => say(G.holeScores[G.holeIdx] === G.holeDef.par ? 'scared' : 'scaredOff', vars(), {}));
 }
 
 // ============================================================ room interactions
@@ -3629,6 +3711,8 @@ function endScare() {
 // (a wheel wedge), and the scare notice. All ride the server's rate-limited
 // `emote` relay; the client mirrors its bucket so buttons grey out honestly.
 const REACTS = { honk: '📯', clap: '👏', gasp: '😱', laugh: '😂' };
+// (round 8, S4) quick chat: a fixed list sent as ids, never free text
+const CHATS = { goose: '🪿 Respect the goose.', tom: '👻 Old Tom would never.', luck: '🍀 Lucky. Pure luck.', rip: '🕯️ Pour one out for that ball.', fore: '📣 FORE! Sorry.' };
 const emoteBucket = { tokens: 5, at: 0 };
 function emoteTokens() {
   const now = performance.now();
@@ -3654,6 +3738,21 @@ function sendReact(kind) {
   feed(`<b>You</b> ${REACTS[kind]}`);
   renderEmoteButtons();
 }
+function sendChat(id) {
+  const now = performance.now();
+  if (!CHATS[id] || now - (G.lastReactAt ?? 0) < 2000) return;
+  if (!sendEmote('chat', '', `${myHole()}:${id}`)) return;
+  G.lastReactAt = now;
+  feed(`<b>You</b>: ${esc(CHATS[id])}`);
+  renderEmoteButtons();
+}
+// a speech bubble over a friend's ball on your hole; never when it would sit over yours
+function bubble(r, text) {
+  if (!r.mesh?.visible || r.prog?.hole !== myHole() || dist2(r.mesh.position, G.ball) < 4) return;
+  if (r.bubble) scene.remove(r.bubble);
+  r.bubble = W.buildLabel(text, '#ffffff', 'rgba(20,16,40,0.88)'); scene.add(r.bubble);
+  r.bubbleUntil = performance.now() + 2800;
+}
 function feed(html) {
   const el = document.createElement('div'); el.innerHTML = html;
   $('emoteFeed').appendChild(el);
@@ -3664,6 +3763,7 @@ const reactSound = { bySender: new Map(), recent: [] };
 function onEmote(ev) {
   if (!G.room || ev.round !== G.room.round || !G.room.inRound) return;
   const r = rivals.get(ev.from); if (!r) return;
+  r.activeAt = performance.now();
   const [hs, ...rest] = String(ev.arg ?? '').split(':');
   const hole = +hs;
   if (hole === myHole() && ev.kind === 'knock') {
@@ -3679,10 +3779,16 @@ function onEmote(ev) {
   if (ev.kind === 'scared') { hud.toast(`👻 Old Tom got ${esc(r.name)}.`); return; }
   if (ev.kind === 'sasquack') { hud.toast(`🦶 ${esc(r.name)} met the Sasquack.`); return; }
   if (ev.kind === 'finale') { hud.toast(`🎆 ${esc(r.name)} has finished.`); return; }
-  if (hole !== myHole()) return;
+  // (round 8, S4) reactions and quick chat land from any hole; everything else is hole-local
+  if (hole !== myHole() && !['react', 'chat', 'sabx'].includes(ev.kind)) return;
+  if (ev.kind === 'chat') {
+    const id = rest[0]; if (!CHATS[id]) return;
+    feed(`${dot}: ${esc(CHATS[id])}`); bubble(r, CHATS[id]);
+    return;
+  }
   if (ev.kind === 'react') {
     const kind = rest[0]; if (!REACTS[kind]) return;
-    feed(`${dot} ${REACTS[kind]}`);
+    feed(`${dot} ${REACTS[kind]}`); bubble(r, REACTS[kind]);
     const now = performance.now();
     reactSound.recent = reactSound.recent.filter(t => now - t < 5000);
     if (!reactMuted() && !busy() && now - (reactSound.bySender.get(ev.from) ?? 0) > 4000 && reactSound.recent.length < 3) {
@@ -3713,7 +3819,9 @@ function onEmote(ev) {
     const v = rest[0];
     hud.toast(v === 'save' ? `☂️ You saved ${esc(r.name)}!` : v === 'rob' ? `☂️ You robbed ${esc(r.name)}.` : '☂️ Bonk.');
   } else if (ev.kind === 'sic') {
-    if (!G.sicPending) G.sicPending = r.name;
+    if (!G.sicPending) { G.sicPending = r.name; G.sicFrom = r.id; }
+  } else if (ev.kind === 'sabx') {
+    onSabotageResult(r, rest);
   }
 }
 
@@ -3723,9 +3831,15 @@ function renderEmoteButtons() {
   if (!G.room || G.mode !== 'between') { box.innerHTML = ''; return; }
   const low = emoteTokens() < 1;
   const w = G.between?.watching;
-  let html = Object.entries(REACTS).map(([k, e], i) => `<button data-react="${k}" ${low ? 'disabled' : ''} title="${k} (${i + 1})">${e}</button>`).join('');
+  let html = Object.entries(REACTS).map(([k, e], i) => `<button data-react="${k}" ${low ? 'disabled' : ''} title="${k} (${i + 1})">${e}</button>`).join('')
+    + `<button data-act="chat" aria-expanded="${!!G.chatPick}">💬</button>`;
+  if (G.chatPick) {
+    html += Object.entries(CHATS).map(([k, t]) => `<button data-chat="${k}" ${low ? 'disabled' : ''}>${esc(t)}</button>`).join('');
+    if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+    return;
+  }
   if (w) {
-    html += `<button data-act="possess" ${low ? 'disabled' : ''}>${G.possess ? '🪿 Tap the course' : '🪿 Be the goose'}</button>`;
+    html += `<button data-act="possess" title="${TOOL_TIPS.possess}" ${low ? 'disabled' : ''}>${G.possess ? '🪿 Tap the course' : '🪿 Be the goose'}</button>`;
     const p = w.prog;
     const gimmeable = p && !w.playing && p.rest && !p.holed && p.hole === myHole() && Math.hypot(p.rest.x - G.cup.x, p.rest.z - G.cup.z) <= 1.0 && G.course.surf(p.rest.x, p.rest.z) !== 'rough';
     if (gimmeable && G.gimmeSent !== `${w.id}:${p.strokes}`) html += `<button data-act="gimme">🤝 Gimme</button>`;
@@ -3741,6 +3855,9 @@ $('emotes').addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b || b.disabled) return;
   unlockAudio();
   if (b.dataset.react) { sendReact(b.dataset.react); return; }
+  if (b.dataset.chat) { sendChat(b.dataset.chat); G.chatPick = false; renderEmoteButtons(); return; }
+  if (b.dataset.act === 'chat') { G.chatPick = !G.chatPick; renderEmoteButtons(); return; }
+  toolTip(b.dataset.act);
   if (b.dataset.act === 'stand') { G.standMode = !G.standMode; G.possess = false; G.teethPick = false; renderEmoteButtons(); return; }
   const w = G.between?.watching; if (!w) return;
   if (b.dataset.teeth) { sendTeeth(w, b.dataset.teeth); G.teethPick = false; renderEmoteButtons(); return; }
@@ -3800,6 +3917,7 @@ function puppetGo(r, x, z, honk) {
     for (let k = 0; k < 10 && !validLand(p.x, p.z); k++) { p.x = lerp(p.x, G.ball.x, 0.3); p.z = lerp(p.z, G.ball.z, 0.3); }
     puppets.set(r.id, p);
     hud.toast(`🪿 <b>${esc(r.name)}</b> is a goose now.`);
+    reportSabotage(r.id, 'seen');
   }
   // clamp: playable land, off the green, never crowding your ball
   const g = G.course.green;
@@ -3811,7 +3929,9 @@ function puppetGo(r, x, z, honk) {
   if (honk) {
     const onGreen = ['green', 'fringe'].includes(G.course.surf(G.ball.x, G.ball.z));
     if (busy() || onGreen) feed(`<span style="color:${r.hex}">🪿</span> HONK`);
-    else { sfx.react?.('honk'); G.shake = Math.max(G.shake, 0.05); }
+    else { sfx.react?.('honk'); G.shake = Math.max(G.shake, 0.05); feed(`<span style="color:${r.hex}">🪿</span> <b>${esc(r.name)}</b>: HONK`); }
+    const now = performance.now();
+    if (now - (p.ackAt ?? 0) > 6000) { p.ackAt = now; reportSabotage(r.id, 'honked'); }
   }
 }
 function updatePuppets(dt) {
@@ -3840,6 +3960,7 @@ function dropPuppet(id) {
 }
 // ---- gimme
 function offerGimme(r) {
+  G.gimmeFrom = r.id;
   const el = $('gimme');
   el.innerHTML = `🤝 <b>${esc(r.name)}</b>: gimme? <button id="gimmeYes">Take it (G)</button>`;
   el.classList.remove('hidden');
@@ -3851,6 +3972,7 @@ function offerGimme(r) {
 }
 function acceptGimme() {
   G.gimmeOffer = null; $('gimme').classList.add('hidden');
+  if (G.gimmeFrom) { reportSabotage(G.gimmeFrom, 'gimme'); G.gimmeFrom = null; }
   G.strokes++; G.usedGimme = true;
   const start = { ...G.ball };
   G.ball = { x: G.cup.x, z: G.cup.z, y: G.course.h(G.cup.x, G.cup.z) - 0.05 };
@@ -3870,8 +3992,17 @@ function sicTarget() {
 function updateReactBar() {
   const show = !!G.room && G.room.inRound && ['address', 'flight', 'walk'].includes(G.mode) && !swing.active && !G.scoped;
   $('reactBar').classList.toggle('hidden', !show);
+  if (!show) $('reactBar').classList.remove('open');
 }
-$('reactBar').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { unlockAudio(); sendReact(b.dataset.react); } });
+$('chatMenu').innerHTML = Object.entries(REACTS).map(([k, e]) => `<button data-react="${k}" aria-label="${k}">${e}</button>`).join('')
+  + Object.entries(CHATS).map(([k, t]) => `<button class="phrase" data-chat="${k}">${esc(t)}</button>`).join('');
+$('reactBar').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  unlockAudio();
+  if (b.id === 'chatToggle') { $('reactBar').classList.toggle('open'); clearTimeout(updateReactBar.t); updateReactBar.t = setTimeout(() => $('reactBar').classList.remove('open'), 6000); return; }
+  if (b.dataset.react) sendReact(b.dataset.react); else if (b.dataset.chat) sendChat(b.dataset.chat);
+  $('reactBar').classList.remove('open');
+});
 
 // ============================================================ camera
 function addressCam() {
@@ -4217,6 +4348,20 @@ function updateClub(dt) {
 // the whole course is the pad, and the first few pixels of a drag decide
 // whether it's an aim (sideways) or a swing (down). No pointer lock.
 const coarse = matchMedia('(pointer: coarse)').matches;
+// (round 8, S10) phones only hear about phone controls: desktop strings are
+// rewritten or removed from the page itself (screen readers read hidden text)
+const BULLET_LBL = coarse ? '● BULLET CAM · TAP TO SKIP' : '● BULLET CAM · CLICK TO SKIP';
+function phoneCopy() {
+  $('bulletLbl').textContent = BULLET_LBL;
+  if (!coarse) return;
+  $('acc').querySelector('span')?.remove();   // the key swing's needle: no Space bar here
+  $('breath').innerHTML = '<div id="breathBar"><div id="breathFill"></div></div>'; $('breath').style.display = 'none';   // steadying is a Shift key thing
+  $('helpRows').innerHTML = [
+    ['Aim', 'Drag the course sideways.'], ['Swing', 'On the pad: drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
+    ['Cancel', 'Lift your finger before the flick.'], ['Club', 'Tap a club.'], ['Zoom', 'Tap 🔭.'], ['Sound', 'Tap 🔊 and 🎙️.'],
+  ].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
+}
+phoneCopy();
 function lockPointer() { /* pointer lock retired: drag-to-aim works everywhere */ }
 function inGame() { return !['title', 'end'].includes(G.mode) && $('help').classList.contains('hidden') && $('lb').classList.contains('hidden'); }
 let dragging = null;
@@ -4838,6 +4983,10 @@ function updateRivals(dt) {
     const halo = r.mesh.children[0];
     if (halo) halo.material.opacity = clamp((camera.position.distanceTo(r.mesh.position) - 3) / 10, 0.05, 0.35);
     if (r.label) { scaleLabel(r.label, r.mesh.position, 0.4, 0.035); r.label.visible = camera.position.distanceTo(r.mesh.position) > 6; }
+    if (r.bubble) {
+      if (performance.now() > r.bubbleUntil) { scene.remove(r.bubble); r.bubble = null; }
+      else scaleLabel(r.bubble, r.mesh.position, 1.2, 0.045);
+    }
   }
 }
 document.addEventListener('visibilitychange', () => { if (!document.hidden) for (const r of rivals.values()) if (r.playing) finishRivalShot(r, true); });
@@ -4848,29 +4997,39 @@ function standings() {
   const rows = [{ id: G.room?.me, me: true, name: G.playerName, hex: ROOM_COLORS[(G.room?.myColor ?? 2) % ROOM_COLORS.length], scores: myScores, hole: G.holeIdx + 1, done: G.mode === 'end' || myScores.length === HOLES.length, online: true }];
   if (sameRound()) for (const r of rivals.values()) {
     const p = r.prog ?? {};
-    rows.push({ id: r.id, name: r.name, hex: r.hex, scores: Array.isArray(p.scores) ? p.scores : [], hole: p.hole ?? 0, done: !!p.done, online: r.online });
+    rows.push({ id: r.id, name: r.name, hex: r.hex, scores: Array.isArray(p.scores) ? p.scores : [], hole: p.hole ?? 0, done: !!p.done, online: r.online, idle: isIdle(r) });
   }
   for (const x of rows) { x.toPar = x.scores.reduce((s, v, i) => s + v - par(i), 0); x.thru = x.scores.length; x.total = x.scores.reduce((a, b) => a + b, 0); }
-  rows.sort((a, b) => a.toPar - b.toPar || b.thru - a.thru || (a.me ? -1 : b.me ? 1 : 0));
-  rows.forEach((x, i) => { x.pos = i > 0 && rows[i - 1].toPar === x.toPar ? rows[i - 1].pos : i + 1; });
+  // (round 8, S8) finished cards first, then everyone still out there by to-par
+  // and how far they've got: "+5 thru 4" never outranks a finished round
+  rows.sort((a, b) => (b.done - a.done) || a.toPar - b.toPar || b.thru - a.thru || (a.me ? -1 : b.me ? 1 : 0));
+  rows.forEach((x, i) => { const y = rows[i - 1]; x.pos = y && y.done === x.done && y.toPar === x.toPar && (x.done || y.thru === x.thru) ? y.pos : i + 1; });
   for (const x of rows) x.tie = rows.filter(y => y.pos === x.pos).length > 1;
   return rows;
 }
 const thruTxt = x => x.done ? 'F' : x.thru ? `thru ${x.thru}` : x.hole ? `on ${x.hole}` : '—';
 function updateRoomRace() {
   if (!G.room || !G.holeDef) return;
-  const rows = standings(), me = rows.find(x => x.me), n = rows.length;
-  if (G.room.inRound && n > 1 && G.room.lastPos && me.pos !== G.room.lastPos) {
-    const tiedWith = rows.find(x => !x.me && x.pos === me.pos);
-    if (me.pos < G.room.lastPos) {
-      const passed = rows.find(x => !x.me && x.pos > me.pos);
-      if (tiedWith) { sfx.tick(); say('roomLevel', { ...vars(), rival: tiedWith.name }, { bump: -3 }); }
-      else if (passed) { sfx.overtake(); say('roomOvertake', { ...vars(), rival: passed.name }, { bump: -6 }); }
-    } else {
-      const ahead = rows.filter(x => !x.me && x.pos < me.pos).at(-1);
-      if (ahead) { sfx.fallBehind(); setTimeout(() => say('roomFallBehind', { ...vars(), rival: ahead.name }, { bump: 6 }), 1200); }
-    }
+  const rows = standings(), me = rows.find(x => x.me);
+  // (round 8, S15) a lead call compares two cards only over the holes both have
+  // finished, and only when that shared stretch grows: no "moves past" a
+  // friend who is three holes behind
+  const cmp = (G.room.cmp ??= new Map());
+  let call = null;
+  if (G.room.inRound) for (const x of rows) {
+    if (x.me) continue;
+    const n = Math.min(me.thru, x.thru), d = toParThru(me.scores, n) - toParThru(x.scores, n);   // >0: I'm behind
+    const was = cmp.get(x.id);
+    cmp.set(x.id, { n, d });
+    if (!was || n <= was.n || n === 0) continue;
+    const s0 = Math.sign(was.d), s1 = Math.sign(d);
+    if (s0 === s1) continue;
+    const c = s1 < 0 && s0 > 0 ? 'roomOvertake' : s1 === 0 ? 'roomLevel' : s1 > 0 && s0 <= 0 ? 'roomFallBehind' : s1 < 0 ? 'roomOvertake' : null;
+    if (c && (!call || c === 'roomOvertake')) call = { c, name: x.name };
   }
+  if (call?.c === 'roomOvertake') { sfx.overtake(); say('roomOvertake', { ...vars(), rival: call.name }, { bump: -6 }); }
+  else if (call?.c === 'roomLevel') { sfx.tick(); say('roomLevel', { ...vars(), rival: call.name }, { bump: -3 }); }
+  else if (call?.c === 'roomFallBehind') { sfx.fallBehind(); setTimeout(() => say('roomFallBehind', { ...vars(), rival: call.name }, { bump: 6 }), 1200); }
   G.room.lastPos = me.pos;
   // standings live on the between-hole card and the end card, not the HUD
   if (G.mode === 'between') renderBetween();
@@ -4879,11 +5038,14 @@ function updateRoomRace() {
 function renderRoomFinal() {
   const el = $('roomFinal'); if (!el || !G.room) return;
   const rows = standings();
-  el.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}<b>${fmtPar(x.toPar)}</b><small>${x.done ? `${x.total} strokes` : thruTxt(x)}</small></li>`).join('');
-  const waiting = rows.filter(x => !x.done && x.online).length;
+  el.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${x.done ? `${x.total} strokes` : thruTxt(x)}</small></li>`).join('');
+  const waiting = rows.filter(x => !x.done && x.online).length, out = rows.filter(x => !x.done).length;
   const me = rows.find(x => x.me);
+  // a place is only ever read off this same list, among the finished cards
   $('roomFinalNote').textContent = rows.length === 1 ? 'Nobody else finished this round.'
-    : waiting ? `Waiting on ${waiting} player${waiting === 1 ? '' : 's'}…` : me.pos === 1 ? (me.tie ? 'A shared victory. Insufferable, all of you.' : 'You won the room! 🏆') : `${ordinal(me.pos)} place. There's always next round.`;
+    : waiting ? `Waiting on ${waiting} player${waiting === 1 ? '' : 's'}…`
+    : me.pos === 1 ? (me.tie ? 'A shared victory. Insufferable, all of you.' : out ? 'Top of the finished cards! 🏆' : 'You won the room! 🏆')
+    : `${ordinal(me.pos)} place. There's always next round.`;
 }
 
 // ---- sending
@@ -4927,6 +5089,7 @@ function onRoomShot(ev) {
   if (G.room.seen.has(key)) return;
   G.room.seen.add(key);
   const r = rivals.get(ev.from); if (!r) return;
+  r.activeAt = performance.now();
   if (ev.progress) r.prog = ev.progress;
   if (sameRound() && G.room.inRound && ev.hole === G.holeIdx + 1 && Array.isArray(ev.f) && ev.f.length >= 3) {
     if (r.playing) finishRivalShot(r, true);
@@ -4939,7 +5102,7 @@ function onRoomShot(ev) {
 function onRoomProgress(ev) {
   if (!G.room || ev.round !== G.room.round) return;
   const r = rivals.get(ev.from); if (!r) return;
-  r.prog = ev.progress;
+  r.prog = ev.progress; r.activeAt = performance.now();
   const sc = ev.progress?.scores ?? [];
   if (sc.length > r.scoresSeen && sameRound() && G.room.inRound) {
     const hole = sc.length, strokes = sc[hole - 1], par = HOLES[hole - 1]?.par;
@@ -5035,7 +5198,14 @@ async function roomAction(fn) {
   for (const b of ['roomCreate', 'roomJoinBtn']) $(b).disabled = true;
   const client = makeClient();
   try { enterRoom(client, await fn(client, name)); }
-  catch (e) { roomErr(e.message); }
+  catch (e) {
+    roomErr(e.message);
+    // (round 8, S5) one seat per name: "is that you?" takes the seat over
+    if (e.nameTaken) {
+      $('roomErr').innerHTML = `<b>${esc(name)}</b> is already in this room. <button type="button" id="roomMe">That's me</button>`;
+      $('roomMe').onclick = () => roomAction((c, n) => c.join($('roomCode').value.trim().toUpperCase() || G.lastRoomCode, n, { takeover: true }));
+    }
+  }
   finally { for (const b of ['roomCreate', 'roomJoinBtn']) $(b).disabled = false; }
 }
 function leaveRoom() {

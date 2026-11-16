@@ -25,7 +25,7 @@ export const TOM_LINES = {
 export const VOICE_BALLS = ['Bounce Springsteen', 'Sir Thud', 'Butterfingers', 'Clover', 'Lord Floofington', 'Nervous Nigel', 'Range Ball #4471'];
 export const VOICE_GHOSTS = ['Old Tom', 'your old self'];
 // tier 1 lines that are good news get excitement; the rest get sarcasm
-const POSITIVE = new Set(['pure', 'fairway', 'green', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
+const POSITIVE = new Set(['pure', 'fairway', 'green', 'greenBirdie', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
 
 export function voiceTag(cls, tier) {
   return tier === 0 ? '[whispers]' : tier === 2 ? '[shouting]' : POSITIVE.has(cls) ? '[excited]' : '[sarcastic]';
