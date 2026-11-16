@@ -5308,7 +5308,7 @@ function pollPad(dt) {
   try { p = readPad(navigator.getGamepads?.(), padPrev); } catch { p = null; }
   padPrev = p;
   if (!p) return;
-  if (p.active) setInput('pad');
+  if (p.active) { setInput('pad'); noteInput(); }
   if (INPUT !== 'pad') return;
   if (p.pressed.some(Boolean)) unlockAudio();
   const P = k => p.pressed[BTN[k]];
@@ -5675,6 +5675,21 @@ function connectLive() {
     G.elsewhere = G.elsewhere.slice(-2);
   });
 }
+// ============================================================ keep-awake
+// The platform scaler sleeps the app after 30 minutes with no new requests, and
+// the live feeds above are single long requests that don't count again. So while
+// someone is really here (tab visible, input in the last 15 min) ping every
+// 5 min; walk away and the pings stop, and the app sleeps ~30-40 min later.
+const ALIVE_EVERY = 5 * 60e3, ALIVE_IDLE = 15 * 60e3;
+let lastInputAt = Date.now();
+function noteInput() { lastInputAt = Date.now(); }
+for (const ev of ['pointerdown', 'pointermove', 'keydown', 'wheel']) addEventListener(ev, noteInput, { capture: true, passive: true });
+function keepAwake() {
+  if (document.hidden || Date.now() - lastInputAt > ALIVE_IDLE) return false;
+  fetch('/api/alive', { method: 'POST', cache: 'no-store' }).catch(() => {});
+  return true;
+}
+setInterval(keepAwake, ALIVE_EVERY);
 function broadcastHole(hole, strokes) {
   fetch('/api/hole', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: CLIENT_ID, name: G.playerName, hole, strokes }) }).catch(() => {});
 }

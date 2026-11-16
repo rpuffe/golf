@@ -82,6 +82,16 @@ func main() {
 	mux.HandleFunc("/api/events", hub.serveSSE)
 	mux.HandleFunc("/api/hole", hub.serveHole)
 
+	// Keep-awake ping (see keepAwake in web/js/main.js). The platform scaler
+	// puts the app to sleep after 30 minutes without new ALB requests, and the
+	// long-lived SSE feeds count as one request each, so a slow solo round
+	// would look idle. The client sends one of these every few minutes while a
+	// person is actually at the keys; it does nothing but be counted.
+	mux.HandleFunc("/api/alive", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
 	// Multiplayer rooms: create/join by code, then an SSE stream per player.
 	newRooms().register(mux)
 
