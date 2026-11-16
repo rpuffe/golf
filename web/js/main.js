@@ -2748,10 +2748,7 @@ function startWheel() {
   const n = POWERUPS.length, pick = POWERUPS.findIndex(p => p.id === id);
   const disc = $('wheelDisc');
   disc.style.background = `conic-gradient(${POWERUPS.map((p, i) => `${p.color} ${i * 360 / n}deg ${(i + 1) * 360 / n}deg`).join(',')})`;
-  disc.innerHTML = POWERUPS.map((p, i) => {
-    const a = (i + 0.5) * 360 / n;
-    return `<span style="transform: rotate(${a}deg) translate(-50%, -40px) rotate(${-a}deg) translate(0, -50%)">${p.emoji}</span>`;
-  }).join('');
+  disc.innerHTML = '';   // colours only: emoji labels wobbled off-centre as the disc spun (owner playtest)
   const centre = (pick + 0.5) * 360 / n + (Math.random() - 0.5) * (280 / n);
   const back = G.holeDef.spotlight === 'scare';   // the graveyard: the wheel spins backward. Ominous.
   G.wheel = { t: -0.3, dur: 2.0, to: back ? -(360 * 3 + centre) : 360 * 3 + (360 - centre), pick, shown: false, end: 0, lastTick: 0 };
