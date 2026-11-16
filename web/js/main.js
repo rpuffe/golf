@@ -18,6 +18,7 @@ const setAmbience = l => AUDIO.setAmbience?.(l);
 // every user gesture that unlocks WebAudio also unlocks speech (iOS needs both)
 const unlockAudio = () => { unlockAudioOnly(); primeSpeech(); };
 import { RoomClient } from './room.js';
+import { readPad, BTN, newStickSwing, stepStickSwing, navTargets, navPick } from './pad.js';
 import { say, initCommentator, commentator, bumpHysteria, setVoiceEnabled, voiceEnabled, tier, primeSpeech, tomSay } from './commentator.js';
 
 const $ = id => document.getElementById(id);
@@ -374,6 +375,19 @@ const CONFETTI = [0xff6f61, 0xffc84a, 0x4fd39a, 0x5fd3ff, 0xff7aa8, 0xffffff];
 // On a phone the screen is small: tips, toasts and the power-up chip get out of
 // the way after a couple of seconds (playtest: "lots of boxes"). Controls stay.
 const narrow = () => matchMedia('(max-width: 760px)').matches;
+// (controllers) whichever input was used last decides the wording of every
+// hint: touch, mouse/keyboard or pad. TV mode (bigger HUD, safe margins) is on
+// whenever a controller is driving, and always on an Xbox.
+const XBOX = /Xbox/i.test(navigator.userAgent);
+let INPUT = matchMedia('(pointer: coarse)').matches ? 'touch' : 'mouse';
+const W3 = (touch, mouse, pad) => INPUT === 'pad' ? pad : INPUT === 'touch' ? touch : mouse;
+function setInput(k) {
+  if (k === INPUT) return;
+  INPUT = k;
+  applyTV(); applyInputCopy(); renderClubs();
+  if ($('hint').innerHTML && /aim|swing|zoom/i.test($('hint').textContent) && G.mode === 'address' && !G.hintsShown.swing) hud.hint(CONTROL_HINT(), 0, { stay: true });
+}
+function applyTV() { document.body.classList.toggle('pad', INPUT === 'pad'); document.body.classList.toggle('tv', INPUT === 'pad' || XBOX); }
 const hud = {
   banner(html, ms = 1600) {
     const b = $('banner'); b.innerHTML = html; b.classList.add('show');
@@ -397,7 +411,7 @@ function renderClubs() {
     // (round 8, S9) the same live numbers as the aim label and the putt readout
     const live = id === 'putter' ? (G.course ? honestPutt(1) : null) : G.clubCarry?.[id];
     const range = live != null ? Math.round(live) : c.range;
-    return `<button class="club${G.club === id ? ' active' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span>${coarse ? '' : ` <kbd>${i + 1}</kbd>`}</button>`;
+    return `<button class="club${G.club === id ? ' active' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span>${INPUT === 'mouse' ? ` <kbd>${i + 1}</kbd>` : ''}</button>`;
   }).join('');
 }
 $('clubs').addEventListener('click', e => { const b = e.target.closest('.club'); if (b) setClub(b.dataset.id); });
@@ -582,19 +596,21 @@ function loadHole(i) {
 // Control hints: 7 words or fewer, shown on the first shot, then again only
 // if the player stalls at address.
 // (round 8, S10) "lift to cancel" replaces S14: letting go before the flick cancels the swing
-const CONTROL_HINT = coarse => coarse ? '↔ Drag the course to aim<br>↓↑ On the pad: drag down, flick up<br>✋ Lift your finger to cancel' : '↔ Drag sideways to aim<br>↓↑ Drag down, flick up to swing<br>✋ Let go to cancel';
+const CONTROL_HINT = () => W3('↔ Drag the course to aim<br>↓↑ On the pad: drag down, flick up<br>✋ Lift your finger to cancel',
+  '↔ Drag sideways to aim<br>↓↑ Drag down, flick up to swing<br>✋ Let go to cancel',
+  'Ⓛ Left stick aims · LB RB clubs<br>Ⓡ Right stick: pull back, push forward<br>✋ Let it spring back to cancel');
 function holeHint() {
   const s = G.holeDef.spotlight;
-  if (!G.hintsShown.swing) return CONTROL_HINT(coarse);
+  if (!G.hintsShown.swing) return CONTROL_HINT();
   if (s === 'angler') return 'Water ahead. Balls can drown.';
-  if (s === 'scope') return coarse ? 'Windy! Tap 🔭 to zoom.' : 'Windy! Hold right-click to zoom.';
+  if (s === 'scope') return W3('Windy! Tap 🔭 to zoom.', 'Windy! Hold right-click to zoom.', 'Windy! Hold LT to zoom.');
   return G.holeDef.hint ?? '';
 }
 // Called every frame at address: re-show the controls after a long stall.
 function updateIdleHint(dt) {
   const now = performance.now();   // wall clock: a slow frame rate mustn't stretch the wait
   if (G.mode !== 'address' || swing.active || G.scoped || !G.idleSince) { G.idleSince = now; G.idleHint = false; return; }
-  if (now - G.idleSince > 14000 && !G.idleHint) { hud.hint(CONTROL_HINT(coarse)); G.idleHint = true; }
+  if (now - G.idleSince > 14000 && !G.idleHint) { hud.hint(CONTROL_HINT()); G.idleHint = true; }
 }
 
 function buildGraveyard(course, h) {
@@ -1093,7 +1109,7 @@ function endGooseCam() {
   G.stopGooseSong?.(); G.stopGooseSong = null;
   G.gooseCam = null;
   $('letterbox').classList.remove('show'); document.body.classList.remove('bullet', 'goosecam');
-  setTimeout(() => { if (!G.gooseCam) $('bulletLbl').textContent = BULLET_LBL; }, 400);
+  setTimeout(() => { if (!G.gooseCam) $('bulletLbl').textContent = bulletLbl(); }, 400);
 }
 // Nature-documentary tracking shot: three-quarters in front of the goose and
 // to one side, so you can see your ball in its beak the whole way.
@@ -1173,10 +1189,10 @@ function startTug() {
   document.body.classList.add('tugging');
   G.mode = 'tug';
   $('bulletLbl').textContent = '🪿 TUG OF WAR';
-  $('tugHow').textContent = coarse ? 'Swipe like mad!' : 'Hold click and shake!';
+  $('tugHow').textContent = W3('Swipe like mad!', 'Hold click and shake!', 'Waggle the sticks! Mash Ⓐ!');
   $('tugFill').style.width = '26%'; $('tugEffort').style.width = '0%';
   $('tugTimer').textContent = `${TUG_SECS.toFixed(1)} s`;
-  readyCard('tugReady', `🪿 IT WANTS ${esc(bag().name).toUpperCase()}!`, coarse ? 'SWIPE ↕ LIKE MAD' : 'HOLD CLICK, SHAKE', coarse ? '👆' : '🖱️');
+  readyCard('tugReady', `🪿 IT WANTS ${esc(bag().name).toUpperCase()}!`, W3('SWIPE ↕ LIKE MAD', 'HOLD CLICK, SHAKE', 'WAGGLE STICKS, MASH Ⓐ'), W3('👆', '🖱️', '🎮'));
   $('tug').classList.remove('hidden');
   sfx.honk(3);
   say('tugStart', vars(), { bump: 10 });
@@ -1628,9 +1644,13 @@ function finishSwing(power, tempo, drift) {
   if (G.club !== 'putter') {
     showTempoChip(src === 'key' ? 'TIMING' : 'TEMPO', src === 'key' ? 1 - Math.abs(drift) / 0.45 : tempo);
     // (S10) what those dots mean, once per device, 7 words or fewer
-    if (store.get('ghg3d_tempoTip') !== '1') { store.set('ghg3d_tempoTip', '1'); setTimeout(() => hud.hint(src === 'key' ? 'TIMING: tap in the green zone.' : 'TEMPO: a smooth, quick flick flies furthest.', 5000), 1200); }
+    if (store.get('ghg3d_tempoTip') !== '1') { store.set('ghg3d_tempoTip', '1'); setTimeout(() => hud.hint(src === 'key' ? 'TIMING: tap in the green zone.' : src === 'pad' ? 'TEMPO: a smooth, quick push flies furthest.' : 'TEMPO: a smooth, quick flick flies furthest.', 5000), 1200); }
   }
+  const yaw = G.yaw, from = { ...G.ball };
   doShot({ power, tempo, drift });
+  // for the swing checks: what this swing did (carry, and how far off the aim line)
+  const sim = G.shot?.sim, f = fwd(yaw);
+  if (sim) { const dx = sim.carry.x - from.x, dz = sim.carry.z - from.z; G.lastSwing = { src, power, tempo, drift, carry: dx * f.x + dz * f.z, side: dx * -f.z + dz * f.x }; }
 }
 // After impact: how clean was that? (tempo costs up to a third of your carry)
 function showTempoChip(label, q) {
@@ -2093,7 +2113,7 @@ function updateWalk(dt) {
     snapAddressCam();
     if (!maybeTomNudge()) checkStymie();
     const s = G.course.surf(G.ball.x, G.ball.z);
-    if (G.holeIdx === 0 && G.strokes === 1 && !G.hintsShown.scopeTip && G.mode === 'address') { G.hintsShown.scopeTip = true; hud.hint(coarse ? 'Tap 🔭 to zoom.' : '<b>Right-click</b> to zoom.', 6000); }
+    if (G.holeIdx === 0 && G.strokes === 1 && !G.hintsShown.scopeTip && G.mode === 'address') { G.hintsShown.scopeTip = true; hud.hint(W3('Tap 🔭 to zoom.', '<b>Right-click</b> to zoom.', 'Hold <b>LT</b> to zoom.'), 6000); }
     if (G.aura && !G.auraTip && !auraOff() && Math.hypot(G.ball.x - G.holeDef.bossAura.at[0], G.ball.z - G.holeDef.bossAura.at[1]) < 160) { G.auraTip = true; hud.toast('🌀 Right of the Boss slings. Left stalls.'); }
     if ((s === 'green' || s === 'fringe') && !G.hintsShown.green) { G.hintsShown.green = true; hud.hint('White arrows point downhill.', 6000); }
   }
@@ -2234,7 +2254,7 @@ function startAngler(end, from, dock = null, opts = {}) {
   if (avatar) avatar.visible = false;   // first person on the dock: it's your rod
   $('anglerTitle').textContent = `🎣 Save ${bag().name}!`;
   angler.ready = READY_SECS;
-  readyCard('anglerReady', `🎣 ${esc(bag().name).toUpperCase()} IS SINKING!`, coarse ? 'HOLD THE BUTTON' : 'HOLD SPACE OR CLICK', '✊');
+  readyCard('anglerReady', `🎣 ${esc(bag().name).toUpperCase()} IS SINKING!`, W3('HOLD THE BUTTON', 'HOLD SPACE OR CLICK', 'HOLD Ⓐ OR RT'), '✊');
   $('anglerTimer').textContent = `${(free ? 5 : 7).toFixed(1)} s`; $('reelFill').style.width = '0%';
   setTimeout(() => { if (angler.active) $('angler').classList.remove('hidden'); }, 450);
   // look at the splash
@@ -2398,7 +2418,7 @@ function startFlyover() {
   G.fly = { t: 0, dur: clamp(2.8 + len / 120, 3.4, 5.6) };
   $('flyHole').textContent = `Hole ${G.holeIdx + 1} · Par ${h.par} · ${pinText(G.ball)} m`;   // (S9) the HUD's own number
   $('flyName').textContent = h.name;
-  $('flySkip').textContent = coarse ? 'Tap to skip' : 'Click to skip';
+  $('flySkip').textContent = W3('Tap to skip', 'Click to skip', 'Ⓐ to skip');
   $('flyTitle').classList.add('show'); document.body.classList.add('flying');
   hud.hint('');
   sfx.slowmo();
@@ -2569,7 +2589,7 @@ function finishWheel() {
   G.wheel = null;
   renderPowerChip();
   // (S10) the very first tee: the controls go up once the wheel is done, and stay until you swing
-  if (!G.hintsShown.swing && G.mode === 'address') hud.hint(CONTROL_HINT(coarse), 0, { stay: true });
+  if (!G.hintsShown.swing && G.mode === 'address') hud.hint(CONTROL_HINT(), 0, { stay: true });
 }
 const powerDesc = p => p.id === 'banana' && G.holeIdx % 2 === 1 ? 'Next shot swerves hard right.'
   : p.id === 'sic' && G.powerUp?.taxi ? 'A goose relocates your next lie.'
@@ -2955,7 +2975,7 @@ const TOOL_TIPS = { possess: 'Tap their course: your goose walks there.', honk: 
 function toolTip(act) {
   const seen = (toolTip.seen ??= new Set());
   if (!TOOL_TIPS[act] || seen.has(act)) return;
-  seen.add(act); hud.hint(TOOL_TIPS[act], 3500);
+  seen.add(act); hud.hint(INPUT === 'pad' && (act === 'possess' || act === 'stand') ? (act === 'possess' ? 'Ⓧ sends your goose to mid-view.' : 'Ⓧ plants your umbrella mid-view.') : TOOL_TIPS[act], 3500);
 }
 function sendTeeth(w, trick) {
   if (!canTeeth(w)) return;
@@ -4049,7 +4069,7 @@ function dropPuppet(id) {
 function offerGimme(r) {
   G.gimmeFrom = r.id;
   const el = $('gimme');
-  el.innerHTML = `🤝 <b>${esc(r.name)}</b>: gimme? <button id="gimmeYes">Take it (G)</button>`;
+  el.innerHTML = `🤝 <b>${esc(r.name)}</b>: gimme? <button id="gimmeYes">Take it ${W3('', '(G)', 'Ⓧ')}</button>`;
   el.classList.remove('hidden');
   const strokes = G.strokes;
   const take = () => { if (G.mode === 'address' && G.strokes === strokes) acceptGimme(); el.classList.add('hidden'); };
@@ -4437,18 +4457,31 @@ function updateClub(dt) {
 const coarse = matchMedia('(pointer: coarse)').matches;
 // (round 8, S10) phones only hear about phone controls: desktop strings are
 // rewritten or removed from the page itself (screen readers read hidden text)
-const BULLET_LBL = coarse ? '● BULLET CAM · TAP TO SKIP' : '● BULLET CAM · CLICK TO SKIP';
-function phoneCopy() {
-  $('bulletLbl').textContent = BULLET_LBL;
-  if (!coarse) return;
-  $('acc').querySelector('span')?.remove();   // the key swing's needle: no Space bar here
-  $('breath').innerHTML = '<div id="breathBar"><div id="breathFill"></div></div>'; $('breath').style.display = 'none';   // steadying is a Shift key thing
-  $('helpRows').innerHTML = [
-    ['Aim', 'Drag the course sideways.'], ['Swing', 'On the pad: drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
-    ['Cancel', 'Lift your finger before the flick.'], ['Club', 'Tap a club.'], ['Zoom', 'Tap 🔭.'], ['Sound', 'Tap 🔊 and 🎙️.'],
-  ].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
+const bulletLbl = () => W3('● BULLET CAM · TAP TO SKIP', '● BULLET CAM · CLICK TO SKIP', '● BULLET CAM · Ⓐ TO SKIP');
+const HELP_ROWS = {
+  touch: [['Aim', 'Drag the course sideways.'], ['Swing', 'On the pad: drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
+    ['Cancel', 'Lift your finger before the flick.'], ['Club', 'Tap a club.'], ['Zoom', 'Tap 🔭.'], ['Sound', 'Tap 🔊 and 🎙️.']],
+  mouse: [['Aim', 'Drag sideways. Or A / D.'], ['Swing', 'Drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
+    ['Cancel', 'Let go before the flick. Or Esc.'], ['Key swing', 'Hold Space, release, tap again.'], ['Club', '1–4 or scroll wheel.'],
+    ['Zoom', 'Hold right-click or Z.'], ['Sound', 'M mutes. V mutes the voice.']],
+  pad: [['Aim', 'Left stick. D-pad nudges.'], ['Swing', 'Right stick: pull back, push forward.'], ['Curve', 'Push forward at an angle.'],
+    ['Overswing', 'Click the right stick in at the top.'], ['Cancel', 'Let the stick spring back, or Ⓑ.'], ['Club', 'LB / RB.'],
+    ['Zoom', 'Hold LT. Hold RT to steady.'], ['Skip / OK', 'Ⓐ. Back is Ⓑ.'], ['Chat', 'Ⓨ in a room.'], ['Help / sound', '☰ / ⧉.']],
+};
+// every on-screen instruction speaks the input you're using; touch devices
+// never carry keyboard strings in the page (round 8, S10)
+function applyInputCopy() {
+  $('bulletLbl').textContent = bulletLbl();
+  const acc = $('acc').querySelector('span'); if (acc) acc.textContent = INPUT === 'mouse' ? 'Tap Space in the green' : '';
+  $('breathTxt').innerHTML = W3('', 'HOLD <b>SHIFT</b> TO STEADY', 'HOLD <b>RT</b> TO STEADY');
+  $('breath').style.display = INPUT === 'touch' ? 'none' : '';
+  $('helpRows').innerHTML = HELP_ROWS[INPUT].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
+  $('titleHow').innerHTML = W3('<b>Drag down, flick up</b> to swing.', '<b>Drag down, flick up</b> to swing.', '<b>Right stick: pull back, push</b> to swing.');
+  if (G.mode === 'flyover') $('flySkip').textContent = W3('Tap to skip', 'Click to skip', 'Ⓐ to skip');
 }
-phoneCopy();
+applyInputCopy(); applyTV();
+addEventListener('pointerdown', e => setInput(e.pointerType === 'touch' ? 'touch' : 'mouse'), true);
+addEventListener('keydown', e => { if (!e.repeat) setInput('mouse'); }, true);
 function lockPointer() { /* pointer lock retired: drag-to-aim works everywhere */ }
 function inGame() { return !['title', 'end'].includes(G.mode) && $('help').classList.contains('hidden') && $('lb').classList.contains('hidden'); }
 let dragging = null;
@@ -4590,6 +4623,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyV') toggleVoice();
   if (e.code === 'KeyH') openHelp();
 });
+addEventListener('keydown', e => { if (/^Arrow|^Page|^Home$|^End$/.test(e.code) && e.target.tagName !== 'INPUT') e.preventDefault(); }, { capture: true });
 addEventListener('keyup', e => {
   keys[e.code] = false;
   if (e.code === 'Space') { if (G.mode === 'angler') angler.reeling = false; else if (swing.active && swing.src === 'key') endSwing(); }
@@ -4628,6 +4662,177 @@ $('noScare').checked = store.get('ghg3d_noscare') === '1';
 $('noScare').addEventListener('change', e => store.set('ghg3d_noscare', e.target.checked ? '1' : '0'));
 $('muteReact').checked = store.get('ghg3d_mutereact') === '1';
 $('muteReact').addEventListener('change', e => store.set('ghg3d_mutereact', e.target.checked ? '1' : '0'));
+
+// ============================================================ game controllers
+// One pad (the first with the standard mapping), polled once a frame. In play:
+// left stick aims, the right stick swings (pull back, push forward), LB/RB
+// change club, LT scopes and RT steadies, Ⓐ skips and confirms, Ⓑ cancels or
+// goes back, Ⓧ takes a gimme, Ⓨ opens quick chat, ☰ help, ⧉ sound. Anywhere
+// with buttons (title, lobby, help, the between-hole card, the end card) the
+// D-pad or left stick moves a visible focus ring and Ⓐ presses.
+try { if ('gamepadInputEmulation' in navigator) navigator.gamepadInputEmulation = 'gamepad'; } catch { /* Edge on Xbox only */ }
+let padPrev = null, padNavT = 0, padSticks = null, padLockSwing = false;
+const stickSw = newStickSwing();
+addEventListener('gamepadconnected', e => { if (e.gamepad?.mapping === 'standard' || e.gamepad?.buttons?.length >= 16) hud.toast('🎮 Controller ready.'); });
+addEventListener('gamepaddisconnected', () => { padPrev = null; if (swing.active && swing.src === 'pad') cancelSwing(); Object.assign(stickSw, newStickSwing()); });
+function pollPad(dt) {
+  let p;
+  try { p = readPad(navigator.getGamepads?.(), padPrev); } catch { p = null; }
+  padPrev = p;
+  if (!p) return;
+  if (p.active) setInput('pad');
+  if (INPUT !== 'pad') return;
+  if (p.pressed.some(Boolean)) unlockAudio();
+  const P = k => p.pressed[BTN[k]];
+  if (P('MENU')) { if ($('help').classList.contains('hidden')) openHelp(); else $('help').classList.add('hidden'); return; }
+  if (P('VIEW')) toggleMute();
+  const root = navRoot();
+  if (root) { if (swing.active && swing.src === 'pad') cancelSwing(); padNav(root, p, dt); }
+  else padGame(p, dt);
+  padSticks = { lx: p.lx, ly: p.ly, rx: p.rx, ry: p.ry };
+}
+// where the focus ring lives right now (null: in play, the sticks drive the game)
+function navRoot() {
+  if (!$('padKeys').classList.contains('hidden')) return $('padKeys');
+  for (const id of ['help', 'lb']) if (!$(id).classList.contains('hidden')) return $(id);
+  if (document.body.classList.contains('money')) return $('moneyStrip');
+  if (!$('end').classList.contains('hidden')) return $('end');
+  if (G.mode === 'title' && !$('title').classList.contains('hidden')) return $('title');
+  if ($('reactBar').classList.contains('open')) return $('reactBar');
+  if (G.mode === 'between') return $('between');
+  return null;
+}
+function defaultFocus(root, targets) {
+  const pick = id => targets.find(el => el.id === id);
+  if (root.id === 'title') return (!$('name').value.trim() && pick('name')) || pick('roomStart') || pick('play') || targets[0];
+  if (root.id === 'between') return pick('betweenGo') || targets[0];
+  if (root.id === 'help') return pick('helpClose') || targets[0];
+  if (root.id === 'lb') return pick('lbClose') || targets[0];
+  if (root.id === 'end') return pick('again') || targets.find(el => el.classList.contains('go')) || targets[0];
+  if (root.id === 'moneyStrip') return targets.at(-1);
+  return targets[0];
+}
+function padFocus(el) {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+}
+function padNav(root, p, dt) {
+  const targets = navTargets(root);
+  let cur = document.activeElement;
+  const P = k => p.pressed[BTN[k]];
+  // a ring that wasn't showing yet: this press only shows where you are
+  if (!targets.includes(cur)) { cur = defaultFocus(root, targets); padFocus(cur); if (P('A')) return; }
+  let dx = P('LEFT') ? -1 : P('RIGHT') ? 1 : 0, dy = P('UP') ? -1 : P('DOWN') ? 1 : 0;
+  // the left stick moves the ring too, with a gentle auto-repeat
+  padNavT -= dt;
+  if (!dx && !dy && (Math.abs(p.lx) > 0.55 || Math.abs(p.ly) > 0.55)) {
+    if (padNavT <= 0) { if (Math.abs(p.lx) > Math.abs(p.ly)) dx = Math.sign(p.lx); else dy = Math.sign(p.ly); padNavT = 0.24; }
+  } else if (Math.abs(p.lx) < 0.3 && Math.abs(p.ly) < 0.3) padNavT = 0;
+  if (dx || dy) { const n = navPick(cur, targets, dx, dy); if (n) { padFocus(n); sfx.tick(); } }
+  if (P('A') && cur) {
+    if (cur.tagName === 'INPUT' && cur.type !== 'checkbox') openPadKeys(cur);
+    else cur.click();
+  }
+  if (P('X') && root.id === 'padKeys') padKeyType('⌫');
+  if (P('X') && root.id === 'between' && (G.possess || G.standMode)) {
+    // Be the Goose / Stand here with a pad: the spot in the middle of the view
+    const e = { clientX: innerWidth / 2, clientY: innerHeight * 0.58 };
+    if (!standTap(e)) possessTap(e);
+  }
+  if (P('Y') && root.id === 'between') { G.chatPick = !G.chatPick; renderEmoteButtons(); }
+  if (P('B')) padBack(root);
+}
+function padBack(root) {
+  if (root.id === 'padKeys') closePadKeys();
+  else if (root.id === 'help' || root.id === 'lb') root.classList.add('hidden');
+  else if (root.id === 'reactBar') root.classList.remove('open');
+  else if (root.id === 'moneyStrip') endMoney();
+  else if (root.id === 'between') { G.possess = false; G.standMode = false; G.chatPick = false; G.teethPick = false; renderEmoteButtons(); padFocus($('betweenGo')); }
+  else if (root.id === 'title' && !$('roomPanel').classList.contains('hidden') && !G.room) { $('roomPanel').classList.add('hidden'); padFocus($('roomBtn')); }
+}
+// in play: what the sticks and buttons do in each mode
+function padGame(p, dt) {
+  const P = k => p.pressed[BTN[k]], H = k => p.down[BTN[k]], m = G.mode;
+  const prev = padSticks ?? p;
+  if (m === 'tug') {
+    // waggle either stick (how far it travels each frame) or mash Ⓐ
+    const travel = Math.hypot(p.lx - prev.lx, p.ly - prev.ly) + Math.hypot(p.rx - prev.rx, p.ry - prev.ry);
+    if (travel > 0) tugInput(travel * 230 / tugScale());
+    if (P('A') || P('B') || P('X') || P('Y')) tugInput(450 / tugScale());
+    return;
+  }
+  if (m === 'angler') { angler.reeling = H('A') || p.rt > 0.4; return; }
+  if (P('A')) {
+    if (m === 'flyover') { skipFlyover(); return; }
+    if (G.wheel) { hurryWheel(); return; }
+    if (m === 'scare') { skipScare(); return; }
+    if (m === 'linger') { skipLinger(); return; }
+    if (m === 'sasquack') { skipSasquack(); return; }
+    if (m === 'gooseCam' && goose?.state === 'fly') { goose.x = goose.target.x; goose.z = goose.target.z; landGooseFlight(goose); return; }
+    if (G.shot?.wasBullet) { G.shot.t = G.shot.sim.n - 1; return; }
+    if (m === 'holed') { G.celebrate = Math.min(G.celebrate, 0.2); return; }
+    if (G.finalWait && !$('finalGroup').classList.contains('hidden')) { $('finalGroup').querySelector('button')?.click(); return; }
+  }
+  if (P('X')) { if (G.gimmeOffer) G.gimmeOffer(); else if (G.putBack) G.putBack(); }
+  if (P('Y') && !$('reactBar').classList.contains('hidden')) { $('reactBar').classList.add('open'); clearTimeout(updateReactBar.t); return; }
+  if (P('B') && swing.active) { userCancel(); Object.assign(stickSw, newStickSwing()); padLockSwing = true; }
+  const aimable = (m === 'address' || m === 'wheel') && !swing.active;
+  if (aimable) {
+    if (P('LB') || P('RB')) { const i = CLUB_ORDER.indexOf(G.club) + (P('RB') ? 1 : -1); setClub(CLUB_ORDER[(i + 4) % 4]); }
+    const k = (G.scoped ? 0.07 : 1) * dt, ex = v => Math.sign(v) * v * v;   // squared: fine near the centre, fast at the rim
+    G.yaw -= ex(p.lx) * 1.5 * k;
+    G.pitch = clamp(G.pitch - ex(p.ly) * 0.9 * k, -0.75, 0.5);
+    if (H('LEFT')) G.yaw += 0.12 * k; if (H('RIGHT')) G.yaw -= 0.12 * k;
+    if (H('UP')) G.pitch = clamp(G.pitch + 0.1 * k, -0.75, 0.5); if (H('DOWN')) G.pitch = clamp(G.pitch - 0.1 * k, -0.75, 0.5);
+  }
+  if (p.pressed[BTN.LT] && (m === 'address' || m === 'wheel')) setScope(true);
+  if (p.released[BTN.LT]) setScope(false);
+  G.holding = G.scoped && p.rt > 0.5 && G.gasp <= 0;
+  padSwing(p);
+}
+// the stick swing (pad.js) driving the same swing as the mouse and the pad on a phone
+function padSwing(p) {
+  if (swing.active && swing.src !== 'pad') return;
+  if (stickSw.phase !== 'idle' && !(swing.active && swing.src === 'pad')) { Object.assign(stickSw, newStickSwing()); padLockSwing = true; }   // cancelled from outside (a goose, a cutscene)
+  if (padLockSwing) { if (Math.hypot(p.rx, p.ry) === 0) padLockSwing = false; else return; }   // a fresh pull starts a fresh swing
+  const ev = stepStickSwing(stickSw, { x: p.rx, y: p.ry }, performance.now(), { over: p.down[BTN.RS], allowed: canSwing() });
+  if (!ev) return;
+  if (ev.type === 'begin') { beginSwing('pad'); swing.back = ev.back; }
+  else if (ev.type === 'back') { swing.phase = 'back'; swing.back = ev.back; }
+  else if (ev.type === 'down') { swing.phase = 'down'; swing.peak = swing.back; swing.tDown = ev.tDown; }
+  else if (ev.type === 'strike') { swing.peak = ev.power; swing.tDown = ev.tDown; swing.drift = ev.drift; finishSwing(ev.power, tempoNow(), ev.drift); padLockSwing = true; }
+  else if (ev.type === 'cancel' && swing.active) { userCancel(); padLockSwing = true; }
+}
+// ---- an on-screen keyboard for names and room codes (no pointer, no keyboard)
+let padKeysFor = null;
+const PAD_KEYS = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ', '␣', '⌫', '✓'];
+function openPadKeys(input) {
+  padKeysFor = input;
+  const code = input.id === 'roomCode';
+  $('padKeysGrid').innerHTML = PAD_KEYS.filter(k => !(code && k === '␣')).map(k => `<button type="button" data-k="${k}" class="${k === '✓' ? 'done' : ''}">${k === '✓' ? 'Done' : k}</button>`).join('');
+  $('padKeysLbl').textContent = code ? 'Room code' : 'Your name';
+  $('padKeysShow').textContent = input.value || ' ';
+  $('padKeys').classList.remove('hidden');
+  padFocus($('padKeysGrid').querySelector('button'));
+}
+function padKeyType(k) {
+  const input = padKeysFor; if (!input) return;
+  if (k === '✓') { closePadKeys(true); return; }
+  if (k === '⌫') input.value = input.value.slice(0, -1);
+  else if (input.value.length < (input.maxLength > 0 ? input.maxLength : 20)) input.value += k === '␣' ? ' ' : (input.id === 'roomCode' || !input.value || input.value.endsWith(' ') ? k : k.toLowerCase());
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  $('padKeysShow').textContent = input.value || ' ';
+  if (input.id === 'roomCode' && input.value.length === 4) closePadKeys(true);
+}
+function closePadKeys(done = false) {
+  const input = padKeysFor; padKeysFor = null;
+  $('padKeys').classList.add('hidden');
+  if (!input) return;
+  if (input.id === 'name') store.set('ghg_name', input.value.trim());
+  padFocus(done ? (input.id === 'roomCode' ? $('roomJoinBtn') : G.room ? $('roomStart') : $('play')) : input);
+}
+$('padKeysGrid').addEventListener('click', e => { const b = e.target.closest('button'); if (b) padKeyType(b.dataset.k); });
 
 // ============================================================ title / end
 $('name').value = store.get('ghg_name') || store.get('golf_name') || '';
@@ -4817,6 +5022,7 @@ function frame() {
   const now = performance.now() / 1000;
   const rawDt = now - G.tLast;
   const dt = Math.min(0.05, rawDt); G.tLast = now; G.time += dt;
+  pollPad(dt);
   fpsAcc += rawDt; fpsN++;
   if (fpsAcc > 1) {
     G.fps = fpsN / fpsAcc; fpsAcc = 0; fpsN = 0;
@@ -5369,7 +5575,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
@@ -5406,6 +5612,7 @@ window.golf = {
   docks: () => (G.docks ?? []).map(d => ({ stand: d.stand, drop: d.drop })),
   lieCheck: () => ({ surf: G.course.surf(G.ball.x, G.ball.z), aboveWater: +(G.course.h(G.ball.x, G.ball.z) - G.course.waterLevelAt(G.ball.x, G.ball.z)).toFixed(2), strokes: G.strokes }),
   forceLoss(k) { G.forceLoss = k; },
+  anglerTest() { startAngler({ x: G.ball.x, z: G.ball.z }, { ...G.ball }, null, { free: true }); },
   sasquackAt() { const t = nearestTrunk(G.ball, 400); if (!t) return false; const a = Math.atan2(G.cup.z - t.z, G.cup.x - t.x); this.place(t.x + Math.cos(a) * 1.5, t.z + Math.sin(a) * 1.5); G.sasqHole = false; return maybeSasquack(); },
   standAt(x, z) { if (sendEmote('stand', '', `${myHole()}:${x.toFixed(1)}:${z.toFixed(1)}`)) { G.myFan = { x, z }; return true; } return false; },
   possessAt(id, x, z) { return sendEmote('possess', id, `${myHole()}:${x.toFixed(1)}:${z.toFixed(1)}:0`); },

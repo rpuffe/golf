@@ -124,7 +124,16 @@ Also in the game:
 | Sound / voice / help | M / V / H |
 
 Touch devices drag the course to aim and swing on an on-screen pad; lift your
-finger before the flick to back out. Phones only ever see phone instructions. On-screen instructions are seven words or fewer.
+finger before the flick to back out. Phones only ever see phone instructions.
+
+**Controllers** (Xbox and other standard-mapping pads, including Edge on
+Xbox): the left stick aims and the right stick swings. Pull it back for
+power and push it forward to strike; tempo and curve work as with the mouse,
+and letting it spring back cancels. LB/RB change club, LT scopes, RT steadies,
+Ⓐ skips and confirms, Ⓑ cancels or goes back, Ⓧ takes a gimme, Ⓨ opens quick
+chat, ☰ opens Help. Menus, the lobby and room codes work with a focus ring and
+on-screen keys, and TV mode enlarges the HUD inside safe margins. See
+[design/controller.md](design/controller.md). On-screen instructions are seven words or fewer.
 
 ## How it works
 

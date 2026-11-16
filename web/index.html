@@ -64,6 +64,26 @@
   #moneyStrip button { border: 0; border-radius: 12px; padding: 8px 10px; margin: 0 3px; background: rgba(255,255,255,.14); color: var(--cream); font-size: 15px; font-weight: 800; }
   body.money #moneyStrip { display: block; }
   body.money #end { opacity: 0; pointer-events: none; }
+  /* (controllers) a focus ring you can see from the sofa, and TV mode: a
+     bigger HUD inside 5% safe margins */
+  body.pad :focus { outline: 4px solid #ffd34d; outline-offset: 3px; box-shadow: 0 0 0 8px rgba(255, 211, 77, .35); }
+  body.pad #canvas:focus, body.pad canvas:focus { outline: none; box-shadow: none; }
+  html, body { overscroll-behavior: none; }
+  body.tv #hud { inset: 5vh 5vw; zoom: 1.3; }
+  body.tv .overlay > .card { zoom: 1.2; }
+  @media (max-height: 820px) { body.tv .overlay > .card { zoom: 1; } }
+  body.tv .overlay { padding: 5vh 5vw; }
+  body.tv :is(#tug, #angler, #moneyStrip, #flyTitle) { zoom: 1.3; }
+  body.pad #betweenGo::before, body.pad #finalGroup button::before, body.pad #reelBtn::before { content: "Ⓐ "; }
+  body.pad #chatToggle::after { content: "Ⓨ"; position: absolute; right: -4px; bottom: -6px; font-size: 12px; color: var(--sun); }
+  body.pad #chatToggle { position: relative; }
+  body.pad #clubs::before, body.pad #clubs::after { align-self: center; padding: 0 6px; font: 900 12px ui-monospace, Menlo, monospace; color: var(--sun); }
+  body.pad #clubs::before { content: "LB"; } body.pad #clubs::after { content: "RB"; }
+  #padKeys .card { text-align: center; max-width: 560px; }
+  #padKeysShow { font-size: 34px; font-weight: 900; letter-spacing: .15em; min-height: 1.3em; margin: 6px 0 10px; }
+  #padKeysGrid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-bottom: 8px; }
+  #padKeysGrid button { padding: 10px 0; border: 0; border-radius: 10px; background: #efe2c9; color: var(--plum); font-size: 18px; font-weight: 900; }
+  #padKeysGrid button.done { grid-column: span 2; background: var(--sun); }
   #powerChip.curse { background: rgba(90, 16, 52, .9); box-shadow: 0 0 0 2px #ff5a8a; }
   #wheelOut.curse b { color: #ff7a9a; }
   #powerChip.mini .e { font-size: 20px; }
@@ -413,7 +433,7 @@
   </svg>
   <div id="scopeWind">WIND —</div>
   <div id="rangeBox"><div id="rangeDist">— m</div><div id="rangeElev">ELEV —</div></div>
-  <div id="breath" aria-hidden="true">HOLD <b>SHIFT</b> TO STEADY<div id="breathBar"><div id="breathFill"></div></div></div>
+  <div id="breath" aria-hidden="true"><span id="breathTxt">HOLD <b>SHIFT</b> TO STEADY</span><div id="breathBar"><div id="breathFill"></div></div></div>
 </div>
 
 <div id="scareFlash"></div>
@@ -470,7 +490,7 @@
       </div>
       <div id="roomErr" role="status"></div>
     </div>
-    <div class="how"><b>Drag down, flick up</b> to swing.</div>
+    <div class="how" id="titleHow"><b>Drag down, flick up</b> to swing.</div>
     <div class="feat"><span>🪿 Geese</span><span>👻 Old Tom</span><span>🎡 Power-ups</span><span>🎣 Four Balls, One Life</span></div>
     <button id="lbBtn" class="alt">Leaderboard</button>
   </div>
@@ -478,6 +498,7 @@
 
 <div id="holeCard" class="overlay hidden"><div class="card" id="holeCardBody"></div></div>
 <div id="moneyStrip" class="panel"><span></span><div><button data-react="gasp">😱</button><button data-react="clap">👏</button><button data-react="honk">📯</button><button type="button">Back to card</button></div></div>
+<div id="padKeys" class="overlay hidden"><div class="card"><div class="sub" id="padKeysLbl">Room code</div><div id="padKeysShow"> </div><div id="padKeysGrid"></div><div class="sub">Ⓧ deletes · Ⓑ closes</div></div></div>
 <div id="end" class="overlay hidden"><div class="card" id="endBody"></div></div>
 <div id="help" class="overlay hidden">
   <div class="card">
