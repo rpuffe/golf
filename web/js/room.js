@@ -20,10 +20,10 @@ export class RoomClient {
   static saved() { try { return JSON.parse(sessionStorage.getItem(CRED_KEY) || 'null'); } catch { return null; } }
   static forget() { try { sessionStorage.removeItem(CRED_KEY); } catch { /* storage blocked */ } }
 
-  create(name) { return this._join('/api/rooms', { name }); }
+  create(name) { return this._join('/api/rooms', { name, ...this.h.look?.() }); }
   join(code, name, { takeover = false } = {}) {
     code = String(code).trim().toUpperCase();
-    const body = { name };
+    const body = { name, ...this.h.look?.() };
     if (takeover) body.takeover = true;
     const s = RoomClient.saved();
     if (s && s.code === code) { body.id = s.id; body.token = s.token; }
@@ -71,7 +71,7 @@ export class RoomClient {
     if (this.rejoinTries > 6) { this._close('Lost the room connection'); return; }
     await sleep(Math.min(8000, 700 * 2 ** this.rejoinTries));
     if (this.closed) return;
-    try { await this._join(`/api/rooms/${this.code}/join`, { name: this.h.name?.() ?? 'Player', id: this.id, token: this.token }); }
+    try { await this._join(`/api/rooms/${this.code}/join`, { name: this.h.name?.() ?? 'Player', ...this.h.look?.(), id: this.id, token: this.token }); }
     catch (e) { if (e.status === 404) this._close('The room has closed'); else if (e.nameTaken) this._close('You rejoined from another tab'); else this._rejoin(); }
   }
 

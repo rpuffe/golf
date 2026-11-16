@@ -58,6 +58,12 @@
   #powerChip b { color: var(--sun); }
   #powerChip { pointer-events: auto; transition: font-size .3s, padding .3s; }
   #powerChip.mini { font-size: 0; padding: 4px 8px; }
+  /* (round 8, S7) the money putt: the end card folds away to a strip while you watch */
+  #moneyStrip { display: none; position: fixed; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(440px, 94vw); padding: 10px 12px; text-align: center; z-index: 30; pointer-events: auto; }
+  #moneyStrip span { display: block; font-size: 16px; margin-bottom: 6px; }
+  #moneyStrip button { border: 0; border-radius: 12px; padding: 8px 10px; margin: 0 3px; background: rgba(255,255,255,.14); color: var(--cream); font-size: 15px; font-weight: 800; }
+  body.money #moneyStrip { display: block; }
+  body.money #end { opacity: 0; pointer-events: none; }
   #powerChip.curse { background: rgba(90, 16, 52, .9); box-shadow: 0 0 0 2px #ff5a8a; }
   #wheelOut.curse b { color: #ff7a9a; }
   #powerChip.mini .e { font-size: 20px; }
@@ -295,6 +301,11 @@
   .standings li b { margin-left: auto; } .standings li small { color: #7a6a90; font-weight: 400; min-width: 64px; text-align: right; }
   .standings li.me { color: #c66a1c; }
   #roomErr { color: #d0453a; font-size: 13px; min-height: 1em; margin-top: 6px; }
+  #roomErr.info { color: #6a5a80; }   /* an invite is good news, not an error */
+  .mark { flex: none; width: 14px; text-align: center; font-size: 13px; text-shadow: 0 0 2px #fff, 0 0 2px #fff; }
+  .pf { flex: none; width: 26px; height: 26px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,.18); }
+  #roomMembers .who { display: flex; flex-direction: column; min-width: 0; }
+  #roomMembers .who small { color: #7a6a90; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #roomNet { font-size: 12px; color: #7a6a90; margin-top: 6px; }
   @media (max-width: 760px) {
     #topLeft { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
@@ -466,6 +477,7 @@
 </div>
 
 <div id="holeCard" class="overlay hidden"><div class="card" id="holeCardBody"></div></div>
+<div id="moneyStrip" class="panel"><span></span><div><button data-react="gasp">😱</button><button data-react="clap">👏</button><button data-react="honk">📯</button><button type="button">Back to card</button></div></div>
 <div id="end" class="overlay hidden"><div class="card" id="endBody"></div></div>
 <div id="help" class="overlay hidden">
   <div class="card">

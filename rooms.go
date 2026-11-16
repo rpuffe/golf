@@ -81,6 +81,7 @@ type Member struct {
 	lastSeq  int
 	conns    map[chan []byte]struct{}
 	Progress Progress
+	Look     Look // golfer and balls picked on the title card (lobby display)
 
 	emoteTokens float64   // token bucket for emotes; see allowEmoteLocked
 	emoteAt     time.Time // when emoteTokens was last brought up to date
@@ -99,6 +100,39 @@ type Progress struct {
 	Char    string `json:"char,omitempty"` // chosen golfer model, cosmetic
 }
 
+// Look is what a member picked on the title card, shown in the lobby before
+// any round starts (council round 8, S13). Cosmetic only.
+type Look struct {
+	Char  string   `json:"char,omitempty"`
+	Balls []string `json:"balls,omitempty"`
+}
+
+// cleanLook keeps a golfer id of 1-12 lowercase letters and up to four
+// cleaned ball names.
+func cleanLook(char string, balls []string) Look {
+	var l Look
+	if len(char) <= 12 {
+		ok := char != ""
+		for i := 0; i < len(char); i++ {
+			if char[i] < 'a' || char[i] > 'z' {
+				ok = false
+			}
+		}
+		if ok {
+			l.Char = char
+		}
+	}
+	for _, b := range balls {
+		if len(l.Balls) == 4 {
+			break
+		}
+		if b = cleanName(b); b != "" {
+			l.Balls = append(l.Balls, b)
+		}
+	}
+	return l
+}
+
 type Vec3 struct {
 	X float64 `json:"x"`
 	Y float64 `json:"y"`
@@ -112,6 +146,7 @@ type rosterMember struct {
 	Online   bool     `json:"online"`
 	Host     bool     `json:"host"`
 	Progress Progress `json:"progress"`
+	Look     Look     `json:"look"`
 }
 
 type roomState struct {
@@ -227,7 +262,7 @@ func (r *Room) stateLocked() roomState {
 	st := roomState{Code: r.code, Round: r.round, Seed: r.seed, Started: r.started, HostID: r.hostID}
 	for _, id := range r.order {
 		m := r.members[id]
-		st.Members = append(st.Members, rosterMember{ID: m.ID, Name: m.Name, Color: m.Color, Online: len(m.conns) > 0, Host: m.ID == r.hostID, Progress: m.Progress})
+		st.Members = append(st.Members, rosterMember{ID: m.ID, Name: m.Name, Color: m.Color, Online: len(m.conns) > 0, Host: m.ID == r.hostID, Progress: m.Progress, Look: m.Look})
 	}
 	return st
 }
@@ -340,7 +375,9 @@ type joinReq struct {
 	Name     string `json:"name"`
 	ID       string `json:"id"`       // rejoin with an existing identity (page reload)
 	Token    string `json:"token"`    //
-	Takeover bool   `json:"takeover"` // "that's me": take over the seat of a member with this name
+	Takeover bool     `json:"takeover"` // "that's me": take over the seat of a member with this name
+	Char     string   `json:"char"`     // the golfer and balls picked on the title card
+	Balls    []string `json:"balls"`    //
 }
 
 type joinResp struct {
@@ -389,6 +426,7 @@ func (rs *Rooms) serveCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	room.mu.Lock()
 	m := room.addLocked(in.Name)
+	m.Look = cleanLook(in.Char, in.Balls)
 	resp := joinResp{roomState: room.stateLocked(), You: m.ID, Token: m.token}
 	room.mu.Unlock()
 	log.Printf("room %s: created", room.code)
@@ -432,6 +470,7 @@ func (rs *Rooms) serveJoin(w http.ResponseWriter, r *http.Request) {
 		m = room.addLocked(in.Name)
 	}
 	m.lastSeen = time.Now()
+	m.Look = cleanLook(in.Char, in.Balls)
 	st := room.stateLocked()
 	room.broadcastLocked("roster", st, m.ID)
 	writeJSON(w, http.StatusOK, joinResp{roomState: st, You: m.ID, Token: m.token})

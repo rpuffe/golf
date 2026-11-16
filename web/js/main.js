@@ -2642,11 +2642,16 @@ function afterHole() {
 }
 const scoreWord = d => d <= -3 ? 'Albatross' : d === -2 ? 'Eagle' : d === -1 ? 'Birdie' : d === 0 ? 'Par' : d === 1 ? 'Bogey' : d === 2 ? 'Double bogey' : `+${d}`;
 // Rivals still playing the hole we just finished (online, same round).
+// (round 8, S6) once you've gone on without someone, you're not held for them
+// again until they catch up; waiting for them is your call ("Wait for them")
 function waitingFor() {
   if (!G.room || !sameRound()) return [];
-  const h = G.holeIdx + 1;
-  return [...rivals.values()].filter(r => r.online && !r.prog?.done && (r.prog?.scores?.length ?? 0) < h);
+  const h = G.holeIdx + 1, skipped = (G.room.skipped ??= new Set());
+  for (const id of [...skipped]) { const r = rivals.get(id); if (!r || (r.prog?.scores?.length ?? 0) >= G.holeIdx) skipped.delete(id); }
+  return [...rivals.values()].filter(r => r.online && !r.prog?.done && (r.prog?.scores?.length ?? 0) < h && !skipped.has(r.id));
 }
+// only touch the wait line when it changes, so its button survives the 0.5 s refresh
+function setWait(html) { const el = $('betweenWait'); if (el.dataset.h !== html) { el.innerHTML = html; el.dataset.h = html; } }
 function renderBetween() {
   const n = G.holeScores[G.holeIdx], par = G.holeDef.par;
   const done = G.holeScores.filter(Number.isInteger);
@@ -2660,29 +2665,49 @@ function renderBetween() {
   const st = $('betweenStand');
   if (G.room) {
     const rows = standings();
-    st.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${thruTxt(x)}</small></li>`).join('');
+    st.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}">${whoHTML(x.color, x.char)}${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${thruTxt(x)}</small></li>`).join('');
   } else st.innerHTML = '';
   const wait = waitingFor(), btn = $('betweenGo');
   document.body.classList.toggle('waiting', wait.length > 0);
   const left = Math.ceil(WAIT_SECS - G.between.t), late = left <= 0 || wait.every(isIdle);
   if (wait.length) {
     const w = G.between.watching;
-    $('betweenWait').textContent = `Waiting for ${wait.map(r => r.name + (isIdle(r) ? ' 💤' : '')).join(', ')}…${w ? ` 👀 ${w.name}` : ''}`;
+    setWait(esc(`Waiting for ${wait.map(r => r.name + (isIdle(r) ? ' 💤' : '')).join(', ')}…${w ? ` 👀 ${w.name}` : ''}`));
     btn.disabled = !late; btn.textContent = late ? 'Go on without them ▶' : `Go on without them in ${left} s`;
   } else {
-    $('betweenWait').textContent = G.room ? 'Everyone is in!' : '';
+    setWait(G.room ? 'Everyone is in!' : '');
     btn.disabled = false; btn.textContent = `Hole ${G.holeIdx + 2} ▶`;
+    // (round 8, S6) a soft regroup: offer, never force, a wait for a friend two holes back
+    const lag = straggler(), rg = G.between.regroup && rivals.get(G.between.regroup);
+    if (rg) setWait(`⏸ Waiting for <b>${esc(rg.name)}</b> to catch up.`);
+    else if (lag) { const n = G.holeIdx + 1 - (lag.prog?.scores?.length ?? 0); setWait(`🐢 <b>${esc(lag.name)}</b> is ${n} hole${n === 1 ? '' : 's'} back. <button type="button" id="regroupBtn">Wait for them</button>`); }
   }
   $('emotes').classList.toggle('hidden', !(G.room && rivals.size));
-  if (!wait.length && G.elsewhere?.length) $('betweenWait').innerHTML = `📣 ${G.elsewhere.join(' · ')}`;
+  if (!wait.length && G.elsewhere?.length && !straggler()) setWait(`📣 ${G.elsewhere.join(' · ')}`);
   renderEmoteButtons();
+}
+// the friend furthest behind, if they're 2+ holes back and still playing
+function straggler() {
+  if (!G.room || !sameRound() || G.holeIdx + 1 >= HOLES.length) return null;
+  let worst = null;
+  for (const r of rivals.values()) {
+    if (!r.online || isIdle(r) || r.prog?.done || !G.room.skipped?.has(r.id)) continue;
+    const thru = r.prog?.scores?.length ?? 0;
+    if (G.holeIdx + 1 - thru >= 1 && (!worst || thru < (worst.prog?.scores?.length ?? 0))) worst = r;
+  }
+  return worst;
+}
+function regroupDone(b) {
+  const r = rivals.get(b.regroup);
+  return !r || !r.online || isIdle(r) || (r.prog?.scores?.length ?? 0) >= G.holeIdx + 1 || b.t - b.regroupAt > 150;
 }
 function updateBetween(dt) {
   const b = G.between; b.t += dt;
   const wait = waitingFor();
   if ((b.render -= dt) <= 0) { b.render = 0.5; renderBetween(); }
-  if (G.room && !wait.length) {
-    if (!b.goAt) b.goAt = b.t + 2;
+  if (b.regroup && regroupDone(b)) { b.regroup = null; b.goAt = b.t + 2; renderBetween(); }
+  if (G.room && !wait.length && !b.regroup) {
+    if (!b.goAt) b.goAt = b.t + (straggler() ? 5 : 2);   // a moment to choose to wait
     if (b.t >= b.goAt) { goNextHole(); return; }
   }
   if (!G.room && b.t > 12) { goNextHole(); return; }
@@ -2693,6 +2718,11 @@ function updateBetween(dt) {
   if (r && !r.playing && wait.some(x => x.playing)) r = wait.find(x => x.playing);
   const snap = r !== b.watching && r;
   b.watching = r;
+  spectateCam(r, b, dt, snap);
+}
+// the spectator camera: chase a friend's ball in the air, stand behind it at
+// rest, or circle the cup when there's nobody to watch
+function spectateCam(r, b, dt, snap) {
   let pos, look;
   const p = r ? (r.playing ? r.playing.pos : rivalPos(r)) : null;
   if (p) {
@@ -2717,6 +2747,53 @@ function updateBetween(dt) {
   camera.position.lerp(pos, 1 - Math.exp(-dt * 2.5));
   G.camLook.lerp(look, 1 - Math.exp(-dt * 4)); camera.lookAt(G.camLook);
 }
+// ------------------------------------------------------------ the money putt
+// (round 8, S7) On the last hole, when a friend's next putt can change the
+// result (holing it lands within a stroke of the best finished card), every
+// finished player watches it live: the end card folds to a strip and the
+// camera goes to their ball. At most twice a round; nobody mid-hole is ever
+// pulled away, and the putter's own screen is untouched.
+function moneyCandidate() {
+  if (!G.room || G.mode !== 'end' || G.money || (G.moneyPutts ?? 0) >= 2) return null;
+  const last = HOLES.length, par = HOLES[last - 1].par;
+  const done = standings().filter(x => x.done);
+  for (const r of rivals.values()) {
+    const p = r.prog;
+    if (!r.online || !p || p.hole !== last || p.holed || p.done || !p.rest || r.moneyWatched === p.strokes) continue;
+    const surf = G.course.surf(p.rest.x, p.rest.z);
+    if ((surf !== 'green' && surf !== 'fringe') || dist2(p.rest, G.cup) > 20) continue;
+    const ifHoled = toParThru(p.scores, last - 1) + (p.strokes + 1 - par);
+    const others = done.filter(x => x.id !== r.id).map(x => x.toPar);
+    if (others.length && Math.abs(ifHoled - Math.min(...others)) <= 1) return r;
+  }
+  return null;
+}
+function updateMoney(dt) {
+  if (!G.money) { const r = moneyCandidate(); if (r) startMoney(r); return; }
+  const m = G.money, r = m.r; m.t += dt;
+  if (r.playing) m.shot = true;
+  if (m.shot && !r.playing) m.after = (m.after ?? 0) + dt;
+  if (m.after > 2.5 || m.t > 30 || !r.online || (!m.shot && r.prog?.holed)) { endMoney(); return; }
+  spectateCam(r, m, dt, m.t === dt);
+}
+function startMoney(r) {
+  G.moneyPutts = (G.moneyPutts ?? 0) + 1; r.moneyWatched = r.prog.strokes;
+  G.money = { r, t: 0, watching: r };
+  $('moneyStrip').querySelector('span').innerHTML = `💰 <b>${esc(r.name)}</b>'s money putt`;
+  document.body.classList.add('money');
+  hud.banner(`💰 MONEY PUTT<small>${esc(r.name)} to putt</small>`, 2200);
+  sfx.slowmo?.();
+}
+function endMoney() {
+  G.money = null;
+  document.body.classList.remove('money');
+  renderRoomFinal();
+}
+$('moneyStrip').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.react) { sendReact(b.dataset.react); return; }
+  endMoney();
+});
 function goNextHole() {
   if (G.mode !== 'between') return;
   G.elsewhere = [];
@@ -2725,8 +2802,16 @@ function goNextHole() {
   loadHole(G.holeIdx + 1);
 }
 $('betweenHead').addEventListener('click', () => $('between').classList.toggle('open'));
+$('betweenWait').addEventListener('click', e => {
+  if (e.target.id !== 'regroupBtn' || G.mode !== 'between') return;
+  const r = straggler(); if (!r) return;
+  Object.assign(G.between, { regroup: r.id, regroupAt: G.between.t });
+  sendEmote('regroup', r.id, String(myHole()), { state: true });
+  renderBetween();
+});
 $('betweenGo').addEventListener('click', () => {
   if (G.mode !== 'between' || $('betweenGo').disabled) return;
+  if (G.room) for (const r of waitingFor()) G.room.skipped.add(r.id);   // "go on without them"
   goNextHole();
 });
 function nextHoleOrEnd() { afterHole(); }
@@ -3720,7 +3805,7 @@ function emoteTokens() {
   return emoteBucket.tokens;
 }
 function sendEmote(kind, to = '', arg = '', { state = false } = {}) {
-  if (!G.room || G.room.closed || !G.room.inRound) return false;
+  if (!G.room || G.room.closed || !(G.room.inRound || G.money)) return false;
   // game-state messages may spend the last token; chatter must leave one spare for them
   if (emoteTokens() < (state ? 1 : 2)) return false;
   emoteBucket.tokens -= 1;
@@ -3780,7 +3865,7 @@ function onEmote(ev) {
   if (ev.kind === 'sasquack') { hud.toast(`🦶 ${esc(r.name)} met the Sasquack.`); return; }
   if (ev.kind === 'finale') { hud.toast(`🎆 ${esc(r.name)} has finished.`); return; }
   // (round 8, S4) reactions and quick chat land from any hole; everything else is hole-local
-  if (hole !== myHole() && !['react', 'chat', 'sabx'].includes(ev.kind)) return;
+  if (hole !== myHole() && !['react', 'chat', 'sabx', 'regroup'].includes(ev.kind)) return;
   if (ev.kind === 'chat') {
     const id = rest[0]; if (!CHATS[id]) return;
     feed(`${dot}: ${esc(CHATS[id])}`); bubble(r, CHATS[id]);
@@ -3820,6 +3905,8 @@ function onEmote(ev) {
     hud.toast(v === 'save' ? `☂️ You saved ${esc(r.name)}!` : v === 'rob' ? `☂️ You robbed ${esc(r.name)}.` : '☂️ Bonk.');
   } else if (ev.kind === 'sic') {
     if (!G.sicPending) { G.sicPending = r.name; G.sicFrom = r.id; }
+  } else if (ev.kind === 'regroup') {
+    hud.toast(`👋 <b>${esc(r.name)}</b> is waiting for you. No rush.`);
   } else if (ev.kind === 'sabx') {
     onSabotageResult(r, rest);
   }
@@ -4778,6 +4865,8 @@ function frame() {
       updateSasquack(dt);
     } else if (G.mode === 'between') {
       updateBetween(dt);
+    } else if (G.mode === 'end') {
+      updateMoney(dt);
     } else if ((G.mode === 'gooseCam' || G.mode === 'tug') && G.gooseCam) {
       updateGooseCam(dt, G.mode === 'tug');
       updateTug(dt);
@@ -4866,6 +4955,13 @@ function frame() {
 // hop behind them, so you watch it fly together), and their resting ball is
 // solid in your world. Standings are golf-style: to par over completed holes.
 const ROOM_COLORS = ['#ff7aa8', '#5fd3ff', '#ffc84a', '#4fd39a', '#c79bff', '#ff9a3c', '#f4f4f4', '#a0e060'];
+// (round 8, S13) who's who: a shape as well as a colour (colour-blind
+// friendly), and the golfer's 2D portrait
+const ROOM_SHAPES = ['●', '▲', '■', '◆', '★', '✚', '⬟', '♥'];
+function whoHTML(color = 0, char) {
+  const i = (color ?? 0) % ROOM_COLORS.length, pic = char && portraits[char];
+  return `<span class="mark" style="color:${ROOM_COLORS[i]}">${ROOM_SHAPES[i]}</span>${pic ? `<img class="pf" alt="" src="${pic}">` : ''}`;
+}
 const rivals = new Map();   // member id -> { mesh, label, trail, prog, playing, ... }
 const fmtPar = v => v === 0 ? 'E' : v > 0 ? `+${v}` : `−${-v}`;
 const ordinal = n => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
@@ -4879,7 +4975,7 @@ function rivalFor(m) {
     r = { id: m.id, hex, mesh, trail, label: null, labelName: '', prog: null, playing: null, online: true, scoresSeen: 0 };
     rivals.set(m.id, r);
   }
-  r.name = m.name; r.online = m.online; r.color = m.color;
+  r.name = m.name; r.online = m.online; r.color = m.color; r.look = m.look ?? null;
   if (r.labelName !== m.name) {
     if (r.label) { scene.remove(r.label); r.label.material.map?.dispose(); r.label.material.dispose(); }
     r.label = W.buildLabel(m.name, r.hex); r.label.visible = false; scene.add(r.label); r.labelName = m.name;
@@ -4955,7 +5051,7 @@ function finishRivalShot(r, silent) {
   else if (pl.shot.result === 'water') burst(end.x, end.y, end.z, 26, 0xbfe6ff, { speed: 2, up: 4, life: 1 });
 }
 function updateRivals(dt) {
-  const show = G.room && G.room.inRound && !['title', 'end'].includes(G.mode);
+  const show = G.room && ((G.room.inRound && !['title', 'end'].includes(G.mode)) || (G.mode === 'end' && !!G.money));
   for (const r of rivals.values()) {
     if (r.knock?.by && (!r.knock.by.playing || r.knock.by.playing.t >= r.knock.at)) startKnockAnim(r, r.knock);
     const pl = r.playing;
@@ -4994,10 +5090,10 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) for 
 function standings() {
   const par = i => HOLES[i]?.par ?? 0;
   const myScores = G.holeScores.filter(Number.isInteger);
-  const rows = [{ id: G.room?.me, me: true, name: G.playerName, hex: ROOM_COLORS[(G.room?.myColor ?? 2) % ROOM_COLORS.length], scores: myScores, hole: G.holeIdx + 1, done: G.mode === 'end' || myScores.length === HOLES.length, online: true }];
+  const rows = [{ id: G.room?.me, me: true, name: G.playerName, hex: ROOM_COLORS[(G.room?.myColor ?? 2) % ROOM_COLORS.length], color: G.room?.myColor ?? 2, char: charId(), scores: myScores, hole: G.holeIdx + 1, done: G.mode === 'end' || myScores.length === HOLES.length, online: true }];
   if (sameRound()) for (const r of rivals.values()) {
     const p = r.prog ?? {};
-    rows.push({ id: r.id, name: r.name, hex: r.hex, scores: Array.isArray(p.scores) ? p.scores : [], hole: p.hole ?? 0, done: !!p.done, online: r.online, idle: isIdle(r) });
+    rows.push({ id: r.id, name: r.name, hex: r.hex, color: r.color, char: r.prog?.char ?? r.look?.char, scores: Array.isArray(p.scores) ? p.scores : [], hole: p.hole ?? 0, done: !!p.done, online: r.online, idle: isIdle(r) });
   }
   for (const x of rows) { x.toPar = x.scores.reduce((s, v, i) => s + v - par(i), 0); x.thru = x.scores.length; x.total = x.scores.reduce((a, b) => a + b, 0); }
   // (round 8, S8) finished cards first, then everyone still out there by to-par
@@ -5038,7 +5134,7 @@ function updateRoomRace() {
 function renderRoomFinal() {
   const el = $('roomFinal'); if (!el || !G.room) return;
   const rows = standings();
-  el.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}"><span class="dot" style="background:${x.hex}"></span>${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${x.done ? `${x.total} strokes` : thruTxt(x)}</small></li>`).join('');
+  el.innerHTML = rows.map(x => `<li class="${x.me ? 'me' : ''}${x.online ? '' : ' off'}">${whoHTML(x.color, x.char)}${x.tie ? 'T' : ''}${x.pos}. ${esc(x.name)}${x.idle ? ' 💤' : x.online ? '' : ' 📴'}<b>${fmtPar(x.toPar)}</b><small>${x.done ? `${x.total} strokes` : thruTxt(x)}</small></li>`).join('');
   const waiting = rows.filter(x => !x.done && x.online).length, out = rows.filter(x => !x.done).length;
   const me = rows.find(x => x.me);
   // a place is only ever read off this same list, among the finished cards
@@ -5091,7 +5187,7 @@ function onRoomShot(ev) {
   const r = rivals.get(ev.from); if (!r) return;
   r.activeAt = performance.now();
   if (ev.progress) r.prog = ev.progress;
-  if (sameRound() && G.room.inRound && ev.hole === G.holeIdx + 1 && Array.isArray(ev.f) && ev.f.length >= 3) {
+  if (sameRound() && (G.room.inRound || G.money) && ev.hole === G.holeIdx + 1 && Array.isArray(ev.f) && ev.f.length >= 3) {
     if (r.playing) finishRivalShot(r, true);
     const { frames, n } = decodeFrames(ev.f);
     r.playing = { shot: { frames, n, result: ev.res }, t: 0, stroke: ev.stroke, pos: { x: frames[0], y: frames[1], z: frames[2] }, wm: typeof ev.wm === 'number' ? ev.wm / 1000 : undefined };
@@ -5141,7 +5237,7 @@ function showTitle() {
   $('hud').classList.add('hidden'); touchSwing.classList.add('hidden'); $('touchScope').classList.add('hidden');
   $('title').classList.remove('hidden');
 }
-function roomErr(t) { $('roomErr').textContent = t || ''; }
+function roomErr(t, info = false) { $('roomErr').textContent = t || ''; $('roomErr').classList.toggle('info', info); }
 function openRoomPanel() {
   $('roomPanel').classList.remove('hidden'); $('roomBtn').classList.add('hidden');
   renderLobby();
@@ -5154,7 +5250,11 @@ function renderLobby() {
   $('play').classList.toggle('go', !inRoom); $('play').classList.toggle('alt', inRoom);
   if (!inRoom) return;
   $('roomCodeShow').textContent = G.room.code;
-  $('roomMembers').innerHTML = (G.room.members ?? []).map(m => `<li class="${m.online ? '' : 'off'}"><span class="dot" style="background:${ROOM_COLORS[m.color % ROOM_COLORS.length]}"></span>${esc(m.name)}${m.id === G.room.me ? ' (you)' : ''}${m.host ? ' 👑' : ''}${m.online ? '' : ' · away'}</li>`).join('');
+  $('roomMembers').innerHTML = (G.room.members ?? []).map(m => {
+    const look = m.id === G.room.me ? myLook() : m.look ?? {}, golfer = GOLFERS.find(g => g.id === look.char);
+    return `<li class="${m.online ? '' : 'off'}">${whoHTML(m.color, look.char)}<span class="who"><b>${esc(m.name)}${m.id === G.room.me ? ' (you)' : ''}${m.host ? ' 👑' : ''}${m.online ? '' : ' · away'}</b>`
+      + `<small>${golfer ? esc(golfer.name) : ''}${look.balls?.length ? ` · ${look.balls.map(esc).join(', ')}` : ''}</small></span></li>`;
+  }).join('');
   const host = G.room.hostId === G.room.me;
   const joinable = G.room.started && G.room.playingRound !== G.room.round;
   const btn = $('roomStart');
@@ -5179,9 +5279,11 @@ function enterRoom(client, st) {
   onRoomState(st);
   openRoomPanel();
 }
+const myLook = () => ({ char: charId(), balls: newBag().map(b => b.name) });
 function makeClient() {
   return new RoomClient({
     name: () => playerNameNow(),
+    look: myLook,
     onState: onRoomState, onShot: onRoomShot, onProgress: onRoomProgress, onStart: onRoomStart, onEmote,
     onConn: () => { renderLobby(); updateRoomRace(); },
     onClosed: why => {
@@ -5250,7 +5352,7 @@ $('roomLeave').addEventListener('click', () => { leaveRoom(); $('roomCode').valu
   openRoomPanel();
   const saved = RoomClient.saved();
   if (saved?.code === code && $('name').value.trim()) roomAction((c, name) => c.join(code, name));
-  else roomErr($('name').value.trim() ? 'You were invited to this room. Press Join.' : 'You were invited to this room. Enter your name, then press Join.');
+  else roomErr($('name').value.trim() ? 'You were invited to this room. Press Join.' : 'You were invited to this room. Enter your name, then press Join.', true);
 })();
 
 // ============================================================ automation hook (QA + fun council)
@@ -5267,7 +5369,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,

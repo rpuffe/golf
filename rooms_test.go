@@ -417,3 +417,13 @@ func TestRoomDuplicateName(t *testing.T) {
 		t.Fatalf("old session rejoin: %d", resp.StatusCode)
 	}
 }
+
+func TestCleanLook(t *testing.T) {
+	l := cleanLook("birdie", []string{"Sir Thud", "", "Clover", "A\x00B", "Five", "Six"})
+	if l.Char != "birdie" || len(l.Balls) != 4 || l.Balls[0] != "Sir Thud" || l.Balls[2] != "AB" {
+		t.Fatalf("cleanLook: %+v", l)
+	}
+	if cleanLook("Bad1", nil).Char != "" || cleanLook("averyveryverylongid", nil).Char != "" {
+		t.Fatal("bad golfer ids must be dropped")
+	}
+}
