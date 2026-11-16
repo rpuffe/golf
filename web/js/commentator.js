@@ -74,6 +74,11 @@ const L = {
     ['Off the sails. Mini golf rules apply.', 'The windmill sends it back. Spiteful thing.', 'IT HIT THE WINDMILL! WHO PUT A WINDMILL ON A GOLF COURSE!']],
   tomb: [['Off a headstone. Respectfully.', 'Clattered a gravestone. Sorry, whoever you were.', 'IT HIT A GRAVE! DO NOT WAKE THEM! DO NOT WAKE ANYONE!']],
   scared: [['What was that. Par, I think.', 'WHAT WAS THAT. Was that Old Tom? Par, I think.', 'WHAT WAS THAT! WHAT WAS THAT! I AM UNDER THE DESK! PAR, I THINK!']],
+  // (owner's inside joke) the brood hands the ball back mucky, or as a potato
+  broodWash: [['It brooded on it. It is... sticky.', 'Goose muck! Somebody fetch the pressure washer!', 'IT IS COVERED IN GOOSE! POWER WASH IT! POWER WASH IT NOW!']],
+  broodPotato: [['The egg has hard-boiled. Into a potato.', 'It is a potato now! Peel it! Peel it!', 'A POTATO! SHE SAT ON IT AND MADE A POTATO! PEEL FOR YOUR LIFE!']],
+  choreWin: [['Spotless. Back to golf.', 'Good as new! Better than new!', 'SPARKLING! I CAN SEE MY FACE IN IT!']],
+  choreFail: [['Not quite done. That will play heavy.', 'Half a job! That will cost you some distance!', 'HALF DONE! THE NEXT SHOT IS GOING TO BE UGLY!']],
   // the scare on a hole that wasn't a par: the gag, without a wrong score
   scaredOff: [['What was that. I have lost count.', 'WHAT WAS THAT. Was that Old Tom? Somebody else keep score.', 'WHAT WAS THAT! WHAT WAS THAT! I AM UNDER THE DESK! I CANNOT COUNT FROM HERE!']],
   gallery: [['The gallery has opinions.', 'The gallery has opinions, and they are loud.', 'THE GALLERY IS GOING WILD! EVERYONE HAS AN OPINION!']],
@@ -127,7 +132,7 @@ let clipsFailed = false;
 fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+const PRIO = { broodWash: 3, broodPotato: 3, choreWin: 2, choreFail: 2, greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
 let lastPrio = 0, lastAt = 0, pending = null, busyUntil = 0;
 // (round 8, S11) one line at a time: a line has the floor for about as long as
 // it takes to say. Anything smaller waits in a single pending slot and is
@@ -252,12 +257,26 @@ function speak(text, tr, cls, tpl, vars) {
 // Old Tom talks for himself (in his own voice, a Scot from 1882). His line
 // takes over the caption with a ghostly style. At most once every 20 s.
 let tomAt = -1e9;
+// Variety (playtest: "the same one a couple of times in a row"): each kind of
+// line is dealt from a shuffled deck, so nothing repeats until every line has
+// had its turn (and never twice running across a reshuffle), and each kind
+// waits its own while before it comes round again.
+const TOM_GAP = { holed: 75000, goose: 40000, ahead: 45000, behind: 45000, stymie: 35000 };
+const tomDeck = {}, tomLast = {}, tomKindAt = {};
+function dealTom(cls, lines) {
+  let deck = tomDeck[cls];
+  if (!deck?.length) {
+    deck = tomDeck[cls] = lines.slice().sort(() => Math.random() - 0.5);
+    if (deck.length > 1 && deck[0] === tomLast[cls]) deck.push(deck.shift());
+  }
+  return (tomLast[cls] = deck.shift());
+}
 export function tomSay(cls, { force = false } = {}) {
   const lines = TOM_LINES[cls]; if (!lines) return false;
   const now = performance.now();
-  if (!force && now - tomAt < 20000) return false;
-  tomAt = now;
-  const line = lines[Math.floor(Math.random() * lines.length)];
+  if (!force && (now - tomAt < 20000 || now - (tomKindAt[cls] ?? -1e9) < (TOM_GAP[cls] ?? 0))) return false;
+  tomAt = now; tomKindAt[cls] = now;
+  const line = dealTom(cls, lines);
   const text = line.replace(/\[[^\]]*\]\s*/g, '').trim();
   if (captionEl) {
     captionEl.textContent = text; captionEl.dataset.tier = 0; captionEl.dataset.who = 'tom';

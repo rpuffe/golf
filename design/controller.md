@@ -10,31 +10,40 @@ browser with a controller. No native app. Built after council round 8.
 | --- | --- | --- |
 | Left stick | Aim (squared response: fine near the centre) and look up/down | Move the focus ring (auto-repeat) |
 | D-pad | Nudge the aim, slowly | Move the focus ring |
-| Right stick | **Swing:** pull back (depth = power), push forward (tempo), push at an angle (curve) | |
-| Right stick click | Overswing: up to 115%, if clicked in at the top | |
+| Right stick | **Swing:** pull back (depth = power), then one smooth push forward (tempo); leaning the push curves it | |
+| RT (hold while swinging) | **Power swing:** the rim becomes 115%, like dragging the mouse further (more distance, a hook). Clicking the stick in does the same | |
 | Ⓐ | Skip: flyover, wheel, bullet cam, goose airlift, scare, Sasquack. Tee off now (Final Group). Mash it in a tug. Hold it to reel | Press the focused button; on a text field, open the on-screen keys |
 | Ⓑ | Cancel a swing (free) | Back: close Help, the leaderboard, the keys or quick chat; on the between card, back to "Next hole" |
 | Ⓧ | Take a gimme, or put a ball back | Be the Goose / Stand here: send it to the middle of the view. On the keys: delete |
-| Ⓨ | Quick chat (rooms) | Quick-chat phrases on the between card |
-| LB / RB | Previous / next club | |
+| Ⓨ | **Overview:** a sky view of the shot; aim still works up there, Ⓨ or Ⓑ returns | |
+| LB / RB | Previous / next club (skips clubs you can't use from here) | |
 | LT (hold) | Rangefinder scope | |
-| RT (hold) | Steady the scope (hold your breath). Also reels | |
+| RT (hold) | While scoped: steady (hold your breath). Also reels and sprays | |
 | ☰ Menu | Help (Controls) | Close Help |
-| ⧉ View | Sound on/off | |
+| ⧉ View | Quick chat in a room; sound on/off when solo | Quick-chat phrases on the between card |
 | Waggle either stick | Tug-of-war effort | |
 
 ## The stick swing, through the council's lenses
 
-- **Golf Purist: deterministic and learnable.** The right stick replays the
-  mouse swing exactly. How far you pull (after a radial dead zone of 0.18) is
-  power, full deflection is 100%, and the meter shows it as you pull. Leaving
-  the top starts the tempo clock, and the push completes the strike: the same
-  `tempoNow()` the mouse flick uses, so holding at the top is free and a
-  smooth, quick push is a pure strike. The push's angle curves the ball as a
-  slanted flick does (a 45° push at full power gives the full hook or slice).
-  The same stick path always gives the same shot. Overswing is a deliberate
-  extra (click the stick in), never something you fall into by holding the
-  stick on its rim.
+- **Golf Purist: deterministic and learnable.** How far you pull (after a
+  radial dead zone of 0.18) is power, full deflection is 100%, and the meter
+  shows it as you pull. Leaving the top starts the tempo clock, and the push
+  completes the strike. Holding at the top is free.
+- **Tempo, owner playtest:** "I have to flick it… it should be one smooth
+  motion." Two fixes. First, a units bug: the spring-back cancel compared
+  milliseconds with seconds, so any swing that spent two frames crossing the
+  centre was cancelled; only a flick survived. Second, the stick has its own
+  tempo window (`stickTempo`): a downswing of up to ~0.55 s at full power (a
+  little longer for a chip) is a pure strike, with no penalty for being
+  quicker, and slower swings fade to a slack strike by ~1.4 s. A thumbstick
+  travels the whole gate, so it gets a roomier window than the mouse flick.
+- **Curve:** the push's sideways lean at impact sets the curve (`stickDrift`).
+  A wobble under 0.1 is straight; a lean of 0.65 or more is the full hook or
+  slice. The same stick path always gives the same shot.
+- **Overswing parity:** with a mouse or a phone you overswing just by
+  dragging further, so holding RT during a stick swing does the same. RT
+  power swing 124.7 m against the mouse's 124.5 m at full drag (test hole,
+  same tee). It is never something you fall into by resting on the rim.
 - **Player Advocate: no punishment for fumbling.** Letting the stick spring
   back to centre without a push cancels at no cost (the S14 replacement,
   "lift to cancel", in stick form), and so does Ⓑ. A goose that steals the
@@ -47,16 +56,26 @@ browser with a controller. No native app. Built after council round 8.
 
 Swing checks (rubric criterion 2, headless, simulated pad):
 
-| Push | Power | Tempo | Carry | Side |
+| Smooth sweep, top to full forward | Power | Tempo | Carry | Side |
 | --- | --- | --- | --- | --- |
-| Fast (40 ms) | 100% | 1.00 | 108.8 m | 0.4 m |
-| Medium (350 ms) | 100% | 0.53 | 88.1 m | 0.3 m |
-| Slow (800 ms) | 100% | 0.00 | 62.4 m | 0.2 m |
-| Fast, 45° right | 100% | 1.00 | 103.6 m | 23.6 m |
-| Fast, 30° left | 100% | 1.00 | 105.0 m | −16.2 m |
+| 0.4 s | 100% | 1.00 | 106.6 m | −0.5 m |
+| 0.9 s | 100% | 0.81 | 98.6 m | −0.5 m |
+| 2.0 s (very slow) | 100% | 0.00 | 63.5 m | −0.2 m |
+| 0.6 s, lean 0.25 | 100% | 1.00 | 106.2 m | 3.7 m |
+| 0.6 s, lean 0.8 right | 100% | 1.00 | 101.6 m | 23.1 m |
+| 0.6 s, lean 0.6 left | 100% | 1.00 | 102.2 m | −16.9 m |
 
-The tempo spread is 43% (the bar is 30%), and the curve is 23% of carry
+The tempo spread is 40% (the bar is 30%), and the curve is 23% of carry
 (the bar is 10%).
+
+## Aiming in landscape
+
+The address camera stands 0.75 m to the side of the ball (the TV angle). It
+used to look parallel to the shot line, so the middle of the screen sat
+0.75 m beside where the ball went: about 3° on a 15 m chip, and worse on a
+putt. The camera now turns in to meet the shot line at the playing distance
+(the pin for a putt, the full-power carry otherwise), so the crosshair is on
+the line.
 
 ## Input switching and TV mode
 

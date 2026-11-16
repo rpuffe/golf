@@ -97,7 +97,15 @@ Also in the game:
   tiers), shows the flat-green roll distance for *this* ball and power-up
   (a Slippery ball's number runs long, a Lucky one's short), and uses a
   generous cup. Club buttons show the same live full-power carry as the aim
-  label. At
+  label.
+- **🏌️ Five clubs:** driver (tee shots only), 3-wood, 7-iron, sand wedge
+  (high, short, and it stops) and putter. Crazy golf is putter only. Flat,
+  calm carries at full power: 126 / 111 / 80 / 44 m.
+- **🛰 Overview:** a sky view of the shot from address (O, the 🛰 button, or
+  Ⓨ on a controller). Aim still works up there.
+- **🥚 Brooded:** a goose that broods your ball hands it back either caked in
+  goose muck (power-wash it clean) or hard-boiled into a potato (peel it).
+  Unfinished, your next shot plays heavy, or as a potato. At
   rest, gold dots read the first two-thirds of a dead-weight putt, break
   included. While you pull back they run the whole roll to a stop ring,
   coloured green (it drops), gold (short) or red (well past), and the cup's
@@ -117,7 +125,8 @@ Also in the game:
 | Cancel a swing | Let go before the flick, slide onto the ✕ strip that appears beside the cursor, press Esc, or right-click. |
 | Putt | Same swing. The whole pull-back covers the putter's range for this putt (on the club button), the white ring shows the flat-green roll, and the gold dots read the break. |
 | Easy swing | Hold Space for power and release it, then tap Space as the accuracy needle crosses the centre |
-| Club | 1–4, Q/E or the scroll wheel |
+| Club | 1–5, Q/E or the scroll wheel (the driver is for tee shots only) |
+| Overview | O, or the 🛰 button: a sky view of the shot |
 | Scope / steady | Hold right mouse or Z, and hold Shift to hold your breath |
 | Reel (angler) | Hold the big reel button, the mouse or Space, and keep the needle in the green |
 | Tug-of-war | Hold the button and shake the mouse, swipe hard, or mash Space |
@@ -128,10 +137,11 @@ finger before the flick to back out. Phones only ever see phone instructions.
 
 **Controllers** (Xbox and other standard-mapping pads, including Edge on
 Xbox): the left stick aims and the right stick swings. Pull it back for
-power and push it forward to strike; tempo and curve work as with the mouse,
-and letting it spring back cancels. LB/RB change club, LT scopes, RT steadies,
-Ⓐ skips and confirms, Ⓑ cancels or goes back, Ⓧ takes a gimme, Ⓨ opens quick
-chat, ☰ opens Help. Menus, the lobby and room codes work with a focus ring and
+power, then one smooth push forward to strike (leaning it curves the ball),
+and letting it spring back cancels. Hold RT while you swing for a power
+swing. LB/RB change club, LT scopes (RT steadies), Ⓐ skips and confirms, Ⓑ
+cancels or goes back, Ⓧ takes a gimme, Ⓨ is the overview, ⧉ quick chat, ☰
+Help. Menus, the lobby and room codes work with a focus ring and
 on-screen keys, and TV mode enlarges the HUD inside safe margins. See
 [design/controller.md](design/controller.md). On-screen instructions are seven words or fewer.
 

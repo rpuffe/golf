@@ -53,8 +53,10 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
     } else for (const off of [0, -0.02, 0.02, -0.045, 0.045, -0.08, 0.08])
       for (let p = 0.04; p <= 1.0; p += 0.02) tryShot('putter', p, base + off);
   } else {
-    const clubs = dist > 125 ? ['driver', 'iron'] : dist > 70 ? ['iron', 'wedge', 'driver'] : ['wedge', 'iron'];
-    if (stroke === 1 && holePar >= 4) clubs.splice(0, clubs.length, 'driver', 'iron');
+    // the same rules as yours: the driver only off the tee
+    const clubs = dist > 115 ? ['wood', 'iron'] : dist > 80 ? ['wood', 'iron', 'wedge'] : dist > 45 ? ['iron', 'wedge'] : ['wedge', 'iron'];
+    if (stroke === 1 && holePar >= 4) clubs.splice(0, clubs.length, 'driver', 'wood', 'iron');
+    else if (stroke === 1 && dist > 80) clubs.push('driver');
     for (const club of clubs)
       for (const off of [0, -0.06, 0.06, -0.13, 0.13])
         for (let p = 0.25; p <= 1.0001; p += 0.05) tryShot(club, Math.min(1, p), base + off);

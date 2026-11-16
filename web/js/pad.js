@@ -37,17 +37,36 @@ export function readPad(pads, prev) {
 // ---- the stick swing --------------------------------------------------------
 // Pull the right stick toward you to wind up (how far = power, like the
 // mouse drag), then push it forward to strike. Tempo is the time from leaving
-// the top to the push, exactly as the mouse flick measures it, and the push's
-// angle curves the ball as a slanted flick does. Deterministic: the same stick
+// the top to the push (a smooth, steady swing is a pure strike: see
+// stickTempo), and the push's sideways lean curves the ball. Deterministic: the same stick
 // path always gives the same shot. Letting the stick spring back to centre
 // (no push) cancels at no cost; so does B.
-export const SWING = { rise: 0.05, leave: 0.12, push: 0.5, settle: 0.25, over: 1.15 };
+// Power swing: with `over` (RT held, or the stick clicked in) the rim is 115%,
+// the same overswing a mouse gets by dragging further: more distance, a hook.
+// settle: seconds the stick must rest at centre before it counts as let go
+// (a smooth swing passes through the centre far quicker than that)
+export const SWING = { rise: 0.05, leave: 0.12, push: 0.5, settle: 0.4, over: 1.15 };
+// Tempo for a stick: a smooth, steady forward swing is a pure strike. The
+// downswing (top to impact) may take up to ~0.55 s at full power, a little
+// longer for a gentle chip, with no penalty for being quicker; beyond that it
+// fades to a slack, short strike by ~1.4 s. (A thumbstick has to travel the
+// whole gate, so it gets a roomier window than the mouse flick.)
+export function stickTempo(dur, peak) {
+  const full = 0.55 + 0.35 * Math.max(0, 1 - Math.min(1, peak));
+  return Math.max(0, Math.min(1, 1 - (dur - full) / 0.85));
+}
+// Curve from the push's sideways lean at impact: a small wobble (under 0.1)
+// is straight; leaning 0.65 or more is the full hook or slice.
+export function stickDrift(x, peak) {
+  const k = Math.max(0, Math.min(1, (Math.abs(x) - 0.1) / 0.55));
+  return Math.sign(x) * k * Math.min(1, peak / 0.8);
+}
 export function stickPower(depth, over = false) {
   // depth is the dead-zoned pull, 0..1; full deflection (a little short of the rim) is 100%
   return Math.min(over ? SWING.over : 1, Math.max(0, depth / 0.95) * (over ? SWING.over : 1));
 }
 export function newStickSwing() { return { phase: 'idle', back: 0, tTop: 0, tDown: 0, restAt: undefined }; }
-// One step. stick: {x, y} dead-zoned right stick; over: right stick clicked in.
+// One step. stick: {x, y} dead-zoned right stick; now: milliseconds; over: right stick clicked in.
 // Returns null or an event: begin | back | down | strike {power, drift, tDown} | cancel.
 export function stepStickSwing(s, stick, now, { over = false, allowed = true } = {}) {
   const depth = Math.max(0, stick.y), push = Math.max(0, -stick.y), mag = Math.hypot(stick.x, stick.y);
@@ -63,26 +82,23 @@ export function stepStickSwing(s, stick, now, { over = false, allowed = true } =
     if (p < s.back - SWING.leave || push > 0) {
       // leaving the top: tempo runs from the last moment at the top
       Object.assign(s, { phase: 'down', tDown: s.tTop, restAt: undefined });
-      if (push >= SWING.push) return strike(s, stick);
+      if (push >= SWING.push) return strike(s, stick, now);
       return { type: 'down', tDown: s.tDown };
     }
     return null;
   }
   if (s.phase === 'down') {
-    if (push >= SWING.push) return strike(s, stick);
+    if (push >= SWING.push) return strike(s, stick, now);
     if (p > s.back - 0.04 && push === 0) { s.phase = 'back'; s.back = Math.max(s.back, p); s.tTop = now; return { type: 'back', back: s.back }; }   // wound up again
     // the stick sprang back to centre and stayed there: no swing, no cost
-    if (mag === 0) { s.restAt ??= now; if (now - s.restAt >= SWING.settle) return reset(s, 'cancel'); }
+    if (mag === 0) { s.restAt ??= now; if (now - s.restAt >= SWING.settle * 1000) return reset(s, 'cancel'); }
     else s.restAt = undefined;
     return null;
   }
   return null;
 }
-function strike(s, stick) {
-  const push = Math.max(0.35, -stick.y);
-  // a 45-degree push at full power hooks or slices as hard as a 45-degree mouse flick
-  const drift = Math.max(-1, Math.min(1, (stick.x / push) * s.back / 0.8));
-  const ev = { type: 'strike', power: s.back, drift, tDown: s.tDown };
+function strike(s, stick, now) {
+  const ev = { type: 'strike', power: s.back, drift: stickDrift(stick.x, s.back), tDown: s.tDown, tempo: stickTempo((now - s.tDown) / 1000, s.back) };
   reset(s); return ev;
 }
 function reset(s, type = null) { Object.assign(s, newStickSwing()); return type ? { type } : null; }

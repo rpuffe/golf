@@ -604,7 +604,7 @@ type emoteEvent struct {
 }
 
 var validRes = map[string]bool{"rest": true, "holed": true, "water": true, "oob": true}
-var validClub = map[string]bool{"driver": true, "iron": true, "wedge": true, "putter": true}
+var validClub = map[string]bool{"driver": true, "wood": true, "iron": true, "wedge": true, "putter": true}
 
 func validProgress(p *Progress) bool {
 	if p == nil {

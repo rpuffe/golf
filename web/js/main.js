@@ -165,6 +165,8 @@ function ballAnim(dt) {
   const t = G.time, inFlight = G.shot?.kind === 'player';
   BA.squash = Math.max(0, BA.squash - dt);
   if (G.eggBall) { ballMesh.scale.set(1.25, 1.55, 1.25); ballMesh.material.color.setHex(0xfff6e6); return; }
+  if (G.ballCurse === 'potato') { ballMesh.scale.set(1.45, 1.1, 1.2); ballMesh.material.color.setHex(0xb08a55); return; }
+  if (G.ballCurse === 'muck') { ballMesh.scale.setScalar(1.12); ballMesh.material.color.setHex(0x6b5a3a); return; }
   ballMesh.material.color.setHex(0xffffff);
   if (BA.squash > 0) ballMesh.scale.set(1 + 0.25 * k, 1 - 0.25 * k, 1 + 0.25 * k);
   BA.fx -= dt;
@@ -411,7 +413,8 @@ function renderClubs() {
     // (round 8, S9) the same live numbers as the aim label and the putt readout
     const live = id === 'putter' ? (G.course ? honestPutt(1) : null) : G.clubCarry?.[id];
     const range = live != null ? Math.round(live) : c.range;
-    return `<button class="club${G.club === id ? ' active' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span>${INPUT === 'mouse' ? ` <kbd>${i + 1}</kbd>` : ''}</button>`;
+    const off = !clubAllowed(id);
+    return `<button class="club${G.club === id ? ' active' : ''}${off ? ' off' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"${off ? ' aria-disabled="true" title="Not from here"' : ''}><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span>${INPUT === 'mouse' ? ` <kbd>${i + 1}</kbd>` : ''}</button>`;
   }).join('');
 }
 $('clubs').addEventListener('click', e => { const b = e.target.closest('.club'); if (b) setClub(b.dataset.id); });
@@ -563,12 +566,13 @@ function loadHole(i) {
   G.knockQ = null; G.teethHole = false; G.teethUsed = false; G.teethTargets = new Set(); G.teethPick = false; G.standMode = false; G.myFan = null; G.putBack = null;
   for (const id of [...fans.keys()]) dropFan(id);
   for (const g of geese) if (g.puppetOf) { if (g.label) scene.remove(g.label); g.puppetOf = null; g.label = null; }
-  G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
+  G.relay = null; G.brood = null; G.hammer = null; G.eggBall = false; G.ballCurse = null; if (chore.active) endChore(true); if (adoptee) { scene.remove(adoptee.mesh); adoptee = null; }
   G.finalWait = null; $('finalGroup').classList.add('hidden');
   G.powerUp = null; renderPowerChip(); G.sicPending = null; G.sicFrom = null; G.sabReport = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
   G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.scared = G.scared && G.holeIdx > 0;
   pickUnit(); lastPreview = ''; G.previewCarry = null; G.clubCarry = null; G.clubCarries = null;
+  if (G.overview) toggleOverview(false);
   G.ball = { x: h.tee[0], z: h.tee[1], y: course.h(h.tee[0], h.tee[1]) + R };
   G.lastLie = { ...G.ball };
   aimAtPoint(h.path[1][0], h.path[1][1]);
@@ -598,7 +602,7 @@ function loadHole(i) {
 // (round 8, S10) "lift to cancel" replaces S14: letting go before the flick cancels the swing
 const CONTROL_HINT = () => W3('↔ Drag the course to aim<br>↓↑ On the pad: drag down, flick up<br>✋ Lift your finger to cancel',
   '↔ Drag sideways to aim<br>↓↑ Drag down, flick up to swing<br>✋ Let go to cancel',
-  'Ⓛ Left stick aims · LB RB clubs<br>Ⓡ Right stick: pull back, push forward<br>✋ Let it spring back to cancel');
+  'Ⓛ Left stick aims · LB RB clubs<br>Ⓡ Right stick: pull back, push forward<br>✋ Let it spring back to cancel<br>RT power swing · Ⓨ overview');
 function holeHint() {
   const s = G.holeDef.spotlight;
   if (!G.hintsShown.swing) return CONTROL_HINT();
@@ -645,7 +649,19 @@ function vars() {
 // ============================================================ aiming + clubs
 function fwd(yaw) { return { x: -Math.sin(yaw), z: -Math.cos(yaw) }; }
 function aimAtPoint(x, z) { G.yaw = Math.atan2(-(x - G.ball.x), -(z - G.ball.z)); }
+// (owner playtest) the driver is for tee shots only; crazy golf is putter only
+function clubAllowed(id) {
+  if (!G.course || !G.holeDef) return true;
+  if (G.holeDef.mini) return id === 'putter';
+  if (id === 'driver') return G.course.surf(G.ball.x, G.ball.z) === 'tee';
+  return true;
+}
+function stepClub(dir) {
+  let i = CLUB_ORDER.indexOf(G.club);
+  for (let k = 0; k < CLUB_ORDER.length; k++) { i = (i + dir + CLUB_ORDER.length) % CLUB_ORDER.length; if (clubAllowed(CLUB_ORDER[i])) { setClub(CLUB_ORDER[i]); return; } }
+}
 function setClub(id) {
+  if (CLUBS[id] && !clubAllowed(id) && G.mode === 'address') { hud.hint(id === 'driver' ? 'Driver: tee shots only.' : 'Crazy golf: putter only.', 2200); renderClubs(); return; }
   if (!CLUBS[id] || G.club === id) { renderClubs(); return; }
   G.club = id; renderClubs(); sfx.tick();
   for (const [k, m] of Object.entries(club.userData.heads)) m.visible = k === id;
@@ -654,10 +670,10 @@ function setClub(id) {
 }
 function autoClub() {
   const d = dist2(G.ball, G.cup), s = G.course.surf(G.ball.x, G.ball.z);
-  let id = 'driver';
-  if ((s === 'green' || s === 'fringe') && d < 26) id = 'putter';
-  else if (d < 70) id = 'wedge';
-  else if (d < 125) id = 'iron';
+  let id = s === 'tee' && d >= 118 ? 'driver' : 'wood';
+  if (G.holeDef?.mini || ((s === 'green' || s === 'fringe') && d < 26)) id = 'putter';
+  else if (d < 48) id = 'wedge';
+  else if (d < 92) id = 'iron';
   else if (s === 'sand' || s === 'rough') id = 'iron';
   G.club = null; setClub(id);
   renderClubs();
@@ -1271,7 +1287,7 @@ function endTug(won) {
 // ------------------------------------------------------------ what the goose does when it wins
 // (council round 6, §11.1) A weighted table, never the same outcome twice in a
 // row. Every outcome: no stroke, never closer to the pin, always a playable lie.
-const LOSSES = [['punt', 22], ['relay', 18], ['brood', 15], ['pond', 12], ['stash', 13], ['bunker', 10], ['swallow', 10]];
+const LOSSES = [['punt', 22], ['relay', 18], ['brood', 30], ['pond', 12], ['stash', 13], ['bunker', 10], ['swallow', 10]];
 function lossSpot(p) {
   const s = G.course.surf(p.x, p.z);
   const ok = validLand(p.x, p.z) && s !== 'green' && s !== 'fringe' && Math.hypot(p.x - G.cup.x, p.z - G.cup.z) >= Math.hypot(G.gooseLie.x - G.cup.x, G.gooseLie.z - G.cup.z) - 0.01;
@@ -1394,9 +1410,125 @@ function updateBrood(dt) {
     const at = lossSpot(g);
     g.state = 'graze'; g.target = { x: g.x + (g.x - at.x) * 3 + 6, z: g.z + 4 }; g.timer = 3;
     endGooseCam();
-    G.eggBall = true;
-    placeBall(at.x, at.z);
+    // (owner's inside joke) the goose hands it back in one of two states:
+    // caked in goose muck (power-wash it) or hard-boiled into a potato (peel it)
+    const kind = Math.random() < 0.5 ? 'wash' : 'peel';
+    placeBall(at.x, at.z, 1.4);
+    G.linger.then = () => startChore(kind);
   }
+}
+// ---- the chores: power-wash the muck off, or peel the potato. Never fatal:
+// unfinished, the next shot plays heavy (muck) or as a potato, then it's a ball again.
+const BALL_CURSES = { muck: { speed: 0.93, roll: 1.25 }, potato: { speed: 0.86, bounce: 0.3, roll: 1.6, side: 1.4 } };
+const chore = { active: false };
+const CH = { W: 240, R: 96, CELL: 12 };
+function startChore(kind) {
+  const n = CH.W / CH.CELL, cells = new Float32Array(n * n);
+  let dirty = 0;
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const x = (i + 0.5) * CH.CELL - CH.W / 2, y = (j + 0.5) * CH.CELL - CH.W / 2;
+    if (Math.hypot(x, y) < CH.R) { cells[j * n + i] = 1; dirty++; }
+  }
+  Object.assign(chore, { active: true, kind, t: 0, ready: READY_SECS, limit: kind === 'wash' ? 7.5 : 6.5, cells, n, dirty, prog: 0,
+    strips: Array(8).fill(0), peeled: 0, drag: null, cur: { x: CH.W / 2, y: CH.W / 2 }, spraying: false, padDown: false, keyAt: 0 });
+  G.mode = 'chore'; document.body.classList.add('choring');
+  $('choreTitle').textContent = kind === 'wash' ? '🚿 POWER WASH IT!' : '🥔 PEEL THE POTATO!';
+  $('choreHow').textContent = kind === 'wash' ? W3('Drag all over the ball.', 'Drag to spray it clean.', 'Left stick aims · hold Ⓐ sprays') : W3('Swipe down to peel strips.', 'Drag down to peel strips.', 'Flick Ⓡ down to peel.');
+  readyCard('choreReady', kind === 'wash' ? '🪿 GOOSE MUCK. EVERYWHERE.' : '🥔 IT HARD-BOILED INTO A POTATO', kind === 'wash' ? W3('SCRUB IT: DRAG ALL OVER', 'DRAG TO SPRAY', 'AIM Ⓛ · HOLD Ⓐ') : W3('SWIPE DOWN TO PEEL', 'DRAG DOWN TO PEEL', 'FLICK Ⓡ DOWN'), kind === 'wash' ? '🚿' : '🔪');
+  $('chore').classList.remove('hidden');
+  say(kind === 'wash' ? 'broodWash' : 'broodPotato', vars(), { bump: 10 });
+  drawChore();
+}
+function choreAt(x, y) {
+  if (!chore.active || chore.ready > 0) return;
+  if (chore.kind === 'wash') {
+    const n = chore.n, r = 26;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const cx = (i + 0.5) * CH.CELL, cy = (j + 0.5) * CH.CELL, k = j * n + i;
+      if (chore.cells[k] > 0 && Math.hypot(cx - x, cy - y) < r) chore.cells[k] = Math.max(0, chore.cells[k] - 0.34);
+    }
+    let left = 0; for (const v of chore.cells) left += v;
+    chore.prog = 1 - left / chore.dirty;
+    if ((chore.hiss = (chore.hiss ?? 0) - 1) <= 0) { (sfx.splashBob ?? sfx.tick)(); chore.hiss = 6; }
+  }
+}
+function peelStrip(i) {
+  if (!chore.active || chore.ready > 0 || chore.kind !== 'peel') return;
+  if (i == null) i = chore.strips.findIndex(v => v < 1);
+  if (i < 0 || chore.strips[i] >= 1) return;
+  chore.strips[i] = 1; chore.peeled++; chore.prog = chore.peeled / chore.strips.length;
+  sfx.tick(); burst(G.ball.x, G.ball.y + 0.3, G.ball.z, 6, 0xc29a5b, { speed: 1.2, up: 1.5, life: 0.6 });
+}
+function choreXY(e) { const r = $('choreCanvas').getBoundingClientRect(); return { x: (e.clientX - r.left) / r.width * CH.W, y: (e.clientY - r.top) / r.height * CH.W }; }
+$('choreCanvas').addEventListener('pointerdown', e => {
+  e.preventDefault(); unlockAudio();
+  const p = choreXY(e); chore.drag = { x0: p.x, y0: p.y, id: e.pointerId };
+  try { $('choreCanvas').setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+  if (chore.kind === 'wash') choreAt(p.x, p.y);
+});
+$('choreCanvas').addEventListener('pointermove', e => {
+  if (!chore.active || !chore.drag || chore.drag.id !== e.pointerId) return;
+  const p = choreXY(e);
+  if (chore.kind === 'wash') { choreAt(p.x, p.y); return; }
+  // a downward swipe of half the potato's height peels the strip it started on
+  if (p.y - chore.drag.y0 > CH.R * 0.9) {
+    const i = clamp(Math.floor((chore.drag.x0 - (CH.W / 2 - CH.R)) / (2 * CH.R) * chore.strips.length), 0, chore.strips.length - 1);
+    peelStrip(chore.strips[i] < 1 ? i : null);
+    chore.drag = { x0: p.x, y0: p.y, id: e.pointerId };
+  }
+});
+for (const ev of ['pointerup', 'pointercancel']) $('choreCanvas').addEventListener(ev, () => { chore.drag = null; });
+function choreKey() { if (G.mode === 'chore' && chore.kind === 'peel' && performance.now() - chore.keyAt > 220) { chore.keyAt = performance.now(); peelStrip(); } }
+function updateChore(dt) {
+  if (!chore.active) return;
+  if (chore.ready > 0) { chore.ready -= dt; if (chore.ready <= 0) $('choreReady').classList.remove('show'); drawChore(); return; }
+  chore.t += dt;
+  if (chore.spraying) choreAt(chore.cur.x, chore.cur.y);
+  $('choreFill').style.width = `${Math.round(chore.prog * 100)}%`;
+  $('choreTimer').textContent = `${Math.max(0, chore.limit - chore.t).toFixed(1)} s`;
+  drawChore();
+  const goal = chore.kind === 'wash' ? 0.9 : 1;
+  if (chore.prog >= goal) endChore(true);
+  else if (chore.t >= chore.limit) endChore(false);
+}
+function drawChore() {
+  const c = $('choreCanvas'), x = c.getContext('2d'), W = CH.W, R = CH.R;
+  x.clearRect(0, 0, W, W);
+  if (chore.kind === 'wash') {
+    x.fillStyle = '#ffffff'; x.beginPath(); x.arc(W / 2, W / 2, R, 0, 7); x.fill();
+    x.fillStyle = '#2a2235'; for (const dx of [-26, 26]) { x.beginPath(); x.arc(W / 2 + dx, W / 2 - 14, 13, 0, 7); x.fill(); }   // its eyes, under there somewhere
+    const n = chore.n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const v = chore.cells[j * n + i]; if (v <= 0) continue;
+      x.fillStyle = `rgba(${86 + (i * 7 % 20)}, ${70 + (j * 5 % 16)}, 40, ${0.25 + 0.75 * v})`;
+      x.fillRect(i * CH.CELL - 1, j * CH.CELL - 1, CH.CELL + 2, CH.CELL + 2);
+    }
+    if (INPUT === 'pad') { x.strokeStyle = '#5fd3ff'; x.lineWidth = 3; x.beginPath(); x.arc(chore.cur.x, chore.cur.y, 26, 0, 7); x.stroke(); }
+  } else {
+    const n = chore.strips.length, w = 2 * R / n;
+    x.save(); x.beginPath(); x.ellipse(W / 2, W / 2, R, R * 0.8, 0, 0, 7); x.clip();
+    for (let i = 0; i < n; i++) {
+      x.fillStyle = chore.strips[i] >= 1 ? '#f4e2a8' : i % 2 ? '#a0703c' : '#94673a';
+      x.fillRect(W / 2 - R + i * w, 0, w + 1, W);
+      if (chore.strips[i] < 1) { x.fillStyle = '#6b4626'; for (let k = 0; k < 3; k++) x.fillRect(W / 2 - R + i * w + w * 0.3, 40 + ((i * 37 + k * 61) % 150), 4, 4); }
+    }
+    x.restore();
+    x.strokeStyle = '#5b3a1e'; x.lineWidth = 3; x.beginPath(); x.ellipse(W / 2, W / 2, R, R * 0.8, 0, 0, 7); x.stroke();
+  }
+}
+function endChore(won) {
+  chore.active = false;
+  $('chore').classList.add('hidden'); document.body.classList.remove('choring'); $('choreReady').classList.remove('show');
+  if (won) {
+    sfx.catchBall(); say('choreWin', vars(), { bump: -8 });
+    hud.banner(chore.kind === 'wash' ? '✨ SPOTLESS!<small>back to golf</small>' : '🥔 PEELED!<small>there was a ball in there</small>', GOOSE_BEAT_MS);
+  } else {
+    G.ballCurse = chore.kind === 'wash' ? 'muck' : 'potato';
+    say('choreFail', vars(), { bump: 8 });
+    hud.banner(chore.kind === 'wash' ? '🪿 STILL MUCKY<small>next shot plays heavy</small>' : '🥔 STILL A POTATO<small>next shot: potato</small>', GOOSE_BEAT_MS);
+  }
+  G.previewDirty = true;
+  setTimeout(startWalk, 900);
 }
 // the egg hatches on its next landing; a gosling adopts you
 let adoptee = null;
@@ -1580,6 +1712,8 @@ const swing = { active: false, src: '', phase: 'back', back: 0, peak: 0, fwd: 0,
 const SWING_PX = 260;
 function canSwing() { return G.mode === 'address' && !G.shot && !G.walk && !G.finalWait; }
 function beginSwing(src) {
+  if (G.mode === 'address' && !clubAllowed(G.club)) autoClub();   // never a driver off the fairway
+  if (G.overview) { toggleOverview(false); snapAddressCam(true); }
   if (!canSwing() || swing.active) return;
   if (G.wheel) { hurryWheel(); }
   if (!G.idleHint || G.hintsShown.swing) hud.hint('');
@@ -2625,6 +2759,14 @@ function renderPowerChip() {
 // physics modifiers for the shot about to be hit. "Next shot" power-ups skip
 // putts and are spent by the next full swing.
 function shotMods(consume, clubId = G.club) {
+  const m0 = shotModsPU(consume, clubId), c = G.ballCurse && BALL_CURSES[G.ballCurse];
+  if (!c) return m0;
+  const m = { ...m0 };
+  for (const [k, v] of Object.entries(c)) m[k] = (m[k] ?? 1) * v;
+  if (consume) { const was = G.ballCurse; G.ballCurse = null; setTimeout(() => hud.toast(was === 'potato' ? '🥔 The potato is mash. Ball is back.' : '🚿 The muck flew off. Ball is back.'), 2600); }
+  return m;
+}
+function shotModsPU(consume, clubId = G.club) {
   const p = G.powerUp; if (!p) return {};
   const m = { cupR: p.cupR, noTrees: p.noTrees };
   if (p.shotLeft > 0 && (clubId !== 'putter' || G.holeDef?.mini)) {   // crazy golf is all putts: they count there
@@ -4133,7 +4275,44 @@ function snapAddressCam(keepPitch) {
   camera.rotation.set(G.pitch, G.yaw, 0);
 }
 G.sway = { x: 0, y: 0 };
+function aimConverge() {
+  if (!(G.mode === 'address' || G.mode === 'wheel' || G.mode === 'goose') || !G.course) return 0;
+  const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball, f = fwd(G.yaw);
+  const pc = G.previewCarry, carryD = pc ? Math.hypot(pc.x - base.x, pc.z - base.z) : 60;
+  const D = G.club === 'putter' ? clamp(dist2(base, G.cup), 2, 25) : clamp(carryD, 15, 250);
+  const tx = base.x + f.x * D, tz = base.z + f.z * D, cp = camera.position;
+  const want = Math.atan2(-(tx - cp.x), -(tz - cp.z));
+  return Math.atan2(Math.sin(want - G.yaw), Math.cos(want - G.yaw));
+}
+// ---- the overview: a sky view of the shot (PGA-style), from address
+// Ⓨ / O / the 🛰 button. Aim still works up there: the line runs to the
+// full-power carry ring (the pin for a putt), and swinging drops you back.
+function toggleOverview(on = !G.overview) {
+  on = on && (G.mode === 'address' || G.mode === 'wheel') && !swing.active;
+  if (on === !!G.overview) return;
+  G.overview = on;
+  if (on) setScope(false);
+  document.body.classList.toggle('overview', on);
+  $('ovLbl').textContent = on ? W3('🛰 Overview · tap 🛰 to return', '🛰 Overview · O to return', '🛰 Overview · Ⓨ to return') : '';
+  sfx.tick();
+}
+function overviewTarget() {
+  const b = G.ball, f = fwd(G.yaw);
+  if (G.club === 'putter') { const d = clamp(dist2(b, G.cup), 3, 30); return { x: b.x + f.x * d, z: b.z + f.z * d }; }
+  return G.clubCarries?.[G.club] ?? { x: b.x + f.x * 100, z: b.z + f.z * 100 };
+}
+function updateOverviewCam(dt) {
+  const b = G.ball, f = fwd(G.yaw), T = overviewTarget();
+  const L = Math.max(3, Math.hypot(T.x - b.x, T.z - b.z));
+  const mx = (b.x + T.x) / 2, mz = (b.z + T.z) / 2, gy = G.course.h(mx, mz);
+  const h = clamp(L * 0.8, G.club === 'putter' ? 9 : 26, 200);
+  const want = new THREE.Vector3(mx - f.x * L * 0.32, gy + h, mz - f.z * L * 0.32);
+  camera.position.lerp(want, 1 - Math.exp(-dt * 4));
+  G.camLook.lerp(new THREE.Vector3(mx + f.x * L * 0.06, gy, mz + f.z * L * 0.06), 1 - Math.exp(-dt * 5));
+  camera.lookAt(G.camLook);
+}
 function updateAddressCam(dt) {
+  if (G.overview && G.course && (G.mode === 'address' || G.mode === 'wheel')) { updateOverviewCam(dt); return; }
   const a = addressCam();
   camera.position.lerp(a.pos, 1 - Math.exp(-dt * 14));
   let yaw = G.yaw, pitch = G.pitch;
@@ -4145,6 +4324,11 @@ function updateAddressCam(dt) {
     G.sway.y = (Math.sin(wt * 2.4 + 2) * 0.6 + Math.cos(wt * 1.3) * 0.4) * amp;
     yaw += G.sway.x; pitch += G.sway.y;
   } else { G.sway.x = G.sway.y = 0; }
+  // The camera stands to the side of the ball (the TV angle), so it turns in to
+  // meet the shot line at the target: the middle of the screen is where the
+  // ball goes, at the distance you're playing (the pin for a putt, the
+  // full-power carry otherwise), not 0.75 m beside it.
+  yaw += aimConverge();
   camera.rotation.set(pitch, yaw, 0);
   const f = fwd(yaw);
   G.camLook.set(camera.position.x + f.x * 20, camera.position.y + Math.tan(pitch) * 20, camera.position.z + f.z * 20);
@@ -4189,7 +4373,7 @@ function updatePreview() {
   const d = aimDir();
   // short dashed aim line on the ground
   const pts = aimLine.geometry.attributes.position;
-  const len = G.club === 'putter' ? 3 : 9;
+  const len = G.overview ? Math.hypot(overviewTarget().x - base.x, overviewTarget().z - base.z) : G.club === 'putter' ? 3 : 9;
   for (let i = 0; i < pts.count; i++) {
     const t = (i / (pts.count - 1)) * len;
     const x = base.x + d.x * t, z = base.z + d.z * t;
@@ -4460,13 +4644,13 @@ const coarse = matchMedia('(pointer: coarse)').matches;
 const bulletLbl = () => W3('● BULLET CAM · TAP TO SKIP', '● BULLET CAM · CLICK TO SKIP', '● BULLET CAM · Ⓐ TO SKIP');
 const HELP_ROWS = {
   touch: [['Aim', 'Drag the course sideways.'], ['Swing', 'On the pad: drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
-    ['Cancel', 'Lift your finger before the flick.'], ['Club', 'Tap a club.'], ['Zoom', 'Tap 🔭.'], ['Sound', 'Tap 🔊 and 🎙️.']],
+    ['Cancel', 'Lift your finger before the flick.'], ['Club', 'Tap a club.'], ['Overview', 'Tap 🛰.'], ['Zoom', 'Tap 🔭.'], ['Sound', 'Tap 🔊 and 🎙️.']],
   mouse: [['Aim', 'Drag sideways. Or A / D.'], ['Swing', 'Drag down, flick up.'], ['Curve', 'Flick up at an angle.'],
-    ['Cancel', 'Let go before the flick. Or Esc.'], ['Key swing', 'Hold Space, release, tap again.'], ['Club', '1–4 or scroll wheel.'],
-    ['Zoom', 'Hold right-click or Z.'], ['Sound', 'M mutes. V mutes the voice.']],
+    ['Cancel', 'Let go before the flick. Or Esc.'], ['Key swing', 'Hold Space, release, tap again.'], ['Club', '1–5 or scroll wheel.'],
+    ['Overview', 'O, or the 🛰 button.'], ['Zoom', 'Hold right-click or Z.'], ['Sound', 'M mutes. V mutes the voice.']],
   pad: [['Aim', 'Left stick. D-pad nudges.'], ['Swing', 'Right stick: pull back, push forward.'], ['Curve', 'Push forward at an angle.'],
-    ['Overswing', 'Click the right stick in at the top.'], ['Cancel', 'Let the stick spring back, or Ⓑ.'], ['Club', 'LB / RB.'],
-    ['Zoom', 'Hold LT. Hold RT to steady.'], ['Skip / OK', 'Ⓐ. Back is Ⓑ.'], ['Chat', 'Ⓨ in a room.'], ['Help / sound', '☰ / ⧉.']],
+    ['Power swing', 'Hold RT while you swing (115%).'], ['Cancel', 'Let the stick spring back, or Ⓑ.'], ['Club', 'LB / RB.'],
+    ['Overview', 'Ⓨ: a sky view of the shot.'], ['Zoom', 'Hold LT. Hold RT to steady.'], ['Skip / OK', 'Ⓐ. Back is Ⓑ.'], ['Chat / sound', '⧉ (chat in a room).'], ['Help', '☰.']],
 };
 // every on-screen instruction speaks the input you're using; touch devices
 // never carry keyboard strings in the page (round 8, S10)
@@ -4478,6 +4662,7 @@ function applyInputCopy() {
   $('helpRows').innerHTML = HELP_ROWS[INPUT].map(([a, b]) => `<tr><td><b>${a}</b></td><td>${b}</td></tr>`).join('');
   $('titleHow').innerHTML = W3('<b>Drag down, flick up</b> to swing.', '<b>Drag down, flick up</b> to swing.', '<b>Right stick: pull back, push</b> to swing.');
   if (G.mode === 'flyover') $('flySkip').textContent = W3('Tap to skip', 'Click to skip', 'Ⓐ to skip');
+  if (G.overview) $('ovLbl').textContent = W3('🛰 Overview · tap 🛰 to return', '🛰 Overview · O to return', '🛰 Overview · Ⓨ to return');
 }
 applyInputCopy(); applyTV();
 addEventListener('pointerdown', e => setInput(e.pointerType === 'touch' ? 'touch' : 'mouse'), true);
@@ -4565,8 +4750,7 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());
 canvas.addEventListener('wheel', e => {
   if (!inGame()) return;
   e.preventDefault();
-  const i = CLUB_ORDER.indexOf(G.club) + (e.deltaY > 0 ? 1 : -1);
-  setClub(CLUB_ORDER[(i + 4) % 4]);
+  stepClub(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 function look(dx, dy) {
   if (!(G.mode === 'address' || G.mode === 'wheel')) return;
@@ -4604,6 +4788,7 @@ addEventListener('keydown', e => {
     if (e.repeat) return;
     unlockAudio();
     if (G.mode === 'tug') { tugInput(450 / tugScale()); return; }
+    if (G.mode === 'chore') { choreKey(); return; }
     if (G.mode === 'flyover') { skipFlyover(); return; }
     if (G.mode === 'wheel') { hurryWheel(); return; }
     if (G.mode === 'between') { $('betweenGo').click(); return; }
@@ -4617,11 +4802,13 @@ addEventListener('keydown', e => {
   }
   if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') { if (G.scoped && G.gasp <= 0) G.holding = true; }
   if (e.code === 'KeyZ' && !e.repeat) setScope(true);
-  if (/^Digit[1-4]$/.test(e.code)) setClub(CLUB_ORDER[+e.code.slice(5) - 1]);
-  if (e.code === 'KeyQ' || e.code === 'KeyE') { const i = CLUB_ORDER.indexOf(G.club) + (e.code === 'KeyE' ? 1 : -1); setClub(CLUB_ORDER[(i + 4) % 4]); }
+  if (/^Digit[1-5]$/.test(e.code)) setClub(CLUB_ORDER[+e.code.slice(5) - 1]);
+  if (e.code === 'KeyQ' || e.code === 'KeyE') stepClub(e.code === 'KeyE' ? 1 : -1);
   if (e.code === 'KeyM') toggleMute();
   if (e.code === 'KeyV') toggleVoice();
   if (e.code === 'KeyH') openHelp();
+  if (e.code === 'KeyO' && !e.repeat) toggleOverview();
+  if (e.code === 'Escape' && G.overview) toggleOverview(false);
 });
 addEventListener('keydown', e => { if (/^Arrow|^Page|^Home$|^End$/.test(e.code) && e.target.tagName !== 'INPUT') e.preventDefault(); }, { capture: true });
 addEventListener('keyup', e => {
@@ -4657,6 +4844,7 @@ $('muteBtn').addEventListener('click', toggleMute);
 $('voiceBtn').addEventListener('click', toggleVoice);
 function openHelp() { if (document.pointerLockElement) document.exitPointerLock(); $('help').classList.remove('hidden'); }
 $('helpBtn').addEventListener('click', openHelp);
+$('ovBtn').addEventListener('click', () => { unlockAudio(); toggleOverview(); });
 $('helpClose').addEventListener('click', () => $('help').classList.add('hidden'));
 $('noScare').checked = store.get('ghg3d_noscare') === '1';
 $('noScare').addEventListener('change', e => store.set('ghg3d_noscare', e.target.checked ? '1' : '0'));
@@ -4685,7 +4873,12 @@ function pollPad(dt) {
   if (p.pressed.some(Boolean)) unlockAudio();
   const P = k => p.pressed[BTN[k]];
   if (P('MENU')) { if ($('help').classList.contains('hidden')) openHelp(); else $('help').classList.add('hidden'); return; }
-  if (P('VIEW')) toggleMute();
+  if (P('VIEW')) {
+    // ⧉: quick chat in a room (anywhere it's offered), sound on/off when solo
+    if (G.room && !$('reactBar').classList.contains('hidden')) { $('reactBar').classList.add('open'); clearTimeout(updateReactBar.t); }
+    else if (G.room && G.mode === 'between') { G.chatPick = !G.chatPick; renderEmoteButtons(); }
+    else toggleMute();
+  }
   const root = navRoot();
   if (root) { if (swing.active && swing.src === 'pad') cancelSwing(); padNav(root, p, dt); }
   else padGame(p, dt);
@@ -4740,7 +4933,6 @@ function padNav(root, p, dt) {
     const e = { clientX: innerWidth / 2, clientY: innerHeight * 0.58 };
     if (!standTap(e)) possessTap(e);
   }
-  if (P('Y') && root.id === 'between') { G.chatPick = !G.chatPick; renderEmoteButtons(); }
   if (P('B')) padBack(root);
 }
 function padBack(root) {
@@ -4763,6 +4955,14 @@ function padGame(p, dt) {
     return;
   }
   if (m === 'angler') { angler.reeling = H('A') || p.rt > 0.4; return; }
+  if (m === 'chore') {
+    // wash: the left stick moves the nozzle, Ⓐ or RT sprays; peel: flick the right stick down
+    chore.cur.x = clamp(chore.cur.x + (p.lx + p.rx * (chore.kind === 'wash' ? 1 : 0)) * 300 * dt, 0, CH.W);
+    chore.cur.y = clamp(chore.cur.y + (p.ly + p.ry * (chore.kind === 'wash' ? 1 : 0)) * 300 * dt, 0, CH.W);
+    chore.spraying = chore.kind === 'wash' && (H('A') || p.rt > 0.4);
+    if (chore.kind === 'peel') { if (p.ry > 0.6 && !chore.padDown) { chore.padDown = true; peelStrip(); } else if (p.ry < 0.25) chore.padDown = false; }
+    return;
+  }
   if (P('A')) {
     if (m === 'flyover') { skipFlyover(); return; }
     if (G.wheel) { hurryWheel(); return; }
@@ -4775,11 +4975,12 @@ function padGame(p, dt) {
     if (G.finalWait && !$('finalGroup').classList.contains('hidden')) { $('finalGroup').querySelector('button')?.click(); return; }
   }
   if (P('X')) { if (G.gimmeOffer) G.gimmeOffer(); else if (G.putBack) G.putBack(); }
-  if (P('Y') && !$('reactBar').classList.contains('hidden')) { $('reactBar').classList.add('open'); clearTimeout(updateReactBar.t); return; }
+  if (P('Y')) toggleOverview();
+  if (P('B') && G.overview) { toggleOverview(false); return; }
   if (P('B') && swing.active) { userCancel(); Object.assign(stickSw, newStickSwing()); padLockSwing = true; }
   const aimable = (m === 'address' || m === 'wheel') && !swing.active;
   if (aimable) {
-    if (P('LB') || P('RB')) { const i = CLUB_ORDER.indexOf(G.club) + (P('RB') ? 1 : -1); setClub(CLUB_ORDER[(i + 4) % 4]); }
+    if (P('LB') || P('RB')) stepClub(P('RB') ? 1 : -1);
     const k = (G.scoped ? 0.07 : 1) * dt, ex = v => Math.sign(v) * v * v;   // squared: fine near the centre, fast at the rim
     G.yaw -= ex(p.lx) * 1.5 * k;
     G.pitch = clamp(G.pitch - ex(p.ly) * 0.9 * k, -0.75, 0.5);
@@ -4796,12 +4997,14 @@ function padSwing(p) {
   if (swing.active && swing.src !== 'pad') return;
   if (stickSw.phase !== 'idle' && !(swing.active && swing.src === 'pad')) { Object.assign(stickSw, newStickSwing()); padLockSwing = true; }   // cancelled from outside (a goose, a cutscene)
   if (padLockSwing) { if (Math.hypot(p.rx, p.ry) === 0) padLockSwing = false; else return; }   // a fresh pull starts a fresh swing
-  const ev = stepStickSwing(stickSw, { x: p.rx, y: p.ry }, performance.now(), { over: p.down[BTN.RS], allowed: canSwing() });
+  // power swing (overswing, up to 115% like dragging the mouse further): hold RT while you swing, or click the stick in
+  const over = p.down[BTN.RS] || (!G.scoped && p.rt > 0.5);
+  const ev = stepStickSwing(stickSw, { x: p.rx, y: p.ry }, performance.now(), { over, allowed: canSwing() });
   if (!ev) return;
   if (ev.type === 'begin') { beginSwing('pad'); swing.back = ev.back; }
   else if (ev.type === 'back') { swing.phase = 'back'; swing.back = ev.back; }
   else if (ev.type === 'down') { swing.phase = 'down'; swing.peak = swing.back; swing.tDown = ev.tDown; }
-  else if (ev.type === 'strike') { swing.peak = ev.power; swing.tDown = ev.tDown; swing.drift = ev.drift; finishSwing(ev.power, tempoNow(), ev.drift); padLockSwing = true; }
+  else if (ev.type === 'strike') { swing.peak = ev.power; swing.tDown = ev.tDown; swing.drift = ev.drift; finishSwing(ev.power, ev.tempo, ev.drift); padLockSwing = true; }
   else if (ev.type === 'cancel' && swing.active) { userCancel(); padLockSwing = true; }
 }
 // ---- an on-screen keyboard for names and room codes (no pointer, no keyboard)
@@ -5076,6 +5279,8 @@ function frame() {
     } else if ((G.mode === 'gooseCam' || G.mode === 'tug') && G.gooseCam) {
       updateGooseCam(dt, G.mode === 'tug');
       updateTug(dt);
+    } else if (G.mode === 'chore') {
+      updateChore(dt);
     } else if (G.mode === 'gooseFetch') {
       const gp = new THREE.Vector3(goose.x, G.course.h(goose.x, goose.z) + 0.6, goose.z);
       const a = addressCam(); camera.position.lerp(a.pos, 1 - Math.exp(-dt * 3));
@@ -5575,7 +5780,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, chore: chore.active ? { kind: chore.kind, prog: chore.prog, t: chore.t, ready: chore.ready } : null, ballCurse: G.ballCurse ?? null, overview: !!G.overview, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, padLock: padLockSwing, canSwing: canSwing(), moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
@@ -5612,6 +5817,11 @@ window.golf = {
   docks: () => (G.docks ?? []).map(d => ({ stand: d.stand, drop: d.drop })),
   lieCheck: () => ({ surf: G.course.surf(G.ball.x, G.ball.z), aboveWater: +(G.course.h(G.ball.x, G.ball.z) - G.course.waterLevelAt(G.ball.x, G.ball.z)).toFixed(2), strokes: G.strokes }),
   forceLoss(k) { G.forceLoss = k; },
+  choreTest(kind) { startChore(kind); },
+  chorePeel() { peelStrip(); },
+  choreWash(x, y) { choreAt(x, y); },
+  // where the shot line at the playing distance lands on screen (0,0 = dead centre)
+  aimScreen() { const b = G.ball, f = fwd(G.yaw), pc = G.previewCarry, D = G.club === 'putter' ? clamp(dist2(b, G.cup), 2, 25) : clamp(pc ? Math.hypot(pc.x - b.x, pc.z - b.z) : 60, 15, 250); const v = new THREE.Vector3(b.x + f.x * D, b.y, b.z + f.z * D).project(camera); return { x: +v.x.toFixed(3), D: +D.toFixed(1) }; },
   anglerTest() { startAngler({ x: G.ball.x, z: G.ball.z }, { ...G.ball }, null, { free: true }); },
   sasquackAt() { const t = nearestTrunk(G.ball, 400); if (!t) return false; const a = Math.atan2(G.cup.z - t.z, G.cup.x - t.x); this.place(t.x + Math.cos(a) * 1.5, t.z + Math.sin(a) * 1.5); G.sasqHole = false; return maybeSasquack(); },
   standAt(x, z) { if (sendEmote('stand', '', `${myHole()}:${x.toFixed(1)}:${z.toFixed(1)}`)) { G.myFan = { x, z }; return true; } return false; },

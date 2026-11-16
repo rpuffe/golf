@@ -355,11 +355,12 @@ export function buildClub() {
   glove2.position.set(0, -0.14, 0.004);
   const heads = {
     driver: new THREE.Mesh(new THREE.SphereGeometry(0.075, 14, 10), new THREE.MeshStandardMaterial({ color: 0x23232b, metalness: 0.5, roughness: 0.35 })),
+    wood: new THREE.Mesh(new THREE.SphereGeometry(0.06, 14, 10), new THREE.MeshStandardMaterial({ color: 0x6b3a1e, metalness: 0.4, roughness: 0.4 })),
     iron: new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.09), new THREE.MeshStandardMaterial({ color: 0xd0d4da, metalness: 0.9, roughness: 0.25 })),
     wedge: new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.085), new THREE.MeshStandardMaterial({ color: 0xb08a5a, metalness: 0.8, roughness: 0.3 })),
     putter: new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.035, 0.12), new THREE.MeshStandardMaterial({ color: 0x9aa0a8, metalness: 0.9, roughness: 0.2 })),
   };
-  heads.driver.scale.set(0.8, 0.6, 1.2);
+  heads.driver.scale.set(0.8, 0.6, 1.2); heads.wood.scale.set(0.75, 0.5, 1.1);
   // heads lie across the line of aim (heel to toe sideways), not pointing at the target
   for (const h of Object.values(heads)) { h.position.y = -1.06; h.rotation.y = Math.PI / 2; h.castShadow = true; g.add(h); }
   g.add(shaft, grip, glove, glove2);

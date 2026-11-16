@@ -18,11 +18,14 @@ const GREEN_SLOPE = 0.5;        // fraction of slope gravity felt while rolling 
 
 export const CLUBS = {
   driver: { id: 'driver', name: 'Driver', short: '1W', speed: 47, angle: 15, lift: 0.11, check: 1.0,  curve: 1.0,  range: 125 },
-  iron:   { id: 'iron',   name: '7 Iron', short: '7i', speed: 36, angle: 22, lift: 0.09, check: 0.75, curve: 0.75, range: 95 },
-  wedge:  { id: 'wedge',  name: 'Wedge',  short: 'SW', speed: 25, angle: 46, lift: 0.05, check: 0.4,  curve: 0.45, range: 58 },
+  // (owner playtest) a 3-wood between the driver (tee only) and a shorter 7-iron
+  wood:   { id: 'wood',   name: '3 Wood', short: '3W', speed: 43.5, angle: 16, lift: 0.10, check: 0.9,  curve: 0.9,  range: 110 },
+  iron:   { id: 'iron',   name: '7 Iron', short: '7i', speed: 32, angle: 24, lift: 0.09, check: 0.65, curve: 0.7,  range: 78 },
+  // the sand wedge: shorter, higher, and it stops (low check = more bite on the first bounce)
+  wedge:  { id: 'wedge',  name: 'Wedge',  short: 'SW', speed: 22.5, angle: 56, lift: 0.05, check: 0.2,  curve: 0.4,  range: 42 },
   putter: { id: 'putter', name: 'Putter', short: 'PT', speed: 5,  angle: 0,  lift: 0,    check: 1.0,  curve: 0.12, range: 20 },
 };
-export const CLUB_ORDER = ['driver', 'iron', 'wedge', 'putter'];
+export const CLUB_ORDER = ['driver', 'wood', 'iron', 'wedge', 'putter'];
 
 export const NO_TRAIT = { speed: 1, bounce: 1, roll: 1, capture: 1, wind: 1, side: 1 };
 

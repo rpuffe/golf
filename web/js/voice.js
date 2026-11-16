@@ -15,17 +15,22 @@ export const TOM_VOICE = 'ztnpYzQJyWffPj1VC5Uw';           // Sean: an old Scots
 export const TOM_LINES = {
   fore: ['[whispers] Fore.'],
   laugh: ['[laughs] Heh heh heh.'],
-  stymie: ['[mischievously] Och. Is that my ball in yer way? What a shame.', '[mischievously] I was here first. I was here in eighteen eighty-two.'],
-  ahead: ['[smug] Par was my religion. You are a heretic.', '[chuckles] Ye cannae beat a dead man at his own game.'],
-  behind: ['[grumbling] Lucky. Pure luck.', '[sighs] In my day the ball was made of feathers.'],
-  holed: ['[satisfied] In the hole. As it should be.'],
-  goose: ['[laughs] The goose! Oh, I do love that goose.'],
+  stymie: ['[mischievously] Och. Is that my ball in yer way? What a shame.', '[mischievously] I was here first. I was here in eighteen eighty-two.',
+    '[innocently] Oh, am I in the way? I hadnae noticed.', '[smug] Chip over me, if ye\'ve the nerve.'],
+  ahead: ['[smug] Par was my religion. You are a heretic.', '[chuckles] Ye cannae beat a dead man at his own game.',
+    '[smug] I can see yer scorecard from up here. Dear me.', '[chuckles] Take yer time. I\'ve got eternity.', '[dry] Even the geese are embarrassed for ye.'],
+  behind: ['[grumbling] Lucky. Pure luck.', '[sighs] In my day the ball was made of feathers.',
+    '[grumbling] The greens were faster in my day. Much faster.', '[muttering] I\'d like to see ye do that with a hickory shaft.', '[huffs] Beginner\'s luck. It runs out.'],
+  holed: ['[satisfied] In the hole. As it should be.', '[smug] Plop. That\'s the sound of experience.', '[chuckles] Never doubted it. Not once in a hundred years.',
+    '[satisfied] Rattled the bottom of the cup. Lovely.', '[dry] Holed. Carve that on my stone.', '[pleased] The old ways still work, laddie.'],
+  goose: ['[laughs] The goose! Oh, I do love that goose.', '[cackles] That goose has better hands than you.',
+    '[amused] I fed that goose\'s great-grandmother. Good stock.', '[laughs] Never turn yer back on a goose. Never.'],
   final: ['[gravely] Last hole. Loser buys the drinks.'],
 };
 export const VOICE_BALLS = ['Bounce Springsteen', 'Sir Thud', 'Butterfingers', 'Clover', 'Lord Floofington', 'Nervous Nigel', 'Range Ball #4471'];
 export const VOICE_GHOSTS = ['Old Tom', 'your old self'];
 // tier 1 lines that are good news get excitement; the rest get sarcasm
-const POSITIVE = new Set(['pure', 'fairway', 'green', 'greenBirdie', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
+const POSITIVE = new Set(['choreWin', 'pure', 'fairway', 'green', 'greenBirdie', 'holed', 'ace', 'lipIn', 'saved', 'close', 'overtake', 'calledIt', 'tugWin', 'roomOvertake', 'roomLevel', 'gooseHit', 'tugGooseHoled', 'strike', 'finale']);
 
 export function voiceTag(cls, tier) {
   return tier === 0 ? '[whispers]' : tier === 2 ? '[shouting]' : POSITIVE.has(cls) ? '[excited]' : '[sarcastic]';
