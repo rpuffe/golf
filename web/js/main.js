@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { buildCourse } from './course.js';
-import { simulate, launch, frameAt, prepColliders, puttPower, windmillAngle, auraGrowth, CLUBS, CLUB_ORDER, R, CUP_R, FPS } from './physics.js';
+import { simulate, launch, frameAt, prepColliders, puttPower, puttMetres, windmillAngle, auraGrowth, CLUBS, CLUB_ORDER, R, CUP_R, FPS } from './physics.js';
 import { extraColliders, placeTombs } from './trees.js';
 import { GOLFERS, buildGolfer, animateGolfer, golferAddress, buildGolferPortrait, GOLFER_IMPACT } from './golfers.js';
 import { buildGooseBreed, buildMonsterGoose, animateMonsterGoose, buildBossCrown, animateBossCrown, MONSTER_GRAB_PICK, MONSTER_THROW_RELEASE } from './geese.js';
@@ -394,8 +394,10 @@ const hud = {
 function renderClubs() {
   $('clubs').innerHTML = CLUB_ORDER.map((id, i) => {
     const c = CLUBS[id];
-    const range = id === 'putter' && G.course ? puttRange() : c.range;
-    return `<button class="club${G.club === id ? ' active' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span> <kbd>${i + 1}</kbd></button>`;
+    // (round 8, S9) the same live numbers as the aim label and the putt readout
+    const live = id === 'putter' ? (G.course ? honestPutt(1) : null) : G.clubCarry?.[id];
+    const range = live != null ? Math.round(live) : c.range;
+    return `<button class="club${G.club === id ? ' active' : ''}" data-id="${id}" role="radio" aria-checked="${G.club === id}"><b>${c.short}</b><span>${range} m${c.id === 'putter' ? '' : ' carry'}</span>${coarse ? '' : ` <kbd>${i + 1}</kbd>`}</button>`;
   }).join('');
 }
 $('clubs').addEventListener('click', e => { const b = e.target.closest('.club'); if (b) setClub(b.dataset.id); });
@@ -413,11 +415,12 @@ function renderBag() {
   $('ballLine').querySelector('span').textContent = `${b.trait.label} ${b.range ? '' : pips}`;
   ballTag.userData.name = '';   // redraw the floating name tag
 }
+// one ball-to-pin number for the HUD and the flyover card
+function pinText(b) { const dp = dist2(b, G.cup); return dp.toFixed(dp < 10 ? 1 : 0); }
 function updateHUD() {
   const h = G.holeDef; if (!h) return;
   $('holeLine').innerHTML = `Hole ${G.holeIdx + 1} <small>Par ${h.par}</small>`;
-  const dp = dist2(G.ball, G.cup);
-  $('roundLine').textContent = `Shot ${G.strokes + 1} · ${dp.toFixed(dp < 10 ? 1 : 0)} m to pin`;
+  $('roundLine').textContent = `Shot ${G.strokes + 1} · ${pinText(G.ball)} m to pin`;
   // wind relative to the view: arrow points where the wind blows
   const ws = Math.hypot(G.wind.x, G.wind.z);
   const wAng = Math.atan2(G.wind.x, -G.wind.z) + G.yaw; // screen-space: up = away from camera
@@ -551,7 +554,7 @@ function loadHole(i) {
   G.powerUp = null; renderPowerChip(); G.sicPending = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
   G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.scared = G.scared && G.holeIdx > 0;
-  pickUnit(); lastPreview = ''; G.previewCarry = null;
+  pickUnit(); lastPreview = ''; G.previewCarry = null; G.clubCarry = null; G.clubCarries = null;
   G.ball = { x: h.tee[0], z: h.tee[1], y: course.h(h.tee[0], h.tee[1]) + R };
   G.lastLie = { ...G.ball };
   aimAtPoint(h.path[1][0], h.path[1][1]);
@@ -647,6 +650,9 @@ function autoClub() {
 // use the whole pull-back, so short putts aren't a 30-pixel twitch. Tiers
 // (not a continuous scale) so the feel is learnable: "this is a 6 m putt".
 const PUTT_TIERS = [2, 3, 6, 10, 15, 21];   // the smallest keeps a full pull honest on a tap-in
+// (round 8, S9) what a pull of `p` really rolls on a flat green, with this
+// ball's trait and any power-up: the one number the readout, ring and button use
+function honestPutt(p, range = puttRange()) { return puttMetres(puttPower(p * range), modTrait()[0]); }
 function puttRange() {
   const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball;
   const tgt = G.mode === 'goose' ? goose : G.cup;
@@ -1136,17 +1142,31 @@ function updateGooseCam(dt, closeUp = 0) {
 // most people lose, and losing is where the fun is.
 const tug = { active: false, p: 35, t: 0, rate: 0, acc: 0, yank: 0, nextYank: 0, last: new Map(), creak: 0 };
 const TUG_SECS = 6.5;
+// (round 8, S2) The clock starts only after a ~1.1 s get-ready card. Only the
+// first tug of a session is softer; after that the goose is as strong as ever.
+const READY_SECS = 1.1;
+let tugsThisSession = 0;
+function readyCard(id, big, verb, hand) {
+  const el = $(id);
+  el.innerHTML = `${big}<small>GET READY: ${verb}</small><span class="hand">${hand}</span>`;
+  el.classList.add('show');
+}
 function startTug() {
   if (tug.active || !goose) return;
+  if (swing.active) cancelSwing();   // a theft mid-backswing must not leave the swing live
   G.stopGooseSong?.(); G.stopGooseSong = null;
   goose.state = 'tug'; goose.target = null;
   // every goose is different: some barely hold on, some are built like a fridge
-  // every goose is different: some barely hold on, some are built like a fridge
-  Object.assign(tug, { active: true, p: 26, t: 0, rate: 0, acc: 0, yank: 0, nextYank: 1.1 + Math.random() * 0.5, last: new Map(), creak: 0, strength: 4 + Math.random() * 70 + (goose.boss ? 8 : 0) + (goose.breed === 'toulouse' ? 10 : goose.breed === 'canada' ? -8 : 0), wall: performance.now() });
+  let strength = 4 + Math.random() * 70 + (goose.boss ? 8 : 0) + (goose.breed === 'toulouse' ? 10 : goose.breed === 'canada' ? -8 : 0);
+  if (tugsThisSession++ === 0) strength = Math.min(strength, 30);
+  Object.assign(tug, { active: true, p: 26, t: 0, ready: READY_SECS, rate: 0, acc: 0, yank: 0, nextYank: 1.1 + Math.random() * 0.5, last: new Map(), creak: 0, strength, wall: performance.now() });
   document.body.classList.add('tugging');
   G.mode = 'tug';
   $('bulletLbl').textContent = '🪿 TUG OF WAR';
   $('tugHow').textContent = coarse ? 'Swipe like mad!' : 'Hold click and shake!';
+  $('tugFill').style.width = '26%'; $('tugEffort').style.width = '0%';
+  $('tugTimer').textContent = `${TUG_SECS.toFixed(1)} s`;
+  readyCard('tugReady', `🪿 IT WANTS ${esc(bag().name).toUpperCase()}!`, coarse ? 'SWIPE ↕ LIKE MAD' : 'HOLD CLICK, SHAKE', coarse ? '👆' : '🖱️');
   $('tug').classList.remove('hidden');
   sfx.honk(3);
   say('tugStart', vars(), { bump: 10 });
@@ -1156,6 +1176,12 @@ const tugScale = () => clamp(800 / Math.min(innerWidth, innerHeight), 0.8, 2.2);
 function tugInput(px) { if (tug.active) tug.acc += px * tugScale(); }
 function updateTug(dt) {
   if (!tug.active) return;
+  if (tug.ready > 0) {
+    // the get-ready card: nothing moves, nothing counts
+    tug.ready -= dt; tug.acc = 0; tug.wall = performance.now();
+    if (tug.ready <= 0) $('tugReady').classList.remove('show');
+    return;
+  }
   tug.t += dt;
   // effort = how fast you're shaking (px/s, smoothed, measured on the wall clock so a slow
   // frame rate can't inflate it); the goose pulls steadily and yanks in bursts
@@ -1173,12 +1199,13 @@ function updateTug(dt) {
   if ((tug.creak -= dt) <= 0 && tug.rate > 600) { (sfx.tugPull ?? sfx.reelClick)(Math.min(1, tug.rate / 5000)); tug.creak = 0.09; }
   G.shake = Math.max(G.shake, Math.min(0.08, tug.rate / 60000));
   $('tugFill').style.width = `${tug.p}%`;
+  $('tugEffort').style.width = `${clamp(you / 44 * 100, 0, 100)}%`;   // every swipe shows
   $('tugTimer').textContent = `${Math.max(0, TUG_SECS - tug.t).toFixed(1)} s`;
   if (tug.p >= 100) endTug(true);
   else if (tug.p <= 0 || tug.t >= TUG_SECS) endTug(false);
 }
 function endTug(won) {
-  tug.active = false;
+  tug.active = false; $('tugReady').classList.remove('show');
   $('tug').classList.add('hidden'); document.body.classList.remove('tugging');
   const g = goose;
   g.carry = false; g.mesh.userData.carry.clear(); g.mesh.rotation.x = 0;
@@ -2184,6 +2211,9 @@ function startAngler(end, from, dock = null, opts = {}) {
   Object.assign(angler, { active: true, t: 0, tension: 30, progress: 0, reeling: false, ph1: Math.random() * 6, ph2: Math.random() * 6, splash: { x: end.x, z: end.z }, from, dock, free, pondToss: !!opts.pondToss });
   if (avatar) avatar.visible = false;   // first person on the dock: it's your rod
   $('anglerTitle').textContent = `🎣 Save ${bag().name}!`;
+  angler.ready = READY_SECS;
+  readyCard('anglerReady', `🎣 ${esc(bag().name).toUpperCase()} IS SINKING!`, coarse ? 'HOLD THE BUTTON' : 'HOLD SPACE OR CLICK', '✊');
+  $('anglerTimer').textContent = `${(free ? 5 : 7).toFixed(1)} s`; $('reelFill').style.width = '0%';
   setTimeout(() => { if (angler.active) $('angler').classList.remove('hidden'); }, 450);
   // look at the splash
   const lk = new THREE.Vector3(end.x, G.course.waterLevelAt(end.x, end.z), end.z);
@@ -2195,6 +2225,11 @@ function updateAngler(dt) {
   if (!angler.active) return;
   if (!$('help').classList.contains('hidden') || !$('lb').classList.contains('hidden')) { angler.reeling = false; return; }
   if ($('angler').classList.contains('hidden')) return;
+  if (angler.ready > 0) {
+    angler.ready -= dt;
+    if (angler.ready <= 0) $('anglerReady').classList.remove('show');
+    return;
+  }
   angler.t += dt * G.timeScale;
   const t = angler.t;
   const pull = 18 + 52 * (0.5 + 0.5 * Math.sin(t * 2.1 + angler.ph1)) * (0.5 + 0.5 * Math.sin(t * 0.9 + angler.ph2));
@@ -2220,7 +2255,7 @@ function updateAngler(dt) {
   else if (t >= limit) endAngler(false, 'slip');
 }
 function endAngler(won, why) {
-  angler.active = false; angler.reeling = false;
+  angler.active = false; angler.reeling = false; $('anglerReady').classList.remove('show');
   document.body.classList.remove('angling');
   rod.visible = false;
   $('angler').classList.add('hidden');
@@ -2339,7 +2374,7 @@ function startFlyover() {
   const h = G.holeDef, len = pathLen(h.path);
   G.mode = 'flyover';
   G.fly = { t: 0, dur: clamp(2.8 + len / 120, 3.4, 5.6) };
-  $('flyHole').textContent = `Hole ${G.holeIdx + 1} · Par ${h.par} · ${Math.round(len)} m`;
+  $('flyHole').textContent = `Hole ${G.holeIdx + 1} · Par ${h.par} · ${pinText(G.ball)} m`;   // (S9) the HUD's own number
   $('flyName').textContent = h.name;
   $('flySkip').textContent = coarse ? 'Tap to skip' : 'Click to skip';
   $('flyTitle').classList.add('show'); document.body.classList.add('flying');
@@ -3923,8 +3958,7 @@ function updatePreview() {
     pts.setXYZ(i, x, G.course.h(x, z) + 0.04, z);
   }
   pts.needsUpdate = true; aimLine.computeLineDistances();
-  if (G.club === 'putter') return;
-  const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${G.club},${G.wind.x.toFixed(2)},${G.ballIdx},${G.powerUp?.id}${G.powerUp?.shotLeft}`;
+  const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${G.wind.x.toFixed(2)},${G.ballIdx},${G.powerUp?.id}${G.powerUp?.shotLeft}`;
   const nowMs = performance.now();
   if (key !== lastPreview || G.previewDirty) {
     // only re-simulate once the aim has settled for 80 ms (cheap on a weak laptop)
@@ -3932,12 +3966,21 @@ function updatePreview() {
     if (nowMs - G.previewKeyAt >= 80 || !lastPreview || G.previewDirty) {
       lastPreview = key; G.previewDirty = false;
       const [tr, airGravity, noTrees] = modTrait();
-      const L1 = launch(G.club, 1, d.x, d.z, 0, 1, tr);
-      if (G.powerUp?.shotLeft && G.powerUp.shot?.banana && G.club !== 'putter') L1.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[G.club].curve;
-      const sim = simulate({ course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L1);
-      G.previewCarry = { x: sim.carry.x, z: sim.carry.z };
+      // every club's full-power carry from here: the aim label and the club buttons share them
+      G.clubCarries = {}; G.clubCarry = {};
+      for (const id of CLUB_ORDER) {
+        if (id === 'putter') continue;
+        const L1 = launch(id, 1, d.x, d.z, 0, 1, tr);
+        if (G.powerUp?.shotLeft && G.powerUp.shot?.banana) L1.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[id].curve;
+        const sim = simulate({ course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L1);
+        G.clubCarries[id] = { x: sim.carry.x, z: sim.carry.z };
+        G.clubCarry[id] = Math.hypot(sim.carry.x - base.x, sim.carry.z - base.z);
+      }
+      renderClubs();
     }
   }
+  if (G.club === 'putter') return;
+  G.previewCarry = G.clubCarries?.[G.club] ?? null;
   const c = G.previewCarry; if (!c) return;
   const y = G.course.h(c.x, c.z) + 0.05;
   aimRing.position.set(c.x, y, c.z);
@@ -4010,7 +4053,7 @@ function updateCarryIndicator(dt) {
   // (playtest: the frozen carry mark left on the fairway in flight read as a crosshair; it goes at impact)
   // the theremin follows predicted carry (putts: their roll distance, scaled up so you can hear it)
   if (swing.active) {
-    if (swing.phase === 'back') swingTone.set(carry.samples ? (pt ? Math.hypot(pt.x - G.ball.x, pt.z - G.ball.z) : 0) : swing.back * puttRange() * 6);
+    if (swing.phase === 'back') swingTone.set(carry.samples ? (pt ? Math.hypot(pt.x - G.ball.x, pt.z - G.ball.z) : 0) : honestPutt(swing.back) * 6);
     else swingTone.release();
   }
   carryRing.visible = carryBeam.visible = !!pt; carryLabel.visible = !!pt && !G.scoped;
@@ -4134,7 +4177,7 @@ function updateClub(dt) {
     const p = swing.active ? (swing.phase === 'back' ? swing.back : swing.peak) : 0;
     $('powerFill').style.height = `${Math.min(1.15, p) / 1.15 * 100}%`;
     const putt = G.club === 'putter';
-    if (putt) { const b0 = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball; $('powerLbl').innerHTML = `${(p * puttRange()).toFixed(1)} m<small>hole ${dist2(b0, G.cup).toFixed(1)} m</small>`; }
+    if (putt) { const b0 = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball; $('powerLbl').innerHTML = `${honestPutt(p).toFixed(1)} m<small>hole ${dist2(b0, G.cup).toFixed(1)} m</small>`; }
     else {
       const pt = carry.samples && p > 0.02 ? carryAt(p) : null, m = pt ? Math.round(Math.hypot(pt.x - G.ball.x, pt.z - G.ball.z)) : 0;
       $('powerLbl').innerHTML = carry.samples ? `${m} m<small>${m >= 5 ? esc(unitText(m)) : `${Math.round(p * 100)}%`}</small>` : `${Math.round(p * 100)}%`;
@@ -4143,7 +4186,7 @@ function updateClub(dt) {
     // flat-green roll distance for this stroke: you still have to read the slope
     puttRing.visible = putt && swing.active && p > 0.01;
     if (puttRing.visible) {
-      const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball, d = aimDir(), L = p * puttRange();
+      const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball, d = aimDir(), L = honestPutt(p);
       const x = base.x + d.x * L, z = base.z + d.z * L;
       puttRing.position.set(x, G.course.h(x, z) + 0.03, z);
     }
@@ -5056,7 +5099,7 @@ window.golf = {
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
       windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
-      angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t },
+      angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
       stats: G.stats ? { ...G.stats } : null, fps: G.fps, cup: G.cup, graveyard: graveyard().length,
     };

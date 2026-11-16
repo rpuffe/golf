@@ -217,6 +217,14 @@
   #tug p { font-size: 15px; margin: 2px 0 8px; }
   #tug .meter { height: 26px; background: rgba(255,255,255,.18); }
   #tugFill { position: absolute; left: 0; top: 0; bottom: 0; width: 35%; background: linear-gradient(90deg, var(--coral), var(--sun), var(--mint)); }
+  .readyCard { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 6px; border-radius: inherit; background: rgba(18,12,30,.94); color: var(--sun); font-size: 26px; font-weight: 900; line-height: 1.1; padding: 10px; animation: readyPop .25s ease-out; }
+  .readyCard.show { display: flex; }
+  .readyCard small { color: #fff; font-size: 17px; letter-spacing: .04em; }
+  .readyCard .hand { font-size: 30px; animation: readyHand .5s ease-in-out infinite alternate; }
+  @keyframes readyPop { from { transform: scale(.85); opacity: 0; } to { transform: none; opacity: 1; } }
+  @keyframes readyHand { from { transform: translateY(-6px); } to { transform: translateY(6px); } }
+  #tugEffortWrap { height: 8px; margin-top: 6px; border-radius: 4px; background: rgba(255,255,255,.12); overflow: hidden; }
+  #tugEffort { height: 100%; width: 0; background: var(--mint); transition: width .08s linear; }
   #tugMid { position: absolute; right: 0; top: -2px; bottom: -2px; width: 6px; background: #fff; }
   /* ---------- cards ---------- */
   .overlay { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(18, 10, 32, 0.45); pointer-events: auto; padding: 16px; }
@@ -391,6 +399,7 @@
   <div class="meter"><div id="reelFill"></div></div>
   <div id="anglerTimer">10.0 s</div>
   <button id="reelBtn" type="button">🎣 HOLD TO REEL</button>
+  <div id="anglerReady" class="readyCard"></div>
 </div>
 
 <div id="tug" class="panel hidden" role="dialog" aria-label="Tug of war with the goose">
@@ -398,6 +407,8 @@
   <p id="tugHow">Hold click and shake!</p>
   <div class="meterLbl"><span>🪿 goose</span><span id="tugTimer">6.0 s</span><span>you 💪</span></div>
   <div class="meter"><div id="tugGoose"></div><div id="tugFill"></div><div id="tugMid"></div></div>
+  <div id="tugEffortWrap" aria-hidden="true"><div id="tugEffort"></div></div>
+  <div id="tugReady" class="readyCard"></div>
 </div>
 
 <div id="title" class="overlay">

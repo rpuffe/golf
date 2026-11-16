@@ -429,6 +429,30 @@ export function puttPower(metres) {
   return Math.min(1.15, pb + (pb - pa) * (metres - db) / ((db - da) || 1));
 }
 
+// (round 8, S9) How far a putt at `power` really rolls on a flat green with
+// this trait (ball plus power-up). puttPower() maps the pull to power for a
+// standard ball; this turns that power back into honest metres for the
+// readout, so the number agrees with the stop ring. Cached per trait.
+const ROLL_TABLES = new Map();
+export function puttMetres(power, trait = NO_TRAIT) {
+  const key = `${trait.speed ?? 1},${trait.roll ?? 1},${trait.bounce ?? 1}`;
+  let T = ROLL_TABLES.get(key);
+  if (!T) {
+    T = [[0, 0]];
+    for (let p = 0.004; p <= 1.16; p *= 1.12) {
+      const s = simulate({ course: FLAT_GREEN, cup: { x: 1e5, z: 1e5 }, trait }, { x: 0, y: R, z: 0 }, launch('putter', p, 1, 0, 0, 1, trait));
+      T.push([p, s.end.x]);
+    }
+    ROLL_TABLES.set(key, T);
+  }
+  if (power <= 0) return 0;
+  for (let i = 1; i < T.length; i++) {
+    if (power <= T[i][0]) { const [p0, d0] = T[i - 1], [p1, d1] = T[i]; return d0 + (d1 - d0) * (power - p0) / ((p1 - p0) || 1); }
+  }
+  const [pa, da] = T[T.length - 2], [pb, db] = T[T.length - 1];
+  return db + (db - da) * (power - pb) / ((pb - pa) || 1);
+}
+
 // The finale's Honk Hole strength multiplier for a stroke (matches simulate()).
 export function auraGrowth(ba, strokeNo = 1) { return Math.min(ba.growMax ?? 1, 1 + (ba.grow ?? 0) * Math.max(0, (strokeNo ?? 1) - 2)); }
 
