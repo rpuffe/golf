@@ -10,7 +10,8 @@ golf, five odd features came out of a design council (see
 [design/council.md](design/council.md)), and a second council round added
 more (see [design/council-round6.md](design/council-round6.md)), and a
 third took the course to nine holes (see
-[design/council-round7.md](design/council-round7.md)):
+[design/council-round7.md](design/council-round7.md)), and a fourth judged a
+three-player playtest (see [design/council-round8.md](design/council-round8.md)):
 
 | Feature | Borrowed from | What it does |
 | --- | --- | --- |
@@ -66,10 +67,16 @@ Also in the game:
 - **👥 Rooms (live multiplayer).** Create a room, share the 4-letter code or
   link, and play the same holes at the same time with 2–8 friends. Their
   balls fly in your world as they hit, and their resting balls are solid.
-  Everyone finishes a hole before anyone moves on; while you wait you watch
-  the others, react (📯👏😱😂), offer a gimme, or **be the goose**: steer a
-  puppet goose around a friend's hole. Scores show between holes. Players
-  affect each other:
+  Everyone finishes a hole before anyone moves on. While you wait (a bottom
+  strip with a countdown to "Go on without them", 💤 for anyone idle) the
+  camera follows whoever is mid-shot, and you can react or quick-chat (💬:
+  four reactions, five preset phrases, shown as bubbles over friends' balls),
+  offer a gimme, or **be the goose**: steer a puppet goose around a friend's
+  hole. Whoever sends a goose hears what it did ("Your goose punted Pat 31 m!").
+  Once you go on without someone you aren't held for them again unless you
+  tap "Wait for them". One seat per name: a second "Pat" is asked "That's me?".
+  The lobby shows each player's golfer, shape and balls. Players affect each
+  other:
   - **Knock-On:** your ball moves a friend's resting ball (knock it in and it
     counts for them).
   - **Teeth:** if you're level or behind, your puppet goose can go for the
@@ -78,10 +85,19 @@ Also in the game:
     it saves some shots and robs others.
   - **Final Group:** the last tee waits for everyone still playing (45 s at
     most, or tap "Tee off now"), then a shared 3-2-1 sends the room off together.
+  - **Money putt:** on the last hole, when a friend's putt can change the
+    result, everyone who has finished watches it live (twice a round at most).
+- **🎲 Fair chaos.** At most one random setback per player per hole (a wild
+  goose, the Boss, Goose Bait, the Sasquack), each with a second of "!" and
+  honk first. A friend's goose is outside that cap. The tug and the reel open
+  on a get-ready card; their clocks start after it.
 - **📏 Carry, in Geese.** While you pull back, a live ring shows where the
   ball will land, in metres and in one absurd unit per hole.
 - **⛳ Putting** scales the putter's stroke to the putt (2/3/6/10/15/21 m
-  tiers), shows the flat-green roll distance, and uses a generous cup. At
+  tiers), shows the flat-green roll distance for *this* ball and power-up
+  (a Slippery ball's number runs long, a Lucky one's short), and uses a
+  generous cup. Club buttons show the same live full-power carry as the aim
+  label. At
   rest, gold dots read the first two-thirds of a dead-weight putt, break
   included. While you pull back they run the whole roll to a stop ring,
   coloured green (it drops), gold (short) or red (well past), and the cup's
@@ -98,7 +114,7 @@ Also in the game:
 | --- | --- |
 | Aim / look | Drag sideways on the course (the first few pixels of a drag decide: sideways aims, down swings). A/D or the arrow keys also aim, and W/S look up and down. |
 | Swing | Drag down (power: watch the carry ring), then flick up fast (tempo). Flicking at an angle curves the ball. |
-| Cancel a swing | Slide onto the ✕ strip that appears beside the cursor, press Esc, or right-click. |
+| Cancel a swing | Let go before the flick, slide onto the ✕ strip that appears beside the cursor, press Esc, or right-click. |
 | Putt | Same swing. The whole pull-back covers the putter's range for this putt (on the club button), the white ring shows the flat-green roll, and the gold dots read the break. |
 | Easy swing | Hold Space for power and release it, then tap Space as the accuracy needle crosses the centre |
 | Club | 1–4, Q/E or the scroll wheel |
@@ -107,8 +123,8 @@ Also in the game:
 | Tug-of-war | Hold the button and shake the mouse, swipe hard, or mash Space |
 | Sound / voice / help | M / V / H |
 
-Touch devices drag the course to aim and swing on an on-screen pad, with the
-same ✕ strip to back out. On-screen instructions are seven words or fewer.
+Touch devices drag the course to aim and swing on an on-screen pad; lift your
+finger before the flick to back out. Phones only ever see phone instructions. On-screen instructions are seven words or fewer.
 
 ## How it works
 
@@ -194,7 +210,10 @@ physics.
   and the server ignores retries it has already seen.
 - **Fairness.** A room seed gives everyone the same balls and wind. Each
   player's power-up wheel is seeded from the room seed and their id.
-- **Emotes.** Reactions, Be the Goose, gimmes and Sic 'Em ride one
+- **One seat per name.** Joining with a name already in the room returns
+  409 "name taken"; rejoining with `takeover` keeps that seat (scores and
+  all) under a new token, which cuts off the old session.
+- **Emotes.** Reactions, quick chat, Be the Goose, gimmes, Sic 'Em and sabotage results ride one
   `emote` message type: relayed to the room and rate-limited per member
   (burst 5, one more every 1.5 s).
 - **Limits:**
