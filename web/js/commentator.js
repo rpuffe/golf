@@ -87,6 +87,15 @@ const L = {
   bossGuard: [['The Boss is sitting on the cup.', 'It is ON the cup! Bonk it!', 'THE BOSS HAS THE CUP! BONK IT!']],
   bossBonk: [['A clean bonk. The crown is off.', 'BONK! Right on the crown, {name}!', 'YOU BONKED THE BOSS! LONG LIVE {name}!']],
   bossYield: [['The Boss steps aside. Out of pity.', 'It just... let you in. Embarrassing.', 'IT FELT SORRY FOR YOU! SORRY!']],
+  // (owner playtest) the ghost race when it isn't close: possession and haunting
+  possess: [['A possession. The golfer is playing the ghost\'s next shot.', 'Possession! The golfer has hold of the ghost\'s ball. Surely this is not legal.', 'POSSESSION! THEY\'VE GOT THE GHOST\'S BALL! SOMEBODY CALL A PRIEST!'],
+    ['The ghost\'s ball, your swing. Be kind. Or don\'t.', 'Oh, the ghost\'s ball is in the wrong hands now.', 'THE GHOST HAS BEEN GHOSTED!']],
+  possessSplash: [['The ghost\'s ball, in the drink. A penalty for the dead.', 'Straight in the water! A penalty stroke for the ghost!', 'SPLASH! A PENALTY FOR A MAN WHO DIED IN EIGHTEEN EIGHTY-TWO!'],
+    ['Sunk. Deliberately, one assumes.', 'That is sabotage, and it is magnificent.', 'DROWNED! THEY DROWNED A GHOST\'S BALL!']],
+  possessSand: [['The ghost\'s ball finds the sand. He will not enjoy that.', 'Bunkered! The ghost\'s ball is buried in the sand.', 'INTO THE BUNKER! SABOTAGE! BEAUTIFUL SABOTAGE!']],
+  possessHoled: [['You holed it. For him. Generous.', 'In the hole! The golfer just holed the ghost\'s ball for him!', 'IT WENT IN! YOU HOLED THE GHOST\'S BALL! WHY?!']],
+  haunt: [['A chill in the air. The ghost is haunting this shot.', 'A haunting! The ghost has put a gust on this one!', 'THE GHOST IS ANGRY! HE\'S HAUNTING THE SHOT!'],
+    ['You\'re too far ahead, and the dead have noticed.', 'Lead the ghost by two and he comes for you. Mind that gust.', 'HE\'S BLOWING ON IT! THE GHOST IS LITERALLY BLOWING ON IT!']],
   honkStrike: [['The Boss has called in air support.', 'Geese inbound! Swing, {name}, swing!', 'INCOMING! IT IS RAINING GEESE!']],
   choreWin: [['Spotless. Back to golf.', 'Good as new! Better than new!', 'SPARKLING! I CAN SEE MY FACE IN IT!']],
   choreFail: [['Not quite done. That will play heavy.', 'Half a job! That will cost you some distance!', 'HALF DONE! THE NEXT SHOT IS GOING TO BE UGLY!']],
@@ -143,7 +152,7 @@ let clipsFailed = false;
 fetch('/voice/index.json').then(r => r.ok ? r.json() : null).then(j => { if (j?.keys?.length) clips = new Set(j.keys); else clipsFailed = true; }).catch(() => { clipsFailed = true; });
 // Big moments outrank chatter: a lower-priority line can't stomp a bigger one
 // that's still on screen (e.g. the race update can't cut off a eulogy).
-const PRIO = { pinsOne: 2, pinsFew: 2, pinsHalf: 3, pinsMost: 3, bossGuard: 4, bossBonk: 4, bossYield: 3, honkStrike: 3, sandWash: 2, broodWash: 3, broodPotato: 3, choreWin: 2, choreFail: 2, greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
+const PRIO = { possess: 3, possessSplash: 3, possessSand: 2, possessHoled: 4, haunt: 3, pinsOne: 2, pinsFew: 2, pinsHalf: 3, pinsMost: 3, bossGuard: 4, bossBonk: 4, bossYield: 3, honkStrike: 3, sandWash: 2, broodWash: 3, broodPotato: 3, choreWin: 2, choreFail: 2, greenBirdie: 1, scaredOff: 4, strike: 4, gutter: 2, crazy: 2, bossAngry: 3, finale: 4, knockOn: 3, knockedBy: 3, knockIn: 4, teeth: 3, teethMiss: 2, fanSave: 3, fanRob: 3, fanBonk: 2, tugRelay: 3, tugBrood: 3, tugPond: 3, tugStash: 3, sasquack: 4, windmill: 3, tomb: 2, scared: 4, gallery: 1, tugStart: 3, tugWin: 3, tugPunt: 3, tugBunker: 3, tugSwallow: 4, tugGooseHoled: 4, snap: 3, gooseTheft: 3, ghostHit: 3, stymie: 3, holed: 3, ace: 4, lipIn: 1, rangeBall: 3, saved: 2, junk: 2, water: 2, bulletcam: 1, close: 2, overtake: 0, fallBehind: 0, tee: 1, roomOvertake: 0, roomFallBehind: 0, rivalHoled: 1, rivalHit: 3, calledIt: 1, roomStymie: 3, roomLevel: 0 };
 let busyUntil = 0;
 // (round 8, S11) one line at a time: a line has the floor for about as long as
 // it takes to say. Anything smaller waits in a single pending slot and is
@@ -196,7 +205,7 @@ export function bumpHysteria(d) { commentator.hysteria = Math.max(0, Math.min(10
 // after you've heard them a couple of times; the gags always get their turn.
 const COMMON = new Set(['tee', 'fairway', 'green', 'greenBirdie', 'rough', 'sand', 'holed', 'close', 'bulletcam', 'overtake', 'fallBehind',
   'roomOvertake', 'roomFallBehind', 'roomLevel', 'rivalHoled', 'lipIn', 'gallery', 'whiff', 'overswing', 'calledIt', 'pure']);
-const FUNNY = new Set(['gooseTheft', 'tugStart', 'tugPunt', 'tugSwallow', 'tugBunker', 'tugWin', 'tugRelay', 'tugBrood', 'tugPond', 'tugStash', 'tugGooseHoled',
+const FUNNY = new Set(['possess', 'possessSplash', 'possessSand', 'possessHoled', 'haunt', 'gooseTheft', 'tugStart', 'tugPunt', 'tugSwallow', 'tugBunker', 'tugWin', 'tugRelay', 'tugBrood', 'tugPond', 'tugStash', 'tugGooseHoled',
   'scared', 'scaredOff', 'windmill', 'snap', 'junk', 'sasquack', 'strike', 'gutter', 'crazy', 'bossAngry', 'finale', 'broodPotato', 'broodWash', 'sandWash',
   'pinsOne', 'pinsFew', 'pinsHalf', 'pinsMost', 'choreWin', 'choreFail', 'bossGuard', 'bossBonk', 'bossYield', 'honkStrike', 'teeth', 'knockIn', 'rangeBall', 'ace', 'tomb', 'ghostHit', 'stymie', 'gooseBlock', 'water', 'oob', 'rivalHit', 'roomStymie']);
 const voicedN = {};
@@ -320,7 +329,7 @@ let tomAt = -1e9;
 // line is dealt from a shuffled deck, so nothing repeats until every line has
 // had its turn (and never twice running across a reshuffle), and each kind
 // waits its own while before it comes round again.
-const TOM_GAP = { holed: 75000, goose: 25000, ahead: 45000, behind: 45000, stymie: 35000 };
+const TOM_GAP = { haunt: 30000, holed: 75000, goose: 25000, ahead: 45000, behind: 45000, stymie: 35000 };
 const tomDeck = {}, tomLast = {}, tomKindAt = {};
 function dealTom(cls, lines) {
   let deck = tomDeck[cls];

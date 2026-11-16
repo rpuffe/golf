@@ -10,7 +10,7 @@ import { GOLFERS, buildGolfer, animateGolfer, golferAddress, buildGolferPortrait
 import { buildGooseBreed, buildMonsterGoose, animateMonsterGoose, buildBossCrown, animateBossCrown, MONSTER_GRAB_PICK, MONSTER_THROW_RELEASE } from './geese.js';
 import { buildOldTom, animateOldTom, buildScareFace, animateScareFace, oldTomAddress, setOldTomOpacity, SWING_IMPACT } from './characters.js';
 import { HOLES, TOTAL_PAR, resolveHole } from './holes.js';
-import { planHole } from './oldtom.js';
+import { planHole, planFrom } from './oldtom.js';
 import * as W from './world.js';
 import * as AUDIO from './audio.js';
 import { sfx, unlockAudio as unlockAudioOnly, setMuted, isMuted, setWindAmbience, flightSound, gooseSong, GOOSE_SONG_SECS, swingTone } from './audio.js';
@@ -286,7 +286,7 @@ function updatePuttRead() {
   if (!on) { puttReadKey = ''; puttEnd.visible = false; cupMark.material.color.set(0xffffff); return; }
   const p = swing.active ? (swing.phase === 'back' ? swing.back : swing.peak) : 0;
   const range = puttRange(), d = aimDir();
-  const tgt = G.mode === 'goose' ? goose : G.cup;
+  const tgt = G.mode === 'goose' && goose ? goose : G.cup;
   const metres = p > 0.02 ? p * range : Math.hypot(tgt.x - base.x, tgt.z - base.z) + 0.35;
   const key = `${base.x.toFixed(2)},${base.z.toFixed(2)},${G.yaw.toFixed(3)},${metres.toFixed(1)},${G.ballIdx},${G.powerUp?.shotLeft ?? 0},${G.holeDef?.windmill ? Math.round(wmPhase() * 4) : 0}`;
   if (key === puttReadKey) return;
@@ -499,7 +499,7 @@ function startRound(startHole = 0) {
   G.ghostSource = G.room ? 'room' : pbGhost && pbGhost.total <= tomTotal ? 'pb' : 'oldtom';
   if (G.room) resetRivalsForRound();
   renderBag();
-  G.bonkSeen = false; G.strikeDone = false;
+  G.bonkSeen = false; G.strikeDone = false; G.grabs = 0;
   G.powerUp = null; G.scareDone = false; G.usedGimme = false; G.sasqRound = 0; G.lastLoss = null; G.leaderTaxed = false;
   drawWheelOrder();
   loadHole(startHole);
@@ -575,7 +575,7 @@ function loadHole(i) {
   G.finalWait = null; $('finalGroup').classList.add('hidden');
   G.powerUp = null; renderPowerChip(); G.sicPending = null; G.sicFrom = null; G.sabReport = null; G.gimmeOffer = null; G.possess = false; $('gimme').classList.add('hidden');
   for (const id of [...puppets.keys()]) dropPuppet(id);
-  G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.scared = G.scared && G.holeIdx > 0;
+  G.strokes = 0; G.stymieTold = false; G.tomNudged = false; G.ghostGlide = null; G.tomGrab = null; G.tomGrabbed = false; G.haunt = null; G.hauntDone = false; G.scared = G.scared && G.holeIdx > 0;
   pickUnit(); lastPreview = ''; G.previewCarry = null; G.clubCarry = null; G.clubCarries = null;
   if (G.overview) toggleOverview(false);
   G.ball = { x: h.tee[0], z: h.tee[1], y: course.h(h.tee[0], h.tee[1]) + R };
@@ -698,7 +698,7 @@ const PUTT_TIERS = [2, 3, 6, 10, 15, 21];   // the smallest keeps a full pull ho
 function honestPutt(p, range = puttRange()) { return puttMetres(puttPower(p * range), modTrait()[0]); }
 function puttRange() {
   const base = G.mode === 'goose' && G.gooseLie ? G.gooseLie : G.ball;
-  const tgt = G.mode === 'goose' ? goose : G.cup;
+  const tgt = G.mode === 'goose' && goose ? goose : G.cup;
   const d = Math.hypot(tgt.x - base.x, tgt.z - base.z) * 1.3;
   return PUTT_TIERS.find(t => t >= d) ?? PUTT_TIERS.at(-1);
 }
@@ -1764,7 +1764,9 @@ function gooseSwallow(g) {
 // ============================================================ swing input
 const swing = { active: false, src: '', phase: 'back', back: 0, peak: 0, fwd: 0, drift: 0, tDown: 0, angle: 0, follow: 0 };
 const SWING_PX = 260;
-function canSwing() { return (G.mode === 'address' || (G.mode === 'goose' && !!G.bonk)) && !G.shot && !G.walk && !G.finalWait && !G.bossIntro && G.honkStrike?.phase !== 'card'; }
+// a free swing with a spare ball: bonking the Boss, or playing the ghost's shot for him
+function spareSwing() { return G.mode === 'goose' && !!(G.bonk || G.tomGrab); }
+function canSwing() { return (G.mode === 'address' || spareSwing()) && !G.shot && !G.walk && !G.finalWait && !G.bossIntro && G.honkStrike?.phase !== 'card'; }
 function beginSwing(src) {
   if (G.mode === 'address' && !clubAllowed(G.club)) autoClub();   // never a driver off the fairway
   if (G.overview) { toggleOverview(false); snapAddressCam(true); }
@@ -1858,8 +1860,8 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
   const shoo = G.mode === 'goose';
   const d = aimDir();
   setScope(false);
-  const ball = shoo ? { name: 'spare ball', trait: RANGE_BALL.trait } : bag();
-  const mods = shotMods(!shoo, clubId);
+  const ball = shoo ? { name: G.tomGrab ? 'his ball' : 'spare ball', trait: RANGE_BALL.trait } : bag();
+  const mods = G.tomGrab ? {} : shotMods(!shoo, clubId);   // your power-ups are yours: his ball plays plain
   if (!shoo && G.honkStrike?.phase === 'clock') G.honkStrike.escaped = performance.now();
   const trait = traitOf(ball);
   for (const k of ['speed', 'bounce', 'roll', 'wind', 'side', 'capture']) if (mods[k]) trait[k] *= mods[k];
@@ -1867,6 +1869,8 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
   const eff = clubId === 'putter' ? puttPower(power * puttRange()) : power;
   const L = launch(clubId, eff, d.x, d.z, drift, tempo, trait);
   if (!miniPutt(L, mods, clubId) && mods.banana) L.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[clubId].curve;   // odd holes hook left, even holes slice right
+  const haunted = !shoo && !!G.haunt && clubId !== 'putter';
+  if (haunted) { L.side += hauntSide(clubId); G.haunt = null; }
   G.ghostShot = !!mods.noTrees;
   const start = { ...(shoo ? G.gooseLie : G.ball) };
   const strokeNo = G.strokes + 1;
@@ -1876,6 +1880,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
     ghost: shoo ? null : ghostColliderFor(strokeNo, start), ghostR: GHOST_R,
     cupR: mods.cupR, airGravity: mods.airGravity, noTrees: mods.noTrees, strokeNo, noAura: auraOff(), wmPhase: wmPhase(),
   };
+  if (G.tomGrab) { world.cupSealed = !!G.holeDef.bossGate && dist2(start, G.cup) > G.holeDef.bossGate.r; ghostMesh.visible = false; }   // his ball, his rules
   if (!shoo) for (const g of liveGeese()) { g.frozen = g.state === 'graze'; g.approach = false; }
   if (!shoo && PINS.def) PINS.before = pinsUp();
   const sim = simulate(world, start, L);
@@ -1931,7 +1936,7 @@ function doShot({ power, tempo = 1, drift = 0, clubId = G.club }) {
     if (len >= 0.5) bullet = { fStart, fEnd, speed: clamp(len / 1.7, 0.25, 0.45) };   // 1.7–4 s of slow-mo
   }
   ballMesh.material.transparent = G.ghostShot; ballMesh.material.opacity = G.ghostShot ? 0.5 : 1;
-  G.shot = { sim, t: 0, kind: shoo ? 'shoo' : 'player', ev: 0, L, start, bullet, clubId, landed: false, strokeNo, ball, wasBullet: false, called, fan, wmPhase: world.wmPhase };
+  G.shot = { sim, t: 0, kind: shoo ? 'shoo' : 'player', ev: 0, L, start, bullet, clubId, landed: false, strokeNo, ball, wasBullet: false, called, fan, wmPhase: world.wmPhase, haunted };
   G.mode = shoo ? 'goose' : 'flight';
   G.hitstop = 0.085;
   G.shake = L.pure ? 0.12 : 0.35; G.fovKick = L.pure ? 5 : 2;
@@ -2090,6 +2095,7 @@ function updateShot(dt) {
   mesh.position.set(p.x, p.y, p.z);
   const sp = Math.hypot(p.vx, p.vy, p.vz);
   flightSound(s.landed ? 0 : sp);
+  if (s.haunted && !s.landed && Math.random() < 0.6) burst(p.x, p.y, p.z, 1, 0x7ff6ff, { speed: 0.4, up: 0.2, life: 0.7, grav: 0 });
   if (s.kind === 'player') {
     for (const r of rivals.values()) if (r.knock && !r.knock.by && s.t >= r.knock.at) { startKnockAnim(r, { ...r.knock, byHex: ROOM_COLORS[(G.room?.myColor ?? 0) % ROOM_COLORS.length] }); sfx.knock?.(1); hud.banner(G.shotCannon ? '🎱 CANNON!' : `💥 KNOCK-ON<small>${esc(r.name)}'s ball is moving</small>`, 1400); if (G.shotCannon) sfx.calledIt(); say('knockOn', { ...vars(), rival: r.name }, { bump: 6 }); }
     fillTrail(liveTrail, s.sim, s.t);
@@ -2112,7 +2118,7 @@ function endShot() {
   $('letterbox').classList.remove('show'); document.body.classList.remove('bullet');
   G.previewHidden = false;
   if (s.kind === 'knock') { endKnock(s); return; }
-  if (s.kind === 'shoo') { endBonk(s); return; }
+  if (s.kind === 'shoo') { if (G.tomGrab) endTomGrab(s); else endBonk(s); return; }
   if (s.kind === 'punt' || s.kind === 'sasquack') {
     // where the goose's drop-kick ended up. No stroke for the kick itself.
     const end = s.sim.end;
@@ -2309,6 +2315,7 @@ function updateWalk(dt) {
     // a supply drop gets its moment; the Boss's business waits for the next shot
     const looted = maybeLoot();
     if (!looted && (maybeBossGuard() || maybeHonkStrike())) return;
+    if (!looted && (maybeTomGrab() || maybeHaunt())) return;
     if (maybeSandWash()) return;
     const s = G.course.surf(G.ball.x, G.ball.z);
     if (G.holeIdx === 0 && G.strokes === 1 && !G.hintsShown.scopeTip && G.mode === 'address') { G.hintsShown.scopeTip = true; hud.hint(W3('Tap 🔭 to zoom.', '<b>Right-click</b> to zoom.', 'Hold <b>LT</b> to zoom.'), 6000); }
@@ -2343,6 +2350,122 @@ function updateGhostGlide(dt) {
   if (Math.random() < 0.5) burst(ghostMesh.position.x, ghostMesh.position.y, ghostMesh.position.z, 2, 0x7ff6ff, { speed: 0.3, up: 0.3, life: 0.8, grav: 0 });
   if (g.t >= 1) G.ghostGlide = null;
 }
+// ---- (owner playtest) the race against the ghost, when it isn't close ----
+// The stymie needs both balls on the same green, so it almost never happened.
+// These two fire on the gap instead, and pull the race back together:
+//   POSSESSION: way behind (his ball 50 m+ nearer the pin) and you play his
+//     next shot for him. Free for you; it's his stroke, wherever it goes.
+//   HAUNTING: two strokes up on him and he puts a ghostly gust on your next
+//     full shot. You're told which way it blows, and the aim line shows it.
+const GRAB_GAP = 50, GRABS_PER_ROUND = 3, HAUNT_LEAD = 2, HAUNT_K = 1.2;
+const ghostName = (cap = false) => G.ghostSource === 'pb' ? (cap ? 'YOUR GHOST' : 'your ghost') : (cap ? 'OLD TOM' : 'Old Tom');
+const ghostRace = () => !G.room && (G.ghostSource === 'oldtom' || G.ghostSource === 'pb') && !!G.ghost && !G.holeDef?.mini && !(G.holeDef?.spotlight === 'scare' && !G.scareDone);
+function maybeTomGrab() {
+  if (!ghostRace() || G.tomGrabbed || (G.grabs ?? 0) >= GRABS_PER_ROUND || G.mode !== 'address' || G.strokes < 1) return false;
+  if (G.ghostSolo || G.ghostGlide || G.ghost.override?.n === G.strokes) return false;
+  const nx = G.ghost.strokes[G.strokes];   // the stroke he plays alongside your next one
+  if (!nx || nx.penaltyOnly || !nx.shot) return false;
+  const gp = ghostRestAfter(G.strokes);
+  if (gp.holed) return false;
+  const dm = dist2(G.ball, G.cup), dg = Math.hypot(gp.x - G.cup.x, gp.z - G.cup.z);
+  if (dm - dg < GRAB_GAP) return false;
+  G.tomGrabbed = true; G.grabs = (G.grabs ?? 0) + 1;
+  const lie = { x: gp.x, y: G.course.h(gp.x, gp.z) + R, z: gp.z };
+  G.tomGrab = { n: G.strokes, myLie: { ...G.ball }, lie };
+  G.gooseLie = { ...lie }; G.ball = { ...lie };
+  goose = null; G.mode = 'goose';
+  shooMesh.material.color.setHex(0x7ff6ff);
+  aimAtPoint(G.cup.x, G.cup.z); G.club = null; autoClub();
+  lastPreview = ''; G.previewDirty = true;
+  snapAddressCam();
+  burst(lie.x, lie.y + 0.3, lie.z, 30, 0x7ff6ff, { speed: 1.6, up: 2, life: 1.2, grav: 0 });
+  sfx.stymie();
+  hud.banner(`👻 POSSESSION!<small>you play ${ghostName()}'s next shot</small>`, 2600);
+  hud.hint(`👻 His ball, his stroke. Free for you. ${W3('Flick it somewhere nasty.', 'Swing it somewhere nasty.', 'Swing it somewhere nasty.')}`, 0, { stay: true });
+  say('possess', vars(), { bump: 8 });
+  if (tomTalks()) setTimeout(() => { if (G.tomGrab) tomSay('possessed', { force: true }); }, 2800);
+  return true;
+}
+function endTomGrab(s) {
+  const g = G.tomGrab, sim = s.sim, res = sim.result, end = sim.end;
+  shooMesh.visible = false; shooMesh.material.color.setHex(0xc8c0b0); hud.hint('');
+  const tl = makeTrail(oldTrailMat, sim.n); fillTrail(tl, sim, sim.n); G.trails.push(tl);
+  // his card: what he'd played, then your swing as his stroke, then he plays on from there
+  const st = { start: { ...g.lie }, shot: sim, possessed: true };
+  let card = [...G.ghost.strokes.slice(0, g.n), st], pos;
+  if (res === 'holed') pos = { x: G.cup.x, y: G.course.h(G.cup.x, G.cup.z) - 0.05, z: G.cup.z, holed: true };
+  else if (res === 'water' || res === 'oob') { card.push({ penaltyOnly: true, start: st.start }); pos = { ...g.lie }; }
+  else pos = { x: end.x, y: end.y, z: end.z };
+  if (res !== 'holed') card = planFrom(G.course, G.holeDef, G.cup, G.colliders, { x: pos.x, z: pos.z }, card, tomSalt);
+  G.ghost.strokes = card;
+  G.ghost.override = { n: g.n, ...pos };   // parked there until you swing: then he "plays" the stroke you already hit
+  G.ghostScores[G.holeIdx] = card.length;
+  G.stats.possessions = (G.stats.possessions ?? 0) + 1;
+  const surf = res === 'rest' ? G.course.surf(end.x, end.z) : res;
+  const who = ghostName(), WHO = ghostName(true);
+  if (res === 'holed') {
+    hud.banner(`👻 YOU HOLED IT FOR HIM<small>how generous</small>`, 2600);
+    say('possessHoled', vars(), { bump: 14 }); if (tomTalks()) setTimeout(() => tomSay('possessHoled', { force: true }), 2400);
+  } else if (res === 'water' || res === 'oob') {
+    hud.banner(`👻 ${res === 'water' ? 'SPLASH' : 'OUT OF BOUNDS'}!<small>+1 penalty for ${who}</small>`, 2600);
+    say('possessSplash', vars(), { bump: 12 }); if (tomTalks()) setTimeout(() => tomSay('possessBad', { force: true }), 2400);
+    moment(45, `Drowned ${who}'s ball on hole ${G.holeIdx + 1}`);
+  } else if (surf === 'sand') {
+    hud.banner(`👻 BUNKERED<small>${who} plays from the sand</small>`, 2600);
+    say('possessSand', vars(), { bump: 8 }); if (tomTalks()) setTimeout(() => tomSay('possessBad', { force: true }), 2400);
+  } else {
+    hud.banner(`👻 ${WHO}'S BALL<small>${Math.round(Math.hypot(end.x - G.cup.x, end.z - G.cup.z))} m from the pin now</small>`, 2200);
+  }
+  // watch where his ball ended up; yours stays put (the mesh follows myLie while you hold his)
+  ghostMesh.visible = true; placeGhostMesh(pos);
+  G.ball = { x: pos.x, y: pos.y, z: pos.z };
+  linger(2.6, leaveTomGrab);
+}
+function leaveTomGrab() {
+  const g = G.tomGrab; if (!g) return;
+  G.tomGrab = null; G.ball = { ...g.myLie };
+  ghostMesh.visible = true; placeGhostMesh(ghostRestAfter(G.strokes));
+  G.mode = 'address'; hud.hint('');
+  aimAtPoint(G.cup.x, G.cup.z); G.club = null; autoClub();
+  lastPreview = ''; G.previewDirty = true;
+  snapAddressCam(); updateHUD();
+}
+// your lead over the ghost on the holes you've both finished
+function leadOverGhost() {
+  let lead = 0;
+  for (let i = 0; i < G.holeIdx; i++) if (Number.isInteger(G.holeScores[i]) && Number.isInteger(G.ghostScores[i])) lead += G.ghostScores[i] - G.holeScores[i];
+  return lead;
+}
+function maybeHaunt() {
+  if (!ghostRace() || G.hauntDone || G.mode !== 'address' || G.strokes < 1) return false;
+  const s = G.course.surf(G.ball.x, G.ball.z);
+  if (s === 'green' || s === 'fringe' || s === 'sand' || dist2(G.ball, G.cup) < 50 || leadOverGhost() < HAUNT_LEAD) return false;
+  if (!G.club || G.club === 'putter') autoClub();
+  if (!G.club || G.club === 'putter') return false;
+  G.hauntDone = true;
+  G.haunt = { dir: 1 };
+  // it blows toward the worse miss: try both ways with this club and keep the nastier
+  const bad = dir => {
+    G.haunt.dir = dir;
+    const tr = traitOf(bag()), d = fwd(G.yaw), L = launch(G.club, 0.92, d.x, d.z, 0, 1, tr);
+    L.side += hauntSide(G.club);
+    const sim = simulate({ course: G.course, cup: G.cup, wind: G.wind, trait: tr, colliders: G.colliders, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, { ...G.ball }, L);
+    const sf = sim.result === 'rest' ? G.course.surf(sim.end.x, sim.end.z) : sim.result;
+    return ({ water: 100, oob: 100, sand: 50, rough: 20 }[sf] ?? 0) + Math.hypot(sim.end.x - G.cup.x, sim.end.z - G.cup.z) * 0.2;
+  };
+  const left = bad(-1), right = bad(1);
+  G.haunt.dir = left > right ? -1 : left < right ? 1 : (Math.random() < 0.5 ? -1 : 1);
+  lastPreview = ''; G.previewDirty = true;
+  burst(G.ball.x, G.ball.y + 0.4, G.ball.z, 26, 0x7ff6ff, { speed: 1.4, up: 1.5, life: 1.2, grav: 0 });
+  sfx.ghostLaugh?.();
+  hud.banner(`👻 ${ghostName(true)} HAUNTS THIS SHOT<small>a ghostly gust blows it ${G.haunt.dir < 0 ? '⟵ left' : 'right ⟶'}</small>`, 2600);
+  hud.hint(`👻 Gust ${G.haunt.dir < 0 ? 'left' : 'right'} on this shot. Aim ${G.haunt.dir < 0 ? 'right' : 'left'} of it.`, 0, { stay: true });
+  say('haunt', vars(), { bump: 8 });
+  tomLater('haunt', 2600);
+  return false;   // you still play this shot as normal
+}
+// the extra curl on a haunted full shot (previews use it too, so the aim line tells the truth)
+function hauntSide(clubId) { return G.haunt && clubId && clubId !== 'putter' && G.mode !== 'goose' ? G.haunt.dir * HAUNT_K * CLUBS[clubId].curve : 0; }
 function checkStymie() {
   if (G.stymieTold || G.mode !== 'address') return;
   if (G.room) { checkRivalStymie(); return; }
@@ -4834,6 +4957,7 @@ function updatePreview() {
         if (id === 'putter') continue;
         const L1 = launch(id, 1, d.x, d.z, 0, 1, tr);
         if (G.powerUp?.shotLeft && G.powerUp.shot?.banana) L1.side += (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[id].curve;
+        L1.side += hauntSide(id);
         const sim = simulate({ course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff(), wmPhase: wmPhase() }, base, L1);
         G.clubCarries[id] = { x: sim.carry.x, z: sim.carry.z };
         G.clubCarry[id] = Math.hypot(sim.carry.x - base.x, sim.carry.z - base.z);
@@ -4889,7 +5013,7 @@ function modTrait() {
 function carrySamples() {
   const base = G.ball, d = aimDir(), [tr, airGravity, noTrees] = modTrait();
   const world = { course: G.course, cup: { x: 1e5, z: 1e5 }, wind: G.wind, trait: tr, colliders: G.colliders, untilCarry: true, airGravity, noTrees, strokeNo: G.strokes + 1, noAura: auraOff() };
-  const ban = G.powerUp?.shotLeft && G.powerUp.shot?.banana ? (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[G.club].curve : 0;
+  const ban = (G.powerUp?.shotLeft && G.powerUp.shot?.banana ? (G.holeIdx % 2 ? 1 : -1) * 0.9 * CLUBS[G.club].curve : 0) + hauntSide(G.club);
   const S = CARRY_P.map(p => { const L = launch(G.club, p, d.x, d.z, 0, 1, tr); L.side += ban; const sim = simulate(world, base, L); return { p, x: sim.carry.x, z: sim.carry.z }; });
   S.base = { x: base.x, z: base.z };
   return S;
@@ -5193,7 +5317,7 @@ canvas.addEventListener('wheel', e => {
   stepClub(e.deltaY > 0 ? 1 : -1);
 }, { passive: false });
 function look(dx, dy) {
-  if (!(G.mode === 'address' || G.mode === 'wheel' || (G.mode === 'goose' && G.bonk && !G.shot))) return;
+  if (!(G.mode === 'address' || G.mode === 'wheel' || (spareSwing() && !G.shot))) return;
   const sens = 0.0022 * (G.scoped ? 0.16 : 1);
   G.yaw -= dx * sens;
   G.pitch = clamp(G.pitch - dy * sens, -0.75, 0.5);
@@ -5258,7 +5382,7 @@ addEventListener('keyup', e => {
   if (e.code === 'KeyZ') setScope(false);
 });
 function keyAim(dt) {
-  if (!(G.mode === 'address' || G.mode === 'wheel' || (G.mode === 'goose' && G.bonk && !G.shot)) || swing.active && swing.src !== 'key') return;
+  if (!(G.mode === 'address' || G.mode === 'wheel' || (spareSwing() && !G.shot)) || swing.active && swing.src !== 'key') return;
   const s = (G.scoped ? 0.06 : 0.9) * dt;
   if (keys.KeyA || keys.ArrowLeft) G.yaw += s;
   if (keys.KeyD || keys.ArrowRight) G.yaw -= s;
@@ -5418,7 +5542,7 @@ function padGame(p, dt) {
   if (P('Y')) toggleOverview();
   if (P('B') && G.overview) { toggleOverview(false); return; }
   if (P('B') && swing.active) { userCancel(); Object.assign(stickSw, newStickSwing()); padLockSwing = true; }
-  const aimable = (m === 'address' || m === 'wheel' || (m === 'goose' && G.bonk && !G.shot)) && !swing.active;
+  const aimable = (m === 'address' || m === 'wheel' || (spareSwing() && !G.shot)) && !swing.active;
   if (aimable) {
     if (P('LB') || P('RB')) stepClub(P('RB') ? 1 : -1);
     const k = (G.scoped ? 0.07 : 1) * dt, ex = v => Math.sign(v) * v * v;   // squared: fine near the centre, fast at the rim
@@ -5763,10 +5887,10 @@ function frame() {
       const gp = new THREE.Vector3(goose.x, G.course.h(goose.x, goose.z) + 0.6, goose.z);
       const a = addressCam(); camera.position.lerp(a.pos, 1 - Math.exp(-dt * 3));
       G.camLook.lerp(gp, 1 - Math.exp(-dt * 4)); camera.lookAt(G.camLook);
-    } else if (G.mode === 'address' || G.mode === 'wheel' || G.mode === 'title' || (G.mode === 'goose' && G.bonk && !G.shot)) updateAddressCam(dt);
+    } else if (G.mode === 'address' || G.mode === 'wheel' || G.mode === 'title' || (spareSwing() && !G.shot)) updateAddressCam(dt);
     updateWheel(dt);
     updateIdleHint(dt);
-    if (!G.shot || G.shot.kind === 'shoo') ballMesh.position.set(G.ball.x, G.ball.y, G.ball.z);
+    if (!G.shot || G.shot.kind === 'shoo') { const b = G.tomGrab ? G.tomGrab.myLie : G.ball; ballMesh.position.set(b.x, b.y, b.z); }
     // camera shake
     if (G.shake > 0) {
       camera.position.x += (Math.random() - 0.5) * G.shake * 0.25;
@@ -6276,7 +6400,7 @@ window.golf = {
       goose: (goose ?? geese[0]) ? (g => ({ state: g.state, x: g.x, z: g.z, carrying: g.carry, frozen: g.frozen }))(goose ?? geese[0]) : null,
       geese: liveGeese().map(g => ({ state: g.state, x: g.x, z: g.z, y: g.mesh.position.y, vis: g.mesh.visible, cer: !!g.ceremony })), cam: { x: camera.position.x, y: camera.position.y, z: camera.position.z }, tug: { active: tug.active, p: tug.p, t: tug.t, rate: tug.rate },
       ghost: G.ghost ? { source: G.ghostSource, x: gp.x, y: gp.y, z: gp.z, stroke: G.ghost.played, total: G.ghost.strokes.length, race: G.race.status } : null,
-      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, song: AUDIO.songState?.(), boss: G.holeDef?.bossGate ? { open: !!G.bossOpen, bonked: !!G.bossBonked, tries: G.bonk?.tries ?? null, guard: liveGeese().some(g => g.boss && g.state === 'guard'), intro: !!G.bossIntro, bossState: bossOf()?.state ?? null, frozen: !!bossOf()?.frozen } : null, honkStrike: G.honkStrike?.phase ?? (G.strikeDone ? 'done' : null), honkT: G.honkStrike?.t ?? null, chore: chore.active ? { kind: chore.kind, prog: chore.prog, t: chore.t, ready: chore.ready } : null, ballCurse: G.ballCurse ?? null, overview: !!G.overview, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, padLock: padLockSwing, canSwing: canSwing(), moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
+      windmill: G.windmill ? G.windmill.angle : null, scareActive: !!G.scare, pins: PINS.def ? pinsUp() : null, finalWait: G.finalWait ? (G.finalWait.count ? 'countdown' : 'waiting') : null, deck: G.holeDef?.deck ?? null, wheelOrder: G.wheelOrder, auraK: G.holeDef?.bossAura ? auraGrowth(G.holeDef.bossAura, G.strokes + 1) : null, crown: !!G.crown, sicPending: G.sicPending ?? null, money: G.money?.r?.name ?? null, song: AUDIO.songState?.(), boss: G.holeDef?.bossGate ? { open: !!G.bossOpen, bonked: !!G.bossBonked, tries: G.bonk?.tries ?? null, guard: liveGeese().some(g => g.boss && g.state === 'guard'), intro: !!G.bossIntro, bossState: bossOf()?.state ?? null, frozen: !!bossOf()?.frozen } : null, honkStrike: G.honkStrike?.phase ?? (G.strikeDone ? 'done' : null), honkT: G.honkStrike?.t ?? null, chore: chore.active ? { kind: chore.kind, prog: chore.prog, t: chore.t, ready: chore.ready } : null, ballCurse: G.ballCurse ?? null, overview: !!G.overview, tomGrab: G.tomGrab ? G.tomGrab.n : null, haunt: G.haunt?.dir ?? null, hauntDone: !!G.hauntDone, grabs: G.grabs ?? 0, lead: G.holeScores ? leadOverGhost() : 0, ghostSource: G.ghostSource ?? null, ghostCard: G.ghost?.strokes?.length ?? null, lastSwing: G.lastSwing ?? null, input: INPUT, stick: stickSw.phase, padLock: padLockSwing, canSwing: canSwing(), moneyPutts: G.moneyPutts ?? 0, disrupt: G.disrupt ?? 0,
       scoped: G.scoped, breath: G.breath, gasp: G.gasp, holding: G.holding, sway: { ...G.sway }, swayAmp: G.swayAmp ?? 0, fov: camera.fov,
       angler: { active: angler.active, tension: angler.tension, progress: angler.progress, t: angler.t, ready: angler.ready }, clubCarry: G.clubCarry, swinging: swing.active,
       shot: G.shot ? { t: G.shot.t, n: G.shot.sim.n, result: G.shot.sim.result, bullet: !!G.shot.bullet, inBullet: !!G.shot.wasBullet, kind: G.shot.kind } : null,
@@ -6359,6 +6483,7 @@ window.golf = {
     return { carry: Math.hypot(s.carry.x - G.ball.x, s.carry.z - G.ball.z), total: Math.hypot(s.end.x - G.ball.x, s.end.z - G.ball.z), end: s.end, result: s.result, apex: s.apex, carryPt: s.carry, bounces: s.events.filter(e => e.type === 'bounce').length, maxBounce: Math.max(0, ...s.events.filter(e => e.type === 'bounce').map(e => e.speed)) };
   },
   ghostAt: n => ghostRestAfter(n),
+  setCards(me, ghost) { for (let i = 0; i < G.holeIdx; i++) { G.holeScores[i] = me; G.ghostScores[i] = ghost; } return leadOverGhost(); },
   checkStymie() { G.stymieTold = false; if (!maybeTomNudge()) checkStymie(); return G.stymieTold; },
   room() {
     if (!G.room) return null;

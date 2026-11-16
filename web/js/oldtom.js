@@ -94,15 +94,28 @@ function planStroke(course, cup, colliders, lie, stroke, holeDef, rng, wind, str
 // `salt` varies his round (solo rounds pass the round seed) so he has good days and bad.
 export function planHole(course, holeDef, cup, colliders, teeOffset = { x: -1.3, z: 0 }, salt = 0) {
   const rng = mulberry32(((holeDef.seed ?? 1) * 7919) ^ salt);
+  const lie = { x: holeDef.tee[0] + teeOffset.x, z: holeDef.tee[1] + teeOffset.z };
+  return playOn(course, holeDef, cup, colliders, lie, [], rng);
+}
+
+// (owner playtest) you possessed his ball and moved it: he plays on from
+// wherever it ended up. `strokes` is his card so far (the possessed swing
+// included); returns the whole card. Seeded, so a reload replays the same.
+export function planFrom(course, holeDef, cup, colliders, lie, strokes, salt = 0) {
+  const rng = mulberry32((((holeDef.seed ?? 1) * 7919) ^ salt ^ Math.imul(strokes.length + 1, 0x9e3779b1)) >>> 0);
+  return playOn(course, holeDef, cup, colliders, lie, strokes.slice(), rng);
+}
+
+function playOn(course, holeDef, cup, colliders, lie, strokes, rng) {
   // Tom played on a day with this hole's usual breeze (fixed, so his ghost is
   // the same for everyone even though your wind varies per round).
   const wa = (holeDef.seed ?? 1) * 1.7, ws = (holeDef.wind ?? 0) * 0.8;
   const wind = { x: Math.cos(wa) * ws, z: Math.sin(wa) * ws };
   if (Array.isArray(colliders)) colliders = prepColliders(colliders);
-  let lie = { x: holeDef.tee[0] + teeOffset.x, z: holeDef.tee[1] + teeOffset.z };
-  const strokes = [];
-  for (let k = 1; k <= 8; k++) {
-    const st = planStroke(course, cup, colliders, lie, k, holeDef, rng, wind, strokes.length + 1);
+  const tries = () => strokes.filter(st => !st.penaltyOnly).length;
+  const cap = Math.max(8, tries() + 3);
+  while (tries() < cap) {
+    const st = planStroke(course, cup, colliders, lie, tries() + 1, holeDef, rng, wind, strokes.length + 1);
     strokes.push(st);
     if (st.shot.result === 'holed') break;
     if (st.shot.result === 'water' || st.shot.result === 'oob') {

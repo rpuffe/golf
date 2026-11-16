@@ -27,6 +27,12 @@ export const TOM_LINES = {
     '[amused] I fed that goose\'s great-grandmother. Good stock.', '[laughs] Never turn yer back on a goose. Never.'],
   final: ['[gravely] Last hole. Loser buys the drinks.'],
   bonk: ['[dryly] Bonked that bird in fifty-two, too.'],
+  possessed: ['[outraged] Get yer hands off my ball!', '[indignant] That is cheating. And I would know.',
+    '[spluttering] In my day they hanged men for less.', '[grumbling] Mind the leather. It\'s older than yer grandfather.'],
+  possessBad: ['[furious] Ye absolute scoundrel!', '[seething] I will remember this. I have eternity to remember this.', '[wailing] My ball! My poor wee ball!'],
+  possessHoled: ['[confused] Did... did ye just hole that for me? Well. Thank ye.'],
+  haunt: ['[cackles] Let\'s see ye play through a draught, laddie.', '[menacing] Getting a wee bit far ahead, are we?',
+    '[whispers] Feel that chill? That\'s me.', '[chuckles] A wee breeze. From the other side.'],
 };
 export const VOICE_BALLS = ['Bounce Springsteen', 'Sir Thud', 'Butterfingers', 'Clover', 'Lord Floofington', 'Nervous Nigel', 'Range Ball #4471'];
 export const VOICE_GHOSTS = ['Old Tom', 'your old self'];

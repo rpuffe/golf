@@ -128,6 +128,15 @@ Also in the game:
   pulsing ring takes the same colour.
 - **👻 Old Tom's ghost ball** races yours in solo rounds: a bright soul ball
   with a halo and a name tag. He has good days and bad (about par +3).
+- **👻 Possession and haunting** keep the ghost race close when it isn't.
+  - **Possession:** if his ball is 50 m or more nearer the pin than yours,
+    you play his next shot for him. It's free for you but counts as his
+    stroke, wherever it goes: water costs him a penalty and sand is his
+    problem. He plays on from there. Up to three times a round.
+  - **Haunting:** lead him by two strokes and he haunts your next full shot
+    on the hole. A gust curls it toward the nastier miss, and the banner and
+    aim line tell you which way, so you can aim off.
+  - Both work against your own best-round ghost as well.
 
 - **dev**: https://golf-dev.fd.robertpuffe.com (deploys on push to `main`)
 - **prod**: https://golf.fd.robertpuffe.com (promoted by tagging `v*`)
